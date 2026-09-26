@@ -256,13 +256,14 @@ export async function registerCallLinkRoutes(
         return bindingConflict(reply);
       }
 
-      const wasEnded = record.status === "ended";
       const session = await completeSessionWithUsage(record.sessionId);
-      if (session?.endedAt) await endCallLegs(session.id, session.endedAt);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
+      // Settlement and Worker shutdown are separate outcomes. Retry the
+      // idempotent stop even after ended, and do not let outbox delivery delay it.
+      await getCallLinkWorkerSupervisor().stop(record.callId);
+      if (session.endedAt) await endCallLegs(session.id, session.endedAt);
       await deliverPendingCallRoomDataEvents(record);
-      if (!wasEnded) await getCallLinkWorkerSupervisor().stop(record.callId);
       return {
         callId: record.callId,
         sessionId: session.id,

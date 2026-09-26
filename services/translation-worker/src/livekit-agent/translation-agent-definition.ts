@@ -2,6 +2,7 @@ import { AutoSubscribe, defineAgent } from "@livekit/agents";
 import * as rtc from "@livekit/rtc-node";
 import pino from "pino";
 import { loadEnv, type TranslationWorkerEnv } from "../config/env.js";
+import { assertLegacyCallWorkerDeployment } from "../config/call-worker-deployment-policy.js";
 import { buildDefaultSpeechPipeline } from "../main.js";
 import { HttpCallSipStatusClient } from "../worker/call-sip-status-client.js";
 import { HttpCallSipControlClient } from "../worker/call-sip-control-client.js";
@@ -45,6 +46,8 @@ export default defineAgent<TranslationAgentProcessData>({
     };
   },
   async entry(ctx) {
+    // Reject an invalid deployment before joining RTC or requesting material.
+    assertLegacyCallWorkerDeployment();
     const ticket = parseWorkerDispatchMetadata(ctx.job.metadata);
     if (!ticket || ctx.job.agentName !== ticket.agentName ||
       ctx.job.room?.name !== ticket.roomName) {

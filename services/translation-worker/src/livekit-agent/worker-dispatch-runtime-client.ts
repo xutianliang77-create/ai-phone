@@ -71,7 +71,7 @@ export class WorkerDispatchRuntimeClient {
     workerId: string;
     jobId: string;
   }) {
-    return await this.post<WorkerRuntimeSnapshot>(
+    const value = await this.post<unknown>(
       input.ticket.callId,
       "worker-snapshot",
       {
@@ -81,6 +81,14 @@ export class WorkerDispatchRuntimeClient {
         jobId: input.jobId,
       },
     );
+    if (!isRecord(value) || value.callId !== input.ticket.callId ||
+      value.sessionId !== input.ticket.sessionId ||
+      value.roomName !== input.ticket.roomName ||
+      value.generation !== input.ticket.generation ||
+      value.participantIdentity !== input.participantIdentity) {
+      throw new Error("Worker runtime snapshot binding is invalid");
+    }
+    return value as unknown as WorkerRuntimeSnapshot;
   }
 
   async event(input: {

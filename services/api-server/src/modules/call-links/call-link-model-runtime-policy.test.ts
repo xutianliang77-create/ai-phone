@@ -56,6 +56,22 @@ describe("Call Link model runtime policy", () => {
     });
   });
 
+  it.each([
+    "CALL_LINK_1_0_COMPATIBILITY_ENABLED",
+    "CALL_LINK_PUBLIC_TTS_ENABLED",
+    "CALL_LINK_DEPLOYMENT_TEST_MODE",
+  ])("does not fall back to private admission when %s lacks a deployment", (flag) => {
+    delete process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+    delete process.env.PUBLIC_RUNTIME_ENABLED;
+    delete process.env.CALL_LINK_1_0_COMPATIBILITY_ENABLED;
+    delete process.env.CALL_LINK_PUBLIC_TTS_ENABLED;
+    delete process.env.CALL_LINK_DEPLOYMENT_TEST_MODE;
+    process.env[flag] = "true";
+    expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
+      ok: false, code: "call_link_public_model_runtime_unavailable",
+    });
+  });
+
   it("does not mistake public session metadata for a Worker provider adapter", () => {
     process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
     expect(callLinkModelRuntimeAdmissionForSession({

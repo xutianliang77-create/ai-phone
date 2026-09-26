@@ -27,4 +27,24 @@ describe("inherited Call Link Worker deployment boundary", () => {
     expect(() => assertLegacyCallWorkerDeployment({ ...env, CALL_LINK_DEPLOYMENT_TEST_MODE: "true" }))
       .toThrow("call_link_public_model_runtime_unavailable");
   });
+
+  it.each([
+    { CALL_LINK_1_0_COMPATIBILITY_ENABLED: "true" },
+    { CALL_LINK_PUBLIC_TTS_ENABLED: "true" },
+    { CALL_LINK_DEPLOYMENT_TEST_MODE: "true" },
+    { API_RESULT_SYNC_DEPLOYMENT_ID: " " },
+  ])("rejects incomplete declarations without becoming a private Worker: %j", (env) => {
+    expect(() => assertLegacyCallWorkerDeployment(env))
+      .toThrow("call_link_public_model_runtime_unavailable");
+  });
+
+  it("does not normalize a different deployment identity into a valid binding", () => {
+    expect(() => assertLegacyCallWorkerDeployment({
+      API_RESULT_SYNC_DEPLOYMENT_ID: " isolated-11 ",
+      CALL_LINK_1_0_COMPATIBILITY_ENABLED: "true",
+      CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID: "isolated-11",
+      CALL_LINK_1_0_COMPATIBILITY_PROFILE: "call_link_only",
+      CALL_PROVIDER_POLICY: "call_link_only",
+    })).toThrow("call_link_public_model_runtime_unavailable");
+  });
 });

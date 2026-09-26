@@ -16,6 +16,35 @@ const ticket = {
 };
 const accessSecret = "worker-tts-material-access-secret";
 
+describe("WorkerDispatchRuntimeClient snapshot binding", () => {
+  const input = { ticket, participantIdentity: "call-1:worker:one", workerId: "worker-1", jobId: "job-1" };
+  const snapshot = { callId: ticket.callId, sessionId: ticket.sessionId,
+    roomName: ticket.roomName, generation: ticket.generation,
+    participantIdentity: input.participantIdentity };
+
+  it("returns only the snapshot bound to this dispatch and participant", async () => {
+    const client = new WorkerDispatchRuntimeClient({
+      apiBaseUrl: "https://api.synthetic.invalid", timeoutMs: 1000,
+      fetchFn: async () => json(snapshot),
+    });
+    await expect(client.snapshot(input)).resolves.toEqual(snapshot);
+  });
+
+  it.each([
+    null, {}, { ...snapshot, callId: "other-call" },
+    { ...snapshot, sessionId: "other-session" },
+    { ...snapshot, roomName: "other-room" },
+    { ...snapshot, generation: 2 },
+    { ...snapshot, participantIdentity: "other-worker" },
+  ])("rejects an unbound snapshot before returning it: %j", async (value) => {
+    const client = new WorkerDispatchRuntimeClient({
+      apiBaseUrl: "https://api.synthetic.invalid", timeoutMs: 1000,
+      fetchFn: async () => json(value),
+    });
+    await expect(client.snapshot(input)).rejects.toThrow("snapshot binding is invalid");
+  });
+});
+
 describe("WorkerDispatchRuntimeClient Call Link TTS material", () => {
   it("sends the separate material capability only on TTS routes and validates the echoed attempt", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];

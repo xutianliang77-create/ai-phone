@@ -37,17 +37,19 @@ export function callLinkModelRuntimeAdmissionForSession(
   publicDeploymentId = process.env.API_RESULT_SYNC_DEPLOYMENT_ID,
   entryKind: CallLinkRuntimeEntryKind = "room",
 ): CallLinkModelRuntimeAdmission {
-  if (!publicDeploymentId && process.env.PUBLIC_RUNTIME_ENABLED !== "true") {
-    return { ok: true, mode: "legacy_private" };
-  }
-  if (!isDeploymentId(publicDeploymentId)) {
-    return { ok: false, code: "call_link_public_model_runtime_unavailable" };
-  }
   // A deliberately isolated deployment smoke candidate may start the API,
   // Gateway and idle Agent process on a shared host, but it must never create
   // a room, dispatch a Worker, or reach any model endpoint. Production and
   // ordinary compatibility candidates do not set this explicit test flag.
   if (process.env.CALL_LINK_DEPLOYMENT_TEST_MODE === "true") {
+    return { ok: false, code: "call_link_public_model_runtime_unavailable" };
+  }
+  if (!publicDeploymentId && process.env.PUBLIC_RUNTIME_ENABLED !== "true" &&
+      process.env.CALL_LINK_1_0_COMPATIBILITY_ENABLED !== "true" &&
+      !callLinkPublicTtsEnabled()) {
+    return { ok: true, mode: "legacy_private" };
+  }
+  if (!isDeploymentId(publicDeploymentId)) {
     return { ok: false, code: "call_link_public_model_runtime_unavailable" };
   }
   if (entryKind === "room" &&

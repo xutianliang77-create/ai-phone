@@ -2,12 +2,16 @@
  * deployment cannot run it unless it is the explicitly isolated 1.0 Call
  * Link compatibility lane. Idle process readiness is checked elsewhere. */
 export function assertLegacyCallWorkerDeployment(env: NodeJS.ProcessEnv = process.env) {
-  const deploymentId = env.API_RESULT_SYNC_DEPLOYMENT_ID?.trim();
+  if (env.CALL_LINK_DEPLOYMENT_TEST_MODE === "true") {
+    throw new Error("call_link_public_model_runtime_unavailable");
+  }
+  // Match the API's exact identity check; whitespace is not a private opt-out.
+  const deploymentId = env.API_RESULT_SYNC_DEPLOYMENT_ID;
   const publicMode = !!deploymentId || env.PUBLIC_RUNTIME_ENABLED === "true" ||
-    env.CALL_LINK_1_0_COMPATIBILITY_ENABLED === "true";
+    env.CALL_LINK_1_0_COMPATIBILITY_ENABLED === "true" ||
+    env.CALL_LINK_PUBLIC_TTS_ENABLED === "true";
   if (!publicMode) return;
   if (deploymentId && /^[A-Za-z0-9_-]{1,128}$/.test(deploymentId) &&
-    env.CALL_LINK_DEPLOYMENT_TEST_MODE !== "true" &&
     env.CALL_LINK_1_0_COMPATIBILITY_ENABLED === "true" &&
     env.CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID === deploymentId &&
     env.CALL_LINK_1_0_COMPATIBILITY_PROFILE === "call_link_only" &&

@@ -226,7 +226,7 @@ describe("call link routes", () => {
       idempotencyKey: `settle:${callId}`,
       note: "call_link_usage",
     });
-    expect(workerRuntime.stoppedCallIds).toEqual([callId]);
+    expect(workerRuntime.stoppedCallIds).toEqual([callId, callId]);
     expect(getStoreSnapshot().outboxEvents.filter(
       (event) => event.sessionId === callId && event.eventType === "call_room.data"
     )).toHaveLength(1);
