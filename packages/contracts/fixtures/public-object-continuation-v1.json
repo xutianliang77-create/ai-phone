@@ -1,5 +1,5 @@
 {
-  "description": "Synthetic metadata using the recorded failure text; observed 88ms edge offset, translated time origin, no claim of raw acoustic replay.",
+  "description": "Synthetic metadata using the recorded text and translated 88ms edge offset. This positive case has no competing voice in the ASR interval; a paired Gateway negative case preserves competing evidence. Not raw acoustic replay.",
   "events": [
     {
       "type": "transcript.final",

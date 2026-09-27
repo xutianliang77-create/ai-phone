@@ -10,7 +10,7 @@ import {LmStudioRealtimeProvider} from "./lmstudio-realtime-provider.js";
 
 const consume=async(events:AsyncGenerator<ServerRealtimeEvent>)=>{const result=[];for await(const e of events)result.push(e);return result;};
 const deferred=()=>{let resolve!:()=>void;const promise=new Promise<void>(r=>resolve=r);return{resolve,promise};};
-function fixture(voiceOutput=false,sourceLanguage:"auto"|"zh"="auto"){
+function fixture(voiceOutput=false,sourceLanguage:"auto"|"zh"="auto",competingVoice=false){
   const session={sessionId:"object",sourceLanguage,targetLanguage:"en" as const,voiceOutput,
     asrEndpointMode:"conversation" as const,speakerAttribution:{mode:"diarization" as const,maxSpeakers:4 as const,deviceProfile:deviceSpeakerProfile.id,allowVoiceIdentity:false}};
   const originals:TranscriptResult[]=[
@@ -34,12 +34,22 @@ function fixture(voiceOutput=false,sourceLanguage:"auto"|"zh"="auto"){
     markAcceptedAudioRange(frame,{startSample:cursor,endSample:end});cursor=end;
     return consume(provider.sendAudio(frame));
   }
-  async function first(){await provider.createSession(session);await feed(480,[[0,0,480]]);await feed(1040,[[0,480,720],[1,720,1040]]);return feed(3200,[[1,1040,3200]]);}
+  async function first(){await provider.createSession(session);await feed(480,[[0,0,480]]);await feed(1040,[[0,480,competingVoice?720:632],[1,720,1040]]);return feed(3200,[[1,1040,3200]]);}
   return{provider,session,base,translate,first,next:()=>feed(7328,[[1,3200,7328]])};
 }
 afterEach(()=>vi.restoreAllMocks());
 
 describe("phone speaker metadata -> public assembler -> MT/TTS revision",()=>{
+  it("does not conceal a real 88ms competing voice to force the same fixture to merge",async()=>{
+    const now=vi.spyOn(Date,"now").mockReturnValue(10000),f=fixture(false,"auto",true);
+    try{
+      const first=await f.first();now.mockReturnValue(14000);const second=await f.next();
+      expect(first.find(e=>e.type==="transcript.final")).toMatchObject({segmentId:"first",speaker:{speakerId:"unknown"},timing:{overlap:false}});
+      expect(second.find(e=>e.type==="transcript.final")).toMatchObject({segmentId:"second",revision:1,text:"Hy-MT2 和 VoxCPM2 的在线模型链路。"});
+      expect(second.some(e=>e.type==="transcript.final"&&e.text==="")).toBe(false);
+      expect(f.base.createSession).toHaveBeenCalledTimes(1);expect(f.base.commitBoundary).not.toHaveBeenCalled();
+    }finally{await f.provider.closeSession("object");}
+  });
   it.each(["auto","zh"] as const)("closes the same real modules and wire contract with source=%s",async source=>{
     const now=vi.spyOn(Date,"now").mockReturnValue(10000),f=fixture(false,source);
     try{

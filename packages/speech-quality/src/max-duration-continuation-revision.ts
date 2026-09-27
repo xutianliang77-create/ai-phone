@@ -129,9 +129,15 @@ export class MaxDurationContinuationRevisionCoordinator {
     if(parts.length===1){this.provisional.delete(sessionId);return {handled:false};}
     const updated=parts.map((part,i)=>i===index?structuredClone(incoming):part);
     const revision=Math.max((pending.transcript.revision??0)+1,...updated.map(part=>part.revision??0));
-    const safe=updated.every(part=>isSemanticContinuationCandidate(part,this.options.semanticSourceLanguage))&&updated.slice(1).every((part,i)=>
-      startsSemanticContinuation(part,updated[i])&&canReviseContinuation(updated[i],part,this.options,true))&&
+    let safe=updated.every(part=>isSemanticContinuationCandidate(part,this.options.semanticSourceLanguage))&&
       Array.from(updated.map(part=>part.text).join("")).length<=(this.options.maxSemanticCharacters??180);
+    // Rebuild the same accumulated context used by forward appends. Comparing
+    // only neighboring list tails loses the governing object from the first part.
+    let prefix=updated[0];
+    for(let i=1;safe&&i<updated.length;i++){
+      safe=startsSemanticContinuation(updated[i],prefix)&&canReviseContinuation(prefix,updated[i],this.options,true);
+      if(safe)prefix=mergeTranscriptParts(updated.slice(0,i+1),{joinSemanticContinuation:true});
+    }
     if(!safe){
       // The original text/revision path can undo a grouping. Re-emit every
       // constituent at a newer revision; never drop an absorbed tail or retain

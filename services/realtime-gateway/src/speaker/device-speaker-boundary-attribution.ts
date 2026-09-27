@@ -36,9 +36,10 @@ function alignEstimatedEdge(transcript:TranscriptResult,spans:SpeakerSpan[],boun
   const prior=transcript.speaker?.speakerId;
   if(prior&&prior!=="unknown"&&prior!==expected)return;
   const start=nearStart?boundary.boundaryMs:timing.startMs,end=nearStart?timing.endMs:boundary.boundaryMs;
-  // A rival voice in the unambiguous interior, or sparse model coverage, cannot
-  // be overridden by a label observed near one edge. Duplicate spans add no weight.
-  if(spans.some(s=>s.speakerId!==expected&&Math.min(end,s.endMs)>Math.max(start,s.startMs)))return;
+  // Every span is already clipped to the full ASR interval. A rival voice at
+  // either edge is still speech evidence, even below 160ms; never discard it
+  // merely because one speaker dominates the remainder of the interval.
+  if(spans.some(s=>s.speakerId!==expected))return;
   const direct=spans.filter(s=>s.speakerId===expected);
   const covered=unionMs(direct.map(s=>({start:Math.max(start,s.startMs),end:Math.min(end,s.endMs)})).filter(s=>s.end>s.start));
   if(covered<minimumEvidence||end-start-covered>=minimumEvidence)return;

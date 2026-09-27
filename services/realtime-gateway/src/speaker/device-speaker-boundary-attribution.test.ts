@@ -14,14 +14,14 @@ const resolve=(value=raw(),evidence=spans(),edges=[boundary()],confirmed=(_id:st
   attributeSpeakerTranscripts([value],evidence,()=>undefined,edges,confirmed,{deviceBoundaryPolicy:true})[0];
 
 describe("phone evidence uses sequential boundaries without inventing simultaneous speech",()=>{
-  it.each([48,88,159])("uses sufficient direct edge evidence at %sms without changing timestamps",offset=>{
-    const at=48632+offset,result=resolve(raw(),spans(at),[boundary(at)]);
+  it.each([48,88,159])("aligns an empty padding edge at %sms only without competing speaker evidence",offset=>{
+    const at=48632+offset,result=resolve(raw(),spans(at).filter(s=>s.speakerId==="new"),[boundary(at)]);
     expect(result.speaker).toMatchObject({speakerId:"new",source:"diarization"});
     expect(result.timing).toMatchObject({startMs:48632,endMs:51200});
     expect(result.timing?.overlap).not.toBe(true);
   });
-  it("also protects the end edge using the same evidence threshold",()=>{
-    const at=51120,result=resolve(raw(),spans(at),[boundary(at)]);
+  it("also aligns empty trailing padding without erasing a second voice",()=>{
+    const at=51120,result=resolve(raw(),spans(at).filter(s=>s.speakerId==="old"),[boundary(at)]);
     expect(result.speaker?.speakerId).toBe("old");expect(result.timing?.overlap).not.toBe(true);
   });
   it.each([160,600,1200])("keeps a meaningful sequential switch unknown at %sms, not overlapping",offset=>{
@@ -41,14 +41,16 @@ describe("phone evidence uses sequential boundaries without inventing simultaneo
       [{...spans()[1],endMs:49300},{...spans()[1],startMs:50000}]]){
       expect(resolve(raw(),evidence).speaker?.speakerId).toBe("unknown");
     }
-    expect(resolve(raw(),spans(),[boundary()],id=>id!=="new").speaker?.speakerId).toBe("unknown");
-    expect(resolve(raw(),spans().map(s=>({...s,confidence:0.4}))).speaker?.speakerId).toBe("unknown");
-    expect(resolve(raw(),spans(),[boundary(),boundary(48800)]).speaker?.speakerId).toBe("unknown");
+    const direct=spans().filter(s=>s.speakerId==="new");
+    expect(resolve(raw(),direct,[boundary()],id=>id!=="new").speaker?.speakerId).toBe("unknown");
+    expect(resolve(raw(),direct.map(s=>({...s,confidence:0.4}))).speaker?.speakerId).toBe("unknown");
+    expect(resolve(raw(),direct,[boundary(),boundary(48800)]).speaker?.speakerId).toBe("unknown");
   });
   it("does not erase timed words, precise timing or an explicit different speaker",()=>{
-    expect(resolve({...raw(),tokenTimings:[{text:"嗯",startMs:48632,endMs:48700}]}).speaker?.speakerId).toBe("unknown");
-    expect(resolve({...raw(),timing:{...raw().timing!,source:"client"}}).speaker?.speakerId).toBe("unknown");
-    expect(resolve({...raw(),speaker:{speakerId:"old",role:"speaker",source:"diarization"}}).speaker?.speakerId).toBe("unknown");
+    const direct=spans().filter(s=>s.speakerId==="new");
+    expect(resolve({...raw(),tokenTimings:[{text:"嗯",startMs:48632,endMs:48700}]},direct).speaker?.speakerId).toBe("unknown");
+    expect(resolve({...raw(),timing:{...raw().timing!,source:"client"}},direct).speaker?.speakerId).toBe("unknown");
+    expect(resolve({...raw(),speaker:{speakerId:"old",role:"speaker",source:"diarization"}},direct).speaker?.speakerId).toBe("unknown");
   });
   it("preserves the original private/default attribution behavior",()=>{
     expect(attributeSpeakerTranscripts([raw()],spans(),()=>undefined,[boundary()],()=>true)[0])

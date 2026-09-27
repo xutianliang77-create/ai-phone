@@ -16,11 +16,11 @@ const second=()=>part("second","Hy-MT2 和 VoxCPM2 的在线模型链路。");
 describe("object and enumeration continuation through the existing revision path",()=>{
   it.each([
     ["我们要测试 Qwen Three ASR。","Hy-MT2 和 VoxCPM2 的在线模型链路。","zh","我们要测试 Qwen Three ASR、Hy-MT2 和 VoxCPM2 的在线模型链路。"],
-    ["我们准备采购苹果。","香蕉和梨。","zh","我们准备采购苹果、香蕉和梨。"],
+    ["我们准备检查日志。","缓存和数据库。","zh","我们准备检查日志、缓存和数据库。"],
     ["需要检查日志。","缓存与数据库的状态。","zh","需要检查日志、缓存与数据库的状态。"],
     ["备选方案包括本地识别。","云端识别以及人工录入。","zh","备选方案包括本地识别、云端识别以及人工录入。"],
-    ["We will test Nova ASR.","Orion MT and Lumen TTS.","en","We will test Nova ASR, Orion MT and Lumen TTS."],
-    ["Please bring apples.","Bananas and pears.","en","Please bring apples, Bananas and pears."],
+    ["We will test Nova3 ASR.","Orion2 MT and Lumen2 TTS.","en","We will test Nova3 ASR, Orion2 MT and Lumen2 TTS."],
+    ["Please check logs.","Cache and database.","en","Please check logs, Cache and database."],
   ] as const)("combines a structural object continuation: %s",(left,right,language,text)=>{
     const a=create();expect(a.push("s",part("first",left,language),0).ready).toHaveLength(1);
     const result=a.push("s",part("second",right,language),4000);
@@ -41,6 +41,9 @@ describe("object and enumeration continuation through the existing revision path
     ["We will test Nova ASR.","You and I should go now.","en"],
     ["We need apples.","Bananas and pears cost money.","en"],
     ["We need apples.","Dogs and cats chase birds.","en"],
+    ["We need logs.","Cache API and Reboot ASR.","en"],
+    ["Please bring apples.","Bananas and pears.","en"],
+    ["We will test Nova ASR.","Orion MT and Lumen TTS.","en"],
     ["We finished the meeting.","Apples and pears.","en"],
   ] as const)("does not append an independent clause or guess an object: %s",(left,right,language)=>{
     const a=create();a.push("s",part("first",left,language),0);

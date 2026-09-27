@@ -1,5 +1,24 @@
 {
   "schemaVersion": 1,
+  "latestSemanticReviewFix20260927": {
+    "status": "review_findings_fixed_host_pass_not_deployed",
+    "baseCommit": "7d69265d924d3702b4aa7b6aebbb290afbb910e9",
+    "verifiedSourceSnapshot": "7f66e6478a7cf3b51928309d6ec643fab33e3d0e01b5b0438e29b7eff8faf6c8",
+    "reviewFindingsAddressed": ["F1_nominal_positive_evidence", "F2_short_competing_voice_preservation", "F3_accumulated_revision_context"],
+    "sharedAndGatewayFilesPassed": 137,
+    "sharedAndGatewayTestsPassed": 1185,
+    "mobileFilesPassed": 5,
+    "mobileTestsPassed": 10,
+    "dualVersionChecksPassed": 40,
+    "genericNaturalLanguageQualityAccepted": false,
+    "deviceAccepted": false,
+    "candidateBuilt": false,
+    "realModelsCalled": false,
+    "deployed": false,
+    "pushed": false,
+    "guardReenabled": false,
+    "externalReport": "outer artifacts/closeout-regression/20260927-semantic-review-fix/RESULT.md"
+  },
   "latestSemanticPolicyRepair20260927": {
     "status": "source_host_pass_not_deployed",
     "baseCommit": "26d1257c9804680670fb2f72ba218b7118d10286",
