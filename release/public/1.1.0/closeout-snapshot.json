@@ -1,5 +1,28 @@
 {
   "schemaVersion": 1,
+  "latestShortDeviceRun20260927": {
+    "status": "short_journey_storage_pass_segmentation_rejected_by_user",
+    "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",
+    "iosBuild": "2026092701",
+    "sessionId": "public-31ae5d802ecb3fe3f86994ba86c2698e7371aaca6d92829cd269b439917b3692",
+    "phoneAndServerSegments": 18,
+    "phoneServerComparisonPassed": true,
+    "tailComplete": true,
+    "ledgerCount": 1,
+    "consumedSeconds": 78,
+    "asrConfirmed": 1,
+    "mtConfirmed": 18,
+    "ttsCalls": 0,
+    "deviceSpeakerClaimVerified": true,
+    "speakerLabelCounts": {"device-speaker-1": 11, "device-speaker-2": 1, "unknown": 6},
+    "userOtherExperience": "acceptable",
+    "segmentationAccepted": false,
+    "segmentationGapReproducedInUnchangedSource": true,
+    "productSourceChanged": false,
+    "guardReenabled": false,
+    "fullQualityOrLongRunAccepted": false,
+    "externalReport": "outer artifacts/closeout-regression/20260927-ios-54337a2/RESULT.md"
+  },
   "latestQaGuardCancellation20260927": {
     "status": "cancelled_and_qa_entry_reopened",
     "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",
