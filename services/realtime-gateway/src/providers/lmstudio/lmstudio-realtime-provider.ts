@@ -189,7 +189,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
   async *flushSession(
     sessionId: string,
-    options?: { finishSession?: boolean },
+    options?: { finishSession?: boolean; reason?: "audio_boundary" },
   ): AsyncGenerator<ServerRealtimeEvent> {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -204,7 +204,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     let transcripts;
     try {
       transcripts = orderedTurnTranscripts(
-        asrResults(await this.asrProvider.flush(sessionId, options)),
+        asrResults(await this.asrProvider.flush(sessionId, options && {finishSession:options.finishSession})),
       );
     } catch (error) {
       if(!this.isCurrent(session))return;
@@ -219,7 +219,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     yield* this.refreshSpeakerSegments(session);
     for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
     if(this.isCurrent(session))yield* asrLanguageNotices(this.asrProvider,session,this.name);
-    yield* this.flushSemanticSegments(session);
+    yield* this.flushSemanticSegments(session,true,!!this.publicSession&&options?.reason==="audio_boundary"&&options.finishSession!==true);
     if(this.isCurrent(session))this.speakerBoundaryRepair.finalizeEndpointNoops(session);
   }
 
@@ -285,10 +285,11 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private async *flushSemanticSegments(
     session: RealtimeProviderSession,
     emitTranscript = true,
+    preserveContinuations = false,
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
-    const assembled = this.semanticSegmentsFor(session).flushWithReplacements(session.sessionId);
-    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"end",assembled);
+    const assembled = this.semanticSegmentsFor(session).flushWithReplacements(session.sessionId,Date.now(),{preserveContinuations});
+    if(this.publicSession)logPublicAsrAssembly(session.sessionId,preserveContinuations?"audio_boundary":"end",assembled);
     yield* this.deliverAssembly(session,assembled,emitTranscript);
   }
 

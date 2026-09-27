@@ -10,7 +10,7 @@ interface Boundary {
   revision?:number;textCharCount?:number;language?:string;
 }
 
-/** Opt-in one-shot QA metadata only. Never include PCM, transcript, credentials,
+/** Opt-in QA metadata only. Never include PCM, transcript, credentials,
  * or the supplier's raw item identifier in the persisted log. */
 export function publicAsrBoundaryTracePayload(value:Boundary){
   return {
@@ -48,14 +48,14 @@ export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
   }catch{/* QA diagnostics must not advance a watermark then abort the audio path. */}
 }
 
-type AssemblyTrigger="push"|"timeout"|"end"|"speaker";
+type AssemblyTrigger="push"|"timeout"|"end"|"speaker"|"audio_boundary";
 type AssemblyInput=Pick<import("../asr/asr-provider.js").TranscriptResult,"segmentId"|"text"|"revision"|"speaker"|"turnId"|"timing">;
 const traceId=(v:unknown):v is string=>typeof v==="string"&&/^[A-Za-z0-9_.:-]{1,200}$/.test(v);
 
 /** Distinguish held/merged/superseded finals from lost data without persisting
  * their text. Array bounds limit diagnostic output, never business results. */
 export function publicAsrAssemblyTracePayload(sessionId:string,trigger:AssemblyTrigger,result:SegmentPushResult,input?:AssemblyInput){
-  if(!traceId(sessionId)||!["push","timeout","end","speaker"].includes(trigger))return undefined;
+  if(!traceId(sessionId)||!["push","timeout","end","speaker","audio_boundary"].includes(trigger))return undefined;
   const item=(value:AssemblyInput)=>({
     ...(traceId(value.segmentId)?{segmentId:value.segmentId}:{}),
     ...(Number.isSafeInteger(value.revision)&&value.revision!>=0?{revision:value.revision}:{}),
@@ -75,7 +75,7 @@ export function publicAsrAssemblyTracePayload(sessionId:string,trigger:AssemblyT
 
 export function logPublicAsrAssembly(sessionId:string,trigger:AssemblyTrigger,result:SegmentPushResult,input?:AssemblyInput){
   if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=="true")return;
-  if(!input&&!result.ready.length&&!result.partial&&!result.supersededSegmentIds?.length)return;
+  if(trigger!=="audio_boundary"&&!input&&!result.ready.length&&!result.partial&&!result.supersededSegmentIds?.length)return;
   try{const payload=publicAsrAssemblyTracePayload(sessionId,trigger,result,input);
     if(payload)realtimeLogger.info(payload,"Public ASR QA boundary");
   }catch{/* Diagnostic failures do not change assembly, translation or stop. */}

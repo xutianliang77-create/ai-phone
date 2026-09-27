@@ -119,11 +119,12 @@ export async function flushProviderSession(
   provider: RealtimeProvider,
   sessionId: string,
   sendEvent: (event: ServerRealtimeEvent) => void,
-  options: { failOnError?: boolean; finishSession?: boolean } = {},
+  options: { failOnError?: boolean; finishSession?: boolean; reason?: "audio_boundary" } = {},
 ) {
   if (!provider.flushSession) return;
   for await (const outgoing of provider.flushSession(sessionId, {
     finishSession: options.finishSession,
+    ...(options.reason ? { reason: options.reason } : {}),
   })) {
     sendEvent(outgoing);
     // A translation.failed event is a persisted terminal result for one

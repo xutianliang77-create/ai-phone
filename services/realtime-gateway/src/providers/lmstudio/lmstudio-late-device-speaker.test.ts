@@ -6,9 +6,10 @@ import {DeviceSpeakerTimeline} from "../../speaker/device-speaker-timeline.js";
 import {markAcceptedAudioRange} from "../../connection/accepted-audio-range.js";
 import {LmStudioRealtimeProvider} from "./lmstudio-realtime-provider.js";
 import {RealtimeTtsOutputQueue} from "../../tts/realtime-tts-output.js";
+import {flushProviderSession} from "../../connection/session-control-handler.js";
 
 const consume=async(stream:AsyncGenerator<ServerRealtimeEvent>)=>{const events=[];for await(const e of stream)events.push(e);return events;};
-function fixture(){
+function fixture(publicMode=true){
   const session={sessionId:"late",sourceLanguage:"auto" as const,targetLanguage:"en" as const,voiceOutput:false,
     asrEndpointMode:"conversation" as const,speakerAttribution:{mode:"diarization" as const,maxSpeakers:4 as const,
       deviceProfile:deviceSpeakerProfile.id,allowVoiceIdentity:false}};
@@ -22,7 +23,7 @@ function fixture(){
   const asr=new SpeakerAwareAsrProvider(base,device,undefined,undefined,{enabled:false,maxSessions:0,maxDurationMs:0,maxRecords:0});
   const translate=vi.fn(async(input:{text:string})=>`Translated: ${input.text}`);
   const provider=new LmStudioRealtimeProvider({baseUrl:"https://synthetic.invalid",model:"configured-mt",timeoutMs:1000,
-    publicSession:session,asrProvider:asr,deviceSpeakerReceiver:device.accept.bind(device),
+    ...(publicMode?{publicSession:session}:{}),asrProvider:asr,deviceSpeakerReceiver:device.accept.bind(device),
     deviceSpeakerRefresh:parts=>device.refresh(parts,asr.deviceSpeakerBoundaryGuards(session.sessionId)),
     translationClient:{translate,supportsAttemptContext:true,healthCheck:async()=>true}});
   const labels:ServerRealtimeEvent[]=[],timeline=new DeviceSpeakerTimeline(session.sessionId,e=>labels.push(e),
@@ -43,6 +44,48 @@ function fixture(){
 }
 afterEach(()=>vi.useRealTimers());
 describe("late validated phone evidence and original public semantic assembly",()=>{
+  it.each(["before_second","after_second"])("retains bounded late-speaker repair across audio boundary %s",async boundary=>{
+    vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
+    const drain=()=>flushProviderSession(f.provider,"late",()=>{},{failOnError:true,reason:"audio_boundary"});
+    try{
+      await f.feed();if(boundary==="before_second"){vi.setSystemTime(10500);await drain();}
+      vi.setSystemTime(11000);await f.feed();if(boundary==="after_second"){vi.setSystemTime(11500);await drain();}
+      f.evidence([[0,0,2000]]);vi.setSystemTime(12000);
+      const events=await f.feed();
+      expect(events.filter(e=>e.type==="transcript.final")).toMatchObject([
+        {segmentId:"b",revision:2,text:""},{segmentId:"a",revision:2,speaker:{speakerId:"device-speaker-1"}},
+      ]);
+      expect(f.translate).toHaveBeenCalledTimes(3);expect(f.base.createSession).toHaveBeenCalledOnce();
+      expect(f.base.flush.mock.calls).toEqual([["late",{finishSession:undefined}]]);
+    }finally{await f.provider.closeSession("late");}
+  });
+  it.each(["pause","end","end_with_boundary_reason"])("still clears continuation at %s",async reason=>{
+    vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
+    try{
+      await f.feed();vi.setSystemTime(11000);await f.feed();
+      await flushProviderSession(f.provider,"late",()=>{},{finishSession:reason!=="pause",...(reason==="end_with_boundary_reason"?{reason:"audio_boundary" as const}:{})});
+      f.evidence([[0,0,2000]]);vi.setSystemTime(12000);
+      expect((await f.feed()).filter(e=>e.type==="translation.final")).toEqual([]);
+      expect(f.translate).toHaveBeenCalledTimes(2);
+    }finally{await f.provider.closeSession("late");}
+  });
+  it("does not renew the five-second deadline at intermediate boundaries",async()=>{
+    vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
+    try{
+      await f.feed();vi.setSystemTime(11000);await f.feed();
+      vi.setSystemTime(14999);await flushProviderSession(f.provider,"late",()=>{},{reason:"audio_boundary"});
+      f.evidence([[0,0,2000]]);vi.setSystemTime(15001);
+      expect((await f.feed()).filter(e=>e.type==="translation.final")).toEqual([]);expect(f.translate).toHaveBeenCalledTimes(2);
+    }finally{await f.provider.closeSession("late");}
+  });
+  it("does not enable public continuation in the private provider",async()=>{
+    const f=fixture(false);await f.provider.createSession(f.session);
+    try{
+      await f.feed();await flushProviderSession(f.provider,"late",()=>{},{reason:"audio_boundary"});await f.feed();
+      f.evidence([[0,0,2000]]);expect((await f.feed()).filter(e=>e.type==="translation.final")).toEqual([]);
+      expect(f.translate).toHaveBeenCalledTimes(2);
+    }finally{await f.provider.closeSession("late");}
+  });
   it.each(["next_audio","finish"])("repairs two emitted fragments on %s without a second ASR",async trigger=>{
     vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
     try{

@@ -146,13 +146,13 @@ export class SegmentAssembler {
     return this.flushWithReplacements(sessionId, nowMs).ready;
   }
 
-  flushWithReplacements(sessionId: string, nowMs = Date.now()): SegmentPushResult {
+  flushWithReplacements(sessionId: string, nowMs = Date.now(), options: {preserveContinuations?:boolean} = {}): SegmentPushResult {
     const state = this.sessions.get(sessionId);
     const result=state?.pending ? this.releasePending(state, nowMs) : { ready: [] };
-    this.continuationRevisions.clear(sessionId);
+    // PCM barriers retain only the remaining window; pause/end still clear it.
+    if(options.preserveContinuations)this.continuationRevisions.expire(sessionId,nowMs);else this.continuationRevisions.clear(sessionId);
     return result;
   }
-
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
     this.continuationRevisions.clear(sessionId);

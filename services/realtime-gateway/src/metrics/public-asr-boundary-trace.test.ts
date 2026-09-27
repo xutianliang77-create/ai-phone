@@ -5,6 +5,14 @@ import {logPublicAsrBoundary,publicAsrBoundaryTracePayload,logPublicSessionEnd,p
 
 afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();});
 
+it("records an intermediate boundary even when no text is released, without enabling guards",()=>{
+  const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});
+  logPublicAsrAssembly("session","audio_boundary",{ready:[]});expect(info).not.toHaveBeenCalled();
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");
+  logPublicAsrAssembly("session","audio_boundary",{ready:[]});
+  expect(info).toHaveBeenCalledOnce();expect(info.mock.calls[0]![0]).toMatchObject({trigger:"audio_boundary",readyCount:0});
+});
+
 it("records bounded numeric PCM levels without treating a nonzero sample as speech",()=>{
   expect(publicPcm16Level(Buffer.from([0,0,3,0,252,255]))).toEqual({sampleCount:3,zeroSamples:1,peakAbs:4,rms:2.887});
   expect(publicPcm16Level(Buffer.alloc(8))).toEqual({sampleCount:4,zeroSamples:4,peakAbs:0,rms:0});

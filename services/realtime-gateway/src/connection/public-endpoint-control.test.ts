@@ -25,7 +25,7 @@ describe("public endpoint ordering on original control and batching",()=>{
     const f=fixture();f.batcher.enqueue(frame());f.batcher.enqueue(frame(2));
     const boundary=handleAudioBoundary({type:"audio.boundary",sessionId:"control",sequence:2},f.options);f.batcher.enqueue(frame(3));
     await f.batcher.flush();await boundary;expect(f.order).toEqual(["audio:2","confirm","commit","drain","audio:3"]);
-    expect(f.flushOptions).toEqual([{finishSession:undefined}]);
+    expect(f.flushOptions).toEqual([{finishSession:undefined,reason:"audio_boundary"}]);
     expect(f.events.at(-1)).toMatchObject({type:"audio.boundary.committed",sequence:2});
   });
   it("does not let an already-running force drain steal audio after the boundary",async()=>{

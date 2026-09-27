@@ -66,7 +66,7 @@ export interface RealtimeProvider {
   sendText?(segment: TextSegmentInput): AsyncGenerator<ServerRealtimeEvent>;
   flushSession?(
     sessionId: string,
-    options?: { finishSession?: boolean },
+    options?: { finishSession?: boolean; reason?: "audio_boundary" },
   ): AsyncGenerator<ServerRealtimeEvent>;
   diagnostics?(
     sessionId: string,
