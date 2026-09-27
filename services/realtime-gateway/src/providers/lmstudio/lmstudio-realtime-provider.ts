@@ -50,6 +50,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.semanticSegments = new SegmentAssembler({
       maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
       emitSemanticContinuationRevisions:!!this.publicSession,
+      semanticSourceLanguage:this.publicSession?.sourceLanguage,
     });
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
@@ -62,6 +63,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
       emitMaxDurationRevisions: true,
       emitSemanticContinuationRevisions:!!this.publicSession,
+      semanticSourceLanguage:this.publicSession?.sourceLanguage,
     });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),

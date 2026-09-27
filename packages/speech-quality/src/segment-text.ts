@@ -6,6 +6,7 @@ import type { SpeechTranscript } from "./speech-transcript.js";
 import { shouldHoldForNextSegment } from "./segment-boundary.js";
 import { analyzeTurnLanguage } from "./turn-language-profile.js";
 import { mergedLanguageEvidence } from "./segment-language-evidence.js";
+import { semanticContinuationPunctuation } from "./semantic-object-boundary.js";
 
 export interface MergeTranscriptPartsOptions {
   allowSingleCharacterCjkOverlap?: boolean;
@@ -91,6 +92,7 @@ function mergeTranscriptContentPart(
     language,
     hardContinuation,
     semanticContinuation,
+    nextPart.text,
   );
   const previousTokens = remapTokens(
     previousState.tokenTimings,
@@ -149,7 +151,7 @@ function mergeTranscriptContentPart(
   const nextIncludedStart = overlap + remainderLeading;
   const remainder = next.slice(nextIncludedStart);
   if (!remainder) return { text: previous, tokenTimings: previousTokens };
-  const separator = shouldJoinWithoutSpace(previous, remainder) ? "" : " ";
+  const separator = semanticContinuation&&language==="zh"&&/[、，]$/u.test(previous)||shouldJoinWithoutSpace(previous,remainder)?"":" ";
   const text = `${previous}${separator}${remainder}`;
   const remainderTokens = remapTokens(
     nextPart.tokenTimings,
@@ -163,19 +165,17 @@ function mergeTranscriptContentPart(
     tokenTimings: combinedTokens(previousTokens, remainderTokens, text),
   };
 }
-
 function normalizedPreviousText(
   text: string,
   language: string,
   hardContinuation: boolean,
-  semanticContinuation: boolean,
+  semanticContinuation: boolean, nextText: string,
 ) {
-  if(semanticContinuation)return text.trim().replace(/[.。]+$/u,language==="zh"?"，":",");
+  if(semanticContinuation)return text.trim().replace(/[.。]+$/u,semanticContinuationPunctuation(text,nextText,language));
   return hardContinuation
     ? text.trim().replace(/[.。]+$/u, "").trim()
     : stripIncompleteJoinPunctuation(text.trim(), language);
 }
-
 function trimmedRange(text: string) {
   const value = text.trim();
   const start = text.length - text.trimStart().length;

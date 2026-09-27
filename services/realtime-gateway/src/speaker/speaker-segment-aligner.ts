@@ -4,6 +4,8 @@ import type {
 } from "@translation/contracts";
 import type { SpeakerSpan } from "./speaker-attribution-provider.js";
 
+export const MINIMUM_SPEAKER_EVIDENCE_MS = 160;
+
 export interface SpeakerAlignment {
   speaker: SpeakerAttributionDto;
   timing: SegmentTimingDto;
@@ -17,7 +19,7 @@ export interface SpeakerAlignmentEvaluation {
 export function alignSpeakerSpan(
   timing: SegmentTimingDto | undefined,
   spans: SpeakerSpan[],
-  minimumEvidenceMs = 160,
+  minimumEvidenceMs = MINIMUM_SPEAKER_EVIDENCE_MS,
   minimumDominanceRatio = 0.55,
 ): SpeakerAlignment | null {
   return evaluateSpeakerSpan(
@@ -31,7 +33,7 @@ export function alignSpeakerSpan(
 export function evaluateSpeakerSpan(
   timing: SegmentTimingDto | undefined,
   spans: SpeakerSpan[],
-  minimumEvidenceMs = 160,
+  minimumEvidenceMs = MINIMUM_SPEAKER_EVIDENCE_MS,
   minimumDominanceRatio = 0.55,
 ): SpeakerAlignmentEvaluation {
   if (!timing || spans.length === 0) {

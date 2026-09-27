@@ -35,6 +35,7 @@ export interface SegmentAssemblerOptions {
   duplicateTextWindowMs?: number;
   emitMaxDurationRevisions?: boolean;
   emitSemanticContinuationRevisions?: boolean;
+  semanticSourceLanguage?: string;
 }
 
 export interface SegmentPushResult {
@@ -76,6 +77,7 @@ export class SegmentAssembler {
       enabled: options.emitMaxDurationRevisions === true,
       maxWindowMs: this.maxContinuationBufferMs,
       semanticContinuations: options.emitSemanticContinuationRevisions === true,
+      semanticSourceLanguage: options.semanticSourceLanguage,
       maxSemanticParts: this.maxBufferedSegments,
       maxSemanticCharacters: this.maxBufferedCharacters,
     });

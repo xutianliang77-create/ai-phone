@@ -1,0 +1,122 @@
+{
+  "description": "Synthetic metadata using the recorded failure text; observed 88ms edge offset, translated time origin, no claim of raw acoustic replay.",
+  "events": [
+    {
+      "type": "transcript.final",
+      "sessionId": "object",
+      "segmentId": "first",
+      "turnId": "turn_2",
+      "revision": 1,
+      "text": "我们要测试 Qwen Three ASR。",
+      "language": "zh",
+      "speaker": {
+        "speakerId": "device-speaker-2",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.97
+      },
+      "timing": {
+        "startMs": 632,
+        "endMs": 3200,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      },
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh",
+        "en"
+      ],
+      "mixedLanguage": true
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "object",
+      "segmentId": "first",
+      "turnId": "turn_2",
+      "revision": 1,
+      "text": "We will test Qwen Three ASR.",
+      "language": "en",
+      "speaker": {
+        "speakerId": "device-speaker-2",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.97
+      },
+      "timing": {
+        "startMs": 632,
+        "endMs": 3200,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      },
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh",
+        "en"
+      ],
+      "mixedLanguage": true
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "object",
+      "segmentId": "second",
+      "turnId": "turn_2",
+      "revision": 2,
+      "text": "",
+      "language": "zh"
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "object",
+      "segmentId": "first",
+      "turnId": "turn_2",
+      "revision": 2,
+      "text": "我们要测试 Qwen Three ASR、Hy-MT2 和 VoxCPM2 的在线模型链路。",
+      "language": "zh",
+      "speaker": {
+        "speakerId": "device-speaker-2",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.97
+      },
+      "timing": {
+        "startMs": 632,
+        "endMs": 7328,
+        "source": "estimated"
+      },
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh",
+        "en"
+      ],
+      "mixedLanguage": true
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "object",
+      "segmentId": "first",
+      "turnId": "turn_2",
+      "revision": 2,
+      "text": "We will test the online model pipeline with Qwen Three ASR, Hy-MT2 and VoxCPM2.",
+      "language": "en",
+      "speaker": {
+        "speakerId": "device-speaker-2",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.97
+      },
+      "timing": {
+        "startMs": 632,
+        "endMs": 7328,
+        "source": "estimated"
+      },
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh",
+        "en"
+      ],
+      "mixedLanguage": true
+    }
+  ]
+}

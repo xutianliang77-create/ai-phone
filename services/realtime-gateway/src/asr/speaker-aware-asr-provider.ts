@@ -167,6 +167,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         frame.sessionId,
         speakerId,
       ),
+      {deviceBoundaryPolicy:this.speaker.controlsAsrEndpoints===false&&this.speaker.requiresDirectEvidence===true},
     );
     const reassigned = this.speaker.controlsAsrEndpoints === false ? attributed : await this.boundaryReassignment.process(
       frame.sessionId,
@@ -205,6 +206,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         sessionId,
         speakerId,
       ),
+      {deviceBoundaryPolicy:this.speaker.controlsAsrEndpoints===false&&this.speaker.requiresDirectEvidence===true},
     );
     const reassigned = this.speaker.controlsAsrEndpoints === false ? attributed : await this.boundaryReassignment.process(
       sessionId,

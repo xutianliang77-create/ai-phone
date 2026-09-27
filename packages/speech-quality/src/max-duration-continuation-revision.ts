@@ -28,6 +28,7 @@ export class MaxDurationContinuationRevisionCoordinator {
     maxTimingGapMs?: number;
     maxTimingOverlapMs?: number;
     semanticContinuations?: boolean;
+    semanticSourceLanguage?: string;
     maxSemanticParts?: number;
     maxSemanticCharacters?: number;
   }) {}
@@ -36,7 +37,7 @@ export class MaxDurationContinuationRevisionCoordinator {
    * pending assembler. Never cache the un-emitted second half of a held prefix. */
   rememberSemantic(sessionId:string,transcript:SpeechTranscript,nowMs:number,partCount:number) {
     if(!this.options.semanticContinuations)return;
-    if(!isSemanticContinuationCandidate(transcript)||partCount>=(this.options.maxSemanticParts??3)||
+    if(!isSemanticContinuationCandidate(transcript,this.options.semanticSourceLanguage)||partCount>=(this.options.maxSemanticParts??3)||
       Array.from(transcript.text).length>=(this.options.maxSemanticCharacters??180))return;
     this.provisional.set(sessionId,{transcript:structuredClone(transcript),emittedAtMs:nowMs,semantic:true,partCount,
       semanticParts:[structuredClone(transcript)]});
@@ -58,7 +59,7 @@ export class MaxDurationContinuationRevisionCoordinator {
       return this.replaceSameSegment(sessionId, pending, transcript);
     }
     const semantic=pending.semantic===true;
-    const semanticAllowed=semantic&&isSemanticContinuationCandidate(transcript)&&startsSemanticContinuation(transcript)&&
+    const semanticAllowed=semantic&&isSemanticContinuationCandidate(transcript,this.options.semanticSourceLanguage)&&startsSemanticContinuation(transcript,pending.transcript)&&
       (pending.partCount??1)<(this.options.maxSemanticParts??3)&&
       Array.from(pending.transcript.text+transcript.text).length<=(this.options.maxSemanticCharacters??180);
     if ((semantic&&!semanticAllowed)||!canReviseContinuation(
@@ -128,8 +129,8 @@ export class MaxDurationContinuationRevisionCoordinator {
     if(parts.length===1){this.provisional.delete(sessionId);return {handled:false};}
     const updated=parts.map((part,i)=>i===index?structuredClone(incoming):part);
     const revision=Math.max((pending.transcript.revision??0)+1,...updated.map(part=>part.revision??0));
-    const safe=updated.every(isSemanticContinuationCandidate)&&updated.slice(1).every((part,i)=>
-      startsSemanticContinuation(part)&&canReviseContinuation(updated[i],part,this.options,true))&&
+    const safe=updated.every(part=>isSemanticContinuationCandidate(part,this.options.semanticSourceLanguage))&&updated.slice(1).every((part,i)=>
+      startsSemanticContinuation(part,updated[i])&&canReviseContinuation(updated[i],part,this.options,true))&&
       Array.from(updated.map(part=>part.text).join("")).length<=(this.options.maxSemanticCharacters??180);
     if(!safe){
       // The original text/revision path can undo a grouping. Re-emit every

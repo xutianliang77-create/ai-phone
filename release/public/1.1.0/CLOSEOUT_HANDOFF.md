@@ -1,5 +1,15 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## CO11-04/06 策略补全：SOURCE/HOST通过，尚未部署（2026-09-27，最新）
+
+26d1257/2026092702已同源部署并完成70秒静音短测：手机/服务器17段一致、尾句完整、唯一77秒结算；会议纪要句revision2合并生效，但用户仍拒绝整体断句。实际枚举句被接续词列表、文本mixedLanguage及段首88ms换人边界→unknown/overlap组合否决，根因在现役未改代码重放确认；旧回执保留，不把局部成功写为验收。
+
+本批沿原Assembler/同ID修订链扩展前后对象-枚举关系，不含测试模型名称；混写提示保留但不再代替已确认ASR/固定source语言；只有phone/direct-evidence的顺序换人路径使用有界关联。真实重叠、中部换人/缺证据/有token时间证据不被猜测覆盖；段首尾依原160ms最小证据阈值、充分覆盖和0.6置信度关联已确认speaker/turn，不改原音频时间，也不把160ms说成模型实测误差。默认私有路径和原3段/180字符/5秒窗口不变，原手机VAD/供应商VAD、模型参数、鉴权余额和结束结算不改。
+
+最终共享库及Gateway全量134文件1163项、Flutter定向5文件10项、双版本40/40、相关build/typecheck、Dart新测试分析、行数/diff通过。真实模块的手机证据→Gateway→翻译模拟→TTS取消用例及同份Gateway/Flutter wire fixture已通过；不是实机或模型资格。最终验证源码指纹2269e025e6ee3437dcc853dcf452d0aa4fc3cb54f73d7f2ec5847448c8a1239c，测试后只补本交接/快照，原用户WIP不混入。原始输出在外层co0406-policy-*，详见`artifacts/closeout-regression/20260927-semantic-policy-repair/RESULT.md`与verification.json。
+
+这是有界中英文语法证据，不保证任意语法都可自动合并；不满足证据保留原边界，已播放音频不能撤回。本轮无push/部署/装机/模型调用，取消的测试守卫不恢复。后续须新同源候选和对应资格后短测断句及朗读，CO11-04/06/15实机与完整质量门禁仍开放。
+
 ## CO11-04 公有断句适配：源码/HOST通过，未部署（2026-09-27）
 
 复用原SegmentAssembler和同ID revision/tombstone链，为公有Provider启用明确接续词的保守合并；首段仍立即输出，同已知speaker/turn/language、非重叠和连续时间才合并。沿原3段/180字符及默认5秒窗口，追加不延长窗口；换人/换向/未知/超窗不合并。默认/私有和硬截断路径保持原行为，不更换模型、不改手机或供应商VAD、不伪造max_duration。更正保留尾句，分组依据失效时用高revision恢复独立文本；无法保持精确字符对齐的token timing不伪造。

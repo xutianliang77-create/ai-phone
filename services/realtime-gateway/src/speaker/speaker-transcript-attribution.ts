@@ -4,11 +4,14 @@ import type {
 } from "../asr/asr-provider.js";
 import type { SpeakerSpan } from "./speaker-attribution-provider.js";
 import { evaluateSpeakerSpan } from "./speaker-segment-aligner.js";
+import { attributeDeviceSpeakerBoundary } from "./device-speaker-boundary-attribution.js";
 
 export interface SpeakerBoundaryGuard {
   boundaryMs: number;
   previousSpeakerId: string;
   nextSpeakerId: string;
+  previousTurnId?: string;
+  nextTurnId?: string;
 }
 
 export function providerResult(results: TranscriptResult[]): AsrProviderResult {
@@ -22,12 +25,14 @@ export function attributeSpeakerTranscripts(
   fallbackSpeakerId: (transcript: TranscriptResult) => string | undefined,
   boundaries: SpeakerBoundaryGuard[] = [],
   isConfirmedSpeakerId: (speakerId: string) => boolean = () => true,
+  options: {deviceBoundaryPolicy?:boolean} = {},
 ) {
   return transcripts.map((transcript) => {
     const crossedBoundaries = boundaries.filter((boundary) =>
       crossesBoundary(transcript, boundary.boundaryMs)
     );
     if (crossedBoundaries.length > 0) {
+      if(options.deviceBoundaryPolicy)return attributeDeviceSpeakerBoundary(transcript,spans,crossedBoundaries,isConfirmedSpeakerId);
       return mixedSpeakerFallback(transcript, crossedBoundaries);
     }
     if (transcript.speaker?.speakerId !== undefined &&
