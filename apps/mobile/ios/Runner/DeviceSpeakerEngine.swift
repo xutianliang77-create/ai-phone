@@ -21,8 +21,9 @@ struct DeviceSpeakerObservation: Sendable {
   let sampleRate: Int
   let throughSample: Int
   let spans: [DeviceSpeakerSpan]
+  let profile: DeviceSpeakerModelVariant
   var json: [String: Any] { ["type": "speaker.evidence", "sessionId": sessionId,
-    "profile": DeviceSpeakerModelResources.profile, "modelRevision": DeviceSpeakerModelResources.revision,
+    "profile": profile.rawValue, "modelRevision": DeviceSpeakerModelResources.revision,
     "sequence": sequence, "sampleRate": sampleRate, "throughSample": throughSample,
     "spans": spans.map(\.json)] }
 }
@@ -32,9 +33,10 @@ struct DeviceSpeakerObservation: Sendable {
 actor DeviceSpeakerEngine {
   let sessionId: String
   let sampleRate: Int
+  private let profile: DeviceSpeakerModelVariant
   private var inputSamples = 0, sequence = 0, through = 0
   private var cancelled = false
-  private var activity = DeviceSpeakerActivityDecoder()
+  private var activity: DeviceSpeakerActivityDecoder
   private var totalProcessingMs = 0.0, maximumProcessingMs = 0.0
   private let inputFormat: AVAudioFormat
   private let outputFormat: AVAudioFormat
@@ -43,23 +45,24 @@ actor DeviceSpeakerEngine {
   private let diarizer: DeviceSpeakerStreamingRuntime
   #endif
 
-  init(sessionId: String, sampleRate: Int, model: MLModel) throws {
+  init(sessionId: String, sampleRate: Int, model: MLModel, profile: DeviceSpeakerModelVariant = .fastest,
+       activityConfiguration: DeviceSpeakerActivityConfiguration = .init(), cacheUpdateFrames:Int? = nil) throws {
     guard !sessionId.isEmpty, sessionId.count <= 240, [16000, 24000].contains(sampleRate),
       let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
       let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)
       else { throw DeviceSpeakerFailure.invalidAudio }
     self.sessionId = sessionId; self.sampleRate = sampleRate
+    self.profile=profile; activity=DeviceSpeakerActivityDecoder(configuration:activityConfiguration)
     inputFormat = input; outputFormat = output
     converter = sampleRate == 16000 ? nil : AVAudioConverter(from: input, to: output)
     guard sampleRate == 16000 || converter != nil else { throw DeviceSpeakerFailure.invalidAudio }
     #if canImport(FluidAudio)
-    let expected: [String: [Int]] = ["chunk": [1, 112, 128], "spkcache": [1, 188, 512], "fifo": [1, 40, 512]]
-    for (name, shape) in expected {
+    for (name, shape) in profile.inputShapes {
       guard model.modelDescription.inputDescriptionsByName[name]?.multiArrayConstraint?.shape.map(\.intValue) == shape else {
         throw DeviceSpeakerFailure.resourcesInvalid
       }
     }
-    diarizer = try DeviceSpeakerStreamingRuntime(model:model)
+    diarizer = try DeviceSpeakerStreamingRuntime(model:model,profile:profile,cacheUpdateFrames:cacheUpdateFrames)
     #else
     throw DeviceSpeakerFailure.unsupported
     #endif
@@ -105,7 +108,7 @@ actor DeviceSpeakerEngine {
     if through < inputSamples {
       through = inputSamples; sequence += 1
       result.append(DeviceSpeakerObservation(sessionId:sessionId,sequence:sequence,sampleRate:sampleRate,
-        throughSample:through,spans:[]))
+        throughSample:through,spans:[],profile:profile))
     }
     cancelled = true; diarizer.cleanup(); converter?.reset()
     return result
@@ -147,7 +150,9 @@ actor DeviceSpeakerEngine {
         if start < through || end <= start { continue }
         let probabilities = (0..<4).map { Double(chunk.probability(speaker: $0, frame: frame, numSpeakers: 4)) }
         guard probabilities.allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1 }) else { throw DeviceSpeakerFailure.invalidAudio }
-        let active = (0..<4).filter { probabilities[$0] >= 0.5 }
+        // The activity decoder already applied the selected thresholds. Zero
+        // means inactive; do not silently impose a second fixed .5 threshold.
+        let active = (0..<4).filter { probabilities[$0] > 0 }
         for speaker in active { spans.append(DeviceSpeakerSpan(speaker: speaker, startSample: start,
           endSample: end, confidence: probabilities[speaker], overlap: active.count > 1)) }
       }
@@ -155,7 +160,7 @@ actor DeviceSpeakerEngine {
       guard end > through else { continue }
       through = end; sequence += 1
       output.append(DeviceSpeakerObservation(sessionId: sessionId, sequence: sequence,
-        sampleRate: sampleRate, throughSample: through, spans: spans))
+        sampleRate: sampleRate, throughSample: through, spans: spans, profile:profile))
     }
     return output
   }

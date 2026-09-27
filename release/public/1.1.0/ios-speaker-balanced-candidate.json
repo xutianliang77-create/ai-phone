@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "sortformer_v2_1_balanced",
+  "revision": "ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1",
+  "repo": "FluidInference/diar-streaming-sortformer-coreml",
+  "modelDirectory": "SortformerNvidiaLow_v2.1.mlmodelc",
+  "sdkRevision": "9c20d9bccc1fa5a0b9890b088167c80ee2d6d913",
+  "candidateOnly": true,
+  "enabledByDefault": false,
+  "sampleRate": 16000,
+  "maxSpeakers": 4,
+  "bytes": 246280141,
+  "storagePrecision": "Mixed (Float16, Float32)",
+  "inputShapes": {
+    "chunk": "[1, 112, 128]",
+    "chunk_lengths": "[1]",
+    "spkcache": "[1, 188, 512]",
+    "spkcache_lengths": "[1]",
+    "fifo": "[1, 188, 512]",
+    "fifo_lengths": "[1]"
+  },
+  "streaming": {
+    "chunk": 6,
+    "left": 1,
+    "right": 7,
+    "fifo": 188,
+    "cache": 188,
+    "update": 144
+  },
+  "files": [
+    {
+      "path": "analytics/coremldata.bin",
+      "bytes": 202,
+      "sha256": "16207cdb2d0bd6e7d48ea79412f71f9d26ca44526bcafaace8e7b3f0bb8f8511"
+    },
+    {
+      "path": "coremldata.bin",
+      "bytes": 1096,
+      "sha256": "15915155a11bcbd655b4c40fb7781f76c42645af8277d060c05120d691df430d"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 5186,
+      "sha256": "52200efd0f58694635a36c0284948163b7d0a78a6f32a72a429b2fe1d2069fb7"
+    },
+    {
+      "path": "model0/analytics/coremldata.bin",
+      "bytes": 108,
+      "sha256": "5a8281049b2a65a3be541cfd9f949e84b8fe1c5251ce90e46da1626fed54e58a"
+    },
+    {
+      "path": "model0/coremldata.bin",
+      "bytes": 641,
+      "sha256": "d4da26a4f13778a7bcba8c5adb7834558315803984b723b6e9ea98839ebd41c6"
+    },
+    {
+      "path": "model0/model.mil",
+      "bytes": 32549,
+      "sha256": "3b36789490c655d9c38c2b3e544c0ba94c838f709669b2694542da89e4662a5f"
+    },
+    {
+      "path": "model0/weights/0-weight.bin",
+      "bytes": 8948544,
+      "sha256": "88a98803e35186b1dfb41d7f748f7cee5093bb6efeb117f56953c17549792fa4"
+    },
+    {
+      "path": "model1/analytics/coremldata.bin",
+      "bytes": 108,
+      "sha256": "5a8281049b2a65a3be541cfd9f949e84b8fe1c5251ce90e46da1626fed54e58a"
+    },
+    {
+      "path": "model1/coremldata.bin",
+      "bytes": 605,
+      "sha256": "0fd4ee4c405f33d5c9244d323c3a6abca6fd23d3bd31fcba4ce79789631b1043"
+    },
+    {
+      "path": "model1/model.mil",
+      "bytes": 1710110,
+      "sha256": "875ecfada1d573647874e9b66e6a18662d4e7571fe6886e81e2187eb62ee9c4b"
+    },
+    {
+      "path": "model1/weights/1-weight.bin",
+      "bytes": 235580992,
+      "sha256": "e98531d7e961c3e8c43f8f1266abd6bbc110e11c52cda4d75a506f7fab53f2d4"
+    }
+  ]
+}

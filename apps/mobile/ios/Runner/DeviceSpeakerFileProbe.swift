@@ -35,8 +35,17 @@ enum DeviceSpeakerFileProbe {
       let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
       guard let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
         let cases = manifest["cases"] as? [[String: Any]], !cases.isEmpty, cases.count <= 12 else { throw DeviceSpeakerFailure.invalidAudio }
+      guard let profile=DeviceSpeakerModelVariant(rawValue:manifest["profile"] as? String ?? DeviceSpeakerModelResources.profile)
+        else { throw DeviceSpeakerFailure.resourcesInvalid }
+      let activity=try DeviceSpeakerActivityConfiguration.fromJson(manifest["activity"])
+      let cacheUpdate:Int?
+      if let value=manifest["cacheUpdateFrames"] {
+        guard let integer=value as? Int else { throw DeviceSpeakerFailure.invalidAudio };cacheUpdate=integer
+      } else { cacheUpdate=nil }
+      result["cacheUpdateFrames"]=try profile.selectedCacheUpdateFrames(cacheUpdate)
+      result["profile"]=profile.rawValue;result["activity"]=activity.json
       let loadStart = ProcessInfo.processInfo.systemUptime
-      let model = try DeviceSpeakerModelResources.load()
+      let model = try DeviceSpeakerModelResources.load(profile:profile)
       result["modelLoadMs"] = (ProcessInfo.processInfo.systemUptime - loadStart) * 1000
       save()
       var peakMemory = residentBytes()
@@ -48,7 +57,7 @@ enum DeviceSpeakerFileProbe {
         let pcm = try Data(contentsOf: root.appendingPathComponent(id + ".pcm"))
         guard !pcm.isEmpty, pcm.count % 2 == 0, pcm.count <= rate * 2 * 300,
           SHA256.hash(data: pcm).map({String(format:"%02x",$0)}).joined() == expected else { throw DeviceSpeakerFailure.invalidAudio }
-        let engine = try DeviceSpeakerEngine(sessionId: id, sampleRate: rate, model: model)
+        let engine = try DeviceSpeakerEngine(sessionId:id,sampleRate:rate,model:model,profile:profile,activityConfiguration:activity,cacheUpdateFrames:cacheUpdate)
         result["currentCase"] = id; save()
         let started = ProcessInfo.processInfo.systemUptime
         var evidence: [[String: Any]] = [], calls: [Double] = []

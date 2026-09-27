@@ -19,8 +19,22 @@ enum DeviceSpeakerModelResources {
     ("model1/model.mil", 1147856, "c064cd7dd36372fa5cbe0bc4f2550e542c8fcd1fd0281a7b2b840959fbc1687d"),
     ("model1/weights/1-weight.bin", 230428224, "4c85926af77684bce762b355a2b162df557d832444fbeb79ee195113a4bbf1db"),
   ]
+  private static let balancedFiles: [(String, Int, String)] = [
+    ("analytics/coremldata.bin", 202, "16207cdb2d0bd6e7d48ea79412f71f9d26ca44526bcafaace8e7b3f0bb8f8511"),
+    ("coremldata.bin", 1096, "15915155a11bcbd655b4c40fb7781f76c42645af8277d060c05120d691df430d"),
+    ("metadata.json", 5186, "52200efd0f58694635a36c0284948163b7d0a78a6f32a72a429b2fe1d2069fb7"),
+    ("model0/analytics/coremldata.bin", 108, "5a8281049b2a65a3be541cfd9f949e84b8fe1c5251ce90e46da1626fed54e58a"),
+    ("model0/coremldata.bin", 641, "d4da26a4f13778a7bcba8c5adb7834558315803984b723b6e9ea98839ebd41c6"),
+    ("model0/model.mil", 32549, "3b36789490c655d9c38c2b3e544c0ba94c838f709669b2694542da89e4662a5f"),
+    ("model0/weights/0-weight.bin", 8948544, "88a98803e35186b1dfb41d7f748f7cee5093bb6efeb117f56953c17549792fa4"),
+    ("model1/analytics/coremldata.bin", 108, "5a8281049b2a65a3be541cfd9f949e84b8fe1c5251ce90e46da1626fed54e58a"),
+    ("model1/coremldata.bin", 605, "0fd4ee4c405f33d5c9244d323c3a6abca6fd23d3bd31fcba4ce79789631b1043"),
+    ("model1/model.mil", 1710110, "875ecfada1d573647874e9b66e6a18662d4e7571fe6886e81e2187eb62ee9c4b"),
+    ("model1/weights/1-weight.bin", 235580992, "e98531d7e961c3e8c43f8f1266abd6bbc110e11c52cda4d75a506f7fab53f2d4"),
+  ]
 
-  static func modelURL() throws -> URL {
+  static func modelURL(profile:DeviceSpeakerModelVariant = .fastest) throws -> URL {
+    let modelName=profile.modelName
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     let candidates = [
       Bundle.main.resourceURL?.appendingPathComponent("Models/Speaker").appendingPathComponent(modelName),
@@ -29,8 +43,14 @@ enum DeviceSpeakerModelResources {
     guard let root = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
       throw DeviceSpeakerFailure.resourcesMissing
     }
+    return try verify(directory:root,profile:profile)
+  }
+
+  static func verify(directory root:URL,profile:DeviceSpeakerModelVariant) throws -> URL {
+    let expectedFiles=profile == .fastest ? files : balancedFiles
+    guard expectedFiles.count==11 else { throw DeviceSpeakerFailure.resourcesInvalid }
     let safeRoot = root.resolvingSymlinksInPath().path + "/"
-    for (name, count, expected) in files {
+    for (name, count, expected) in expectedFiles {
       let file = root.appendingPathComponent(name)
       guard file.resolvingSymlinksInPath().path.hasPrefix(safeRoot),
         let size = (try FileManager.default.attributesOfItem(atPath: file.path)[.size]) as? NSNumber,
@@ -41,9 +61,9 @@ enum DeviceSpeakerModelResources {
     return root
   }
 
-  static func load() throws -> MLModel {
+  static func load(profile:DeviceSpeakerModelVariant = .fastest) throws -> MLModel {
     let url: URL
-    do { url = try modelURL() }
+    do { url = try modelURL(profile:profile) }
     catch let failure as DeviceSpeakerFailure { throw failure }
     catch { throw DeviceSpeakerFailure.resourcesInvalid }
     let configuration = MLModelConfiguration()
