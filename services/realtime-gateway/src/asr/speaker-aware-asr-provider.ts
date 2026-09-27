@@ -243,6 +243,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       ]))],
     };
   }
+  deviceSpeakerBoundaryGuards(sessionId:string) {
+    return this.speaker.controlsAsrEndpoints===false?this.boundaryTranscripts.boundaries(sessionId):[];
+  }
   resolveSpeakerBoundaries(sessionId: string, boundaryMs: number[]) {
     this.boundaryTranscripts.resolveTokenTimingBoundaries(
       sessionId,

@@ -84,7 +84,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       },
     });
     const sendRealtime = eventDispatcher.send;
-    if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = new DeviceSpeakerTimeline(session.id,sendRealtime);
+    if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = new DeviceSpeakerTimeline(session.id,sendRealtime,()=>provider.deviceSpeakerBoundaryGuards?.(session.id)??[]);
     const unsubscribeProvider=provider.setEventListener?.(session.id,event=>{
       if(ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active")sendRealtime(event);
     })??(()=>{});

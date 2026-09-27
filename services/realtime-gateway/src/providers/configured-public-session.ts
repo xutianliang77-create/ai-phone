@@ -154,7 +154,8 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     resolveCredentials:options.output.resolveCredentials,fetchFn:options.output.fetchFn,socketFactory:options.output.socketFactory},options.output.isSessionActive,options.output.maxPendingOutputs):undefined;
   const provider=new LmStudioRealtimeProvider({providerName: `public:${mt!.vendor}`, baseUrl: mt!.endpoint, model: mt!.modelId,
     timeoutMs: mt!.timeoutMs, maxTokens: mt!.maxTokens, asrProvider, translationClient, publicSession: session,
-    ...(phoneSpeaker?{deviceSpeakerReceiver:phoneSpeaker.accept.bind(phoneSpeaker)}:{}),
+    ...(phoneSpeaker?{deviceSpeakerReceiver:phoneSpeaker.accept.bind(phoneSpeaker),deviceSpeakerRefresh:(parts:import("../asr/asr-provider.js").TranscriptResult[])=>
+      phoneSpeaker.refresh(parts,asrProvider instanceof SpeakerAwareAsrProvider?asrProvider.deviceSpeakerBoundaryGuards(binding.sessionId):[])}:{}),
     // Keep one transport batch below Qwen's minimum configurable 200ms silence window,
     // so a durable attempt cannot straddle two supplier-owned speech turns.
     ...(snapshot.components.asr?.protocol==="qwen_asr_realtime"?{maxInputBatchAudioMs:100}:{}),

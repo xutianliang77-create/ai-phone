@@ -1,6 +1,7 @@
 import type { DeviceSpeakerEvidenceEvent, ServerRealtimeEvent } from "@translation/contracts";
 import { reconcileSpeakerRevision, type RevisableSpeakerSegment } from "./speaker-revision-reconciler.js";
 import type { SpeakerRevisionSpan } from "./speaker-revision-provider.js";
+import type {SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
 
 /** Reuses 1.0's metadata-only speaker.updated path for delayed phone evidence.
  * Never re-runs ASR/MT, changes text, infers identity or invents word timings. */
@@ -10,7 +11,8 @@ export class DeviceSpeakerTimeline {
   private through = 0;
   private generation = 0;
   private readonly labels = Object.fromEntries([1,2,3,4].map(i => [`device-speaker-${i}`, `device-speaker-${i}`]));
-  constructor(private readonly sessionId: string, private readonly send: (event: ServerRealtimeEvent) => void) {}
+  constructor(private readonly sessionId: string, private readonly send: (event: ServerRealtimeEvent) => void,
+    private readonly boundaries:()=>SpeakerBoundaryGuard[]=()=>[]) {}
 
   observe(event: ServerRealtimeEvent) {
     if (!("sessionId" in event) || event.sessionId !== this.sessionId) return;
@@ -21,7 +23,7 @@ export class DeviceSpeakerTimeline {
     if (!event.text.trim()) { this.segments.delete(event.segmentId); return; }
     this.segments.set(event.segmentId, {sessionId:this.sessionId, segmentId:event.segmentId,
       revision:event.revision, turnId:event.turnId, timing:event.timing, speaker:event.speaker,
-      speakerRevision:old?.speakerRevision});
+      speakerRevision:old?.speakerRevision,tokenTimings:event.tokenTimings});
     this.reconcile();
   }
   /** Only call after the provider validated session/rate/model and accepted PCM. */
@@ -44,7 +46,7 @@ export class DeviceSpeakerTimeline {
     const result = reconcileSpeakerRevision({sessionId:this.sessionId,generation:this.generation,
       windowStartMs:start,windowEndMs:this.through,provider:"on_device",model:"sortformer_v2_1_fastest",
       speakerCount:new Set(this.spans.map(s => s.speakerId)).size,
-      spans:this.spans.map(s => ({...s,startMs:s.startMs-start,endMs:s.endMs-start}))},eligible,this.labels);
+      spans:this.spans.map(s => ({...s,startMs:s.startMs-start,endMs:s.endMs-start}))},eligible,this.labels,this.boundaries());
     for (const update of result.updates) {
       const segment = this.segments.get(update.segmentId)!;
       this.segments.set(update.segmentId,{...segment,speaker:update.speaker,timing:update.timing,

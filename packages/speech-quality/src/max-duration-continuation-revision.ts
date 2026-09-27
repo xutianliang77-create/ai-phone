@@ -1,6 +1,7 @@
 import type { SpeechTranscript } from "./speech-transcript.js";
 import { mergeTranscriptParts } from "./segment-text.js";
 import {isSemanticContinuationCandidate,startsSemanticContinuation} from "./semantic-continuation-boundary.js";
+import {PendingSpeakerContinuations} from "./pending-speaker-continuations.js";
 
 interface ProvisionalContinuation {
   transcript: SpeechTranscript;
@@ -9,6 +10,7 @@ interface ProvisionalContinuation {
   semantic?: boolean;
   partCount?: number;
   semanticParts?: SpeechTranscript[];
+  speakerRefreshed?:boolean;
 }
 
 export interface ContinuationRevisionDecision {
@@ -21,6 +23,7 @@ export interface ContinuationRevisionDecision {
 
 export class MaxDurationContinuationRevisionCoordinator {
   private readonly provisional = new Map<string, ProvisionalContinuation>();
+  private readonly pendingSpeakers:PendingSpeakerContinuations;
 
   constructor(private readonly options: {
     enabled: boolean;
@@ -31,12 +34,17 @@ export class MaxDurationContinuationRevisionCoordinator {
     semanticSourceLanguage?: string;
     maxSemanticParts?: number;
     maxSemanticCharacters?: number;
-  }) {}
+    lateSpeakerRevisions?:boolean;
+  }) {
+    this.pendingSpeakers=new PendingSpeakerContinuations({...options,enabled:options.semanticContinuations&&options.lateSpeakerRevisions},
+      (a,b)=>canReviseContinuation(a,b,options,true));
+  }
 
   /** Called only for an actually emitted ordinary segment, after the inherited
    * pending assembler. Never cache the un-emitted second half of a held prefix. */
   rememberSemantic(sessionId:string,transcript:SpeechTranscript,nowMs:number,partCount:number) {
     if(!this.options.semanticContinuations)return;
+    this.pendingSpeakers.remember(sessionId,transcript,nowMs,partCount);
     if(!isSemanticContinuationCandidate(transcript,this.options.semanticSourceLanguage)||partCount>=(this.options.maxSemanticParts??3)||
       Array.from(transcript.text).length>=(this.options.maxSemanticCharacters??180))return;
     this.provisional.set(sessionId,{transcript:structuredClone(transcript),emittedAtMs:nowMs,semantic:true,partCount,
@@ -49,6 +57,7 @@ export class MaxDurationContinuationRevisionCoordinator {
     nowMs: number,
   ): ContinuationRevisionDecision {
     if (!this.options.enabled&&!this.options.semanticContinuations) return { handled: false };
+    if(this.pendingSpeakers.hasUnresolved(sessionId,nowMs))return {handled:false};
     const pending = this.activeProvisional(sessionId, nowMs);
     if (!pending) return this.acceptNew(sessionId, transcript, nowMs);
     if(pending.semanticParts){
@@ -60,8 +69,8 @@ export class MaxDurationContinuationRevisionCoordinator {
     }
     const semantic=pending.semantic===true;
     const semanticAllowed=semantic&&isSemanticContinuationCandidate(transcript,this.options.semanticSourceLanguage)&&startsSemanticContinuation(transcript,pending.transcript)&&
-      (pending.partCount??1)<(this.options.maxSemanticParts??3)&&
-      Array.from(pending.transcript.text+transcript.text).length<=(this.options.maxSemanticCharacters??180);
+      (pending.partCount??1)<Math.min(pending.speakerRefreshed?3:Infinity,this.options.maxSemanticParts??3)&&
+      Array.from(pending.transcript.text+transcript.text).length<=Math.min(pending.speakerRefreshed?180:Infinity,this.options.maxSemanticCharacters??180);
     if ((semantic&&!semanticAllowed)||!canReviseContinuation(
       pending.transcript,
       transcript,
@@ -77,6 +86,7 @@ export class MaxDurationContinuationRevisionCoordinator {
       pending.highestPreviewRevision,
       semantic,
     );
+    this.pendingSpeakers.clear(sessionId);
     if(semantic){
       const partCount=(pending.partCount??1)+1;
       this.provisional.set(sessionId,{...pending,transcript:revised,partCount,
@@ -117,10 +127,22 @@ export class MaxDurationContinuationRevisionCoordinator {
 
   expire(sessionId: string, nowMs: number) {
     this.activeProvisional(sessionId, nowMs);
+    this.pendingSpeakers.expire(sessionId,nowMs);
   }
 
   clear(sessionId: string) {
     this.provisional.delete(sessionId);
+    this.pendingSpeakers.clear(sessionId);
+  }
+
+  refreshSpeakers(sessionId:string,project:(parts:SpeechTranscript[])=>SpeechTranscript[],nowMs:number):ContinuationRevisionDecision {
+    const result=this.pendingSpeakers.refresh(sessionId,project,nowMs);if(!result)return {handled:false};
+    const changed=result.parts.length>1;
+    const transcript={...result.transcript,revision:(result.transcript.revision??0)+(changed?1:0)};
+    this.provisional.set(sessionId,{transcript,emittedAtMs:result.emittedAtMs,semantic:true,
+      partCount:result.parts.length,semanticParts:result.parts,speakerRefreshed:true});
+    return changed?{handled:true,transcript,consumedSegmentIds:result.parts.map(p=>p.segmentId),
+      supersededSegmentIds:result.parts.slice(1).map(p=>p.segmentId)}:{handled:false};
   }
 
   private replaceSemanticPart(sessionId:string,pending:ProvisionalContinuation,incoming:SpeechTranscript,index:number):ContinuationRevisionDecision {
@@ -130,7 +152,7 @@ export class MaxDurationContinuationRevisionCoordinator {
     const updated=parts.map((part,i)=>i===index?structuredClone(incoming):part);
     const revision=Math.max((pending.transcript.revision??0)+1,...updated.map(part=>part.revision??0));
     let safe=updated.every(part=>isSemanticContinuationCandidate(part,this.options.semanticSourceLanguage))&&
-      Array.from(updated.map(part=>part.text).join("")).length<=(this.options.maxSemanticCharacters??180);
+      Array.from(updated.map(part=>part.text).join("")).length<=Math.min(pending.speakerRefreshed?180:Infinity,this.options.maxSemanticCharacters??180);
     // Rebuild the same accumulated context used by forward appends. Comparing
     // only neighboring list tails loses the governing object from the first part.
     let prefix=updated[0];
@@ -194,7 +216,7 @@ export class MaxDurationContinuationRevisionCoordinator {
   private activeProvisional(sessionId: string, nowMs: number) {
     const pending = this.provisional.get(sessionId);
     if (!pending) return undefined;
-    if (nowMs - pending.emittedAtMs <= this.options.maxWindowMs) return pending;
+    if (nowMs - pending.emittedAtMs <= Math.min(pending.speakerRefreshed?5000:Infinity,this.options.maxWindowMs)) return pending;
     this.provisional.delete(sessionId);
     return undefined;
   }

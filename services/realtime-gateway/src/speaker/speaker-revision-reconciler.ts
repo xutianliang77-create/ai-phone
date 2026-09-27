@@ -2,11 +2,15 @@ import type {
   SegmentTimingDto,
   SpeakerAttributionDto,
   SpeakerUpdatedEvent,
+  AsrTokenTimingDto,
 } from "@translation/contracts";
 import type {
   SpeakerRevisionResult,
   SpeakerRevisionSpan,
 } from "./speaker-revision-provider.js";
+import {deviceSpeakerAlignment} from "./device-speaker-alignment.js";
+import {attributeDeviceSpeakerBoundary} from "./device-speaker-boundary-attribution.js";
+import type {SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
 import {
   absoluteRevisionSpans,
   intersection,
@@ -22,6 +26,7 @@ export interface RevisableSpeakerSegment {
   speakerRevision?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?:AsrTokenTimingDto[];
 }
 
 export interface SpeakerRevisionReconcileResult {
@@ -40,6 +45,7 @@ export function reconcileSpeakerRevision(
   revision: SpeakerRevisionResult,
   segments: RevisableSpeakerSegment[],
   stableSessionLabels?: Record<string, string>,
+  deviceBoundaries:SpeakerBoundaryGuard[] = [],
 ): SpeakerRevisionReconcileResult {
   const validation = validateSpeakerRevision(revision);
   if (validation) return rejected(validation);
@@ -58,7 +64,7 @@ export function reconcileSpeakerRevision(
   }
   const labelMapping = stableSessionLabels ?? mapRevisionLabels(spans, eligible);
   const updates = eligible.flatMap((segment) =>
-    updateForSegment(segment, spans, labelMapping, stableSessionLabels !== undefined)
+    updateForSegment(segment, spans, labelMapping, stableSessionLabels !== undefined,deviceBoundaries)
   );
   return { accepted: true, updates, labelMapping };
 }
@@ -68,9 +74,18 @@ function updateForSegment(
   spans: SpeakerRevisionSpan[],
   labelMapping: Record<string, string>,
   stableSessionLabels = false,
+  deviceBoundaries:SpeakerBoundaryGuard[] = [],
 ): SpeakerUpdatedEvent[] {
   const timing = segment.timing!;
   if (timing.overlap === true) return [];
+  if(stableSessionLabels){
+    const crossed=deviceBoundaries.filter(b=>timing.startMs<b.boundaryMs&&timing.endMs>b.boundaryMs);
+    const aligned=crossed.length?attributeDeviceSpeakerBoundary(segment,spans,crossed,()=>true):deviceSpeakerAlignment(timing,spans);
+    if(!aligned?.speaker||!aligned.timing)return [];
+    if(!aligned||sameSpeaker(segment.speaker,aligned.speaker)&&sameTiming(timing,aligned.timing))return [];
+    return [{type:"speaker.updated",sessionId:segment.sessionId,segmentId:segment.segmentId,turnId:segment.turnId,
+      revision:segment.revision,speakerRevision:(segment.speakerRevision??0)+1,speaker:aligned.speaker,timing:aligned.timing}];
+  }
   const durationMs = Math.max(1, timing.endMs - timing.startMs);
   const intersections = spans.flatMap((span) => {
     const duration = intersection(

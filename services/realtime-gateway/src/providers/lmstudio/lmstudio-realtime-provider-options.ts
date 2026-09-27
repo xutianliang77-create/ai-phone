@@ -1,6 +1,6 @@
 import type { DeviceSpeakerEvidenceEvent, TermbaseTermDto } from "@translation/contracts";
 import type { LlmProvider } from "@translation/llm";
-import type { AsrProvider } from "../../asr/asr-provider.js";
+import type { AsrProvider, TranscriptResult } from "../../asr/asr-provider.js";
 import type { RealtimeProviderSession } from "../realtime-provider.js";
 
 export interface TranslationClient {
@@ -21,6 +21,7 @@ export interface TranslationClient {
 
 export interface LmStudioRealtimeProviderOptions {
   deviceSpeakerReceiver?: (event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) => boolean;
+  deviceSpeakerRefresh?: (transcripts:TranscriptResult[])=>TranscriptResult[];
   /** Internal public assembly only: one exact session, no implicit reconnect/rebind. */
   publicSession?: RealtimeProviderSession;
   providerName?: string;

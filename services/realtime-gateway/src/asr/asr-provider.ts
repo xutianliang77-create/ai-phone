@@ -110,6 +110,7 @@ export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
 export interface AsrLanguageNotice {segmentId:string;revision:number;language:string;previewLanguage?:TranslationLanguageCode;}
 
 export interface AsrProvider {
+  deviceSpeakerBoundaryGuards?(sessionId:string):AsrSpeakerBoundaryEvidence["boundaries"];
   takeLanguageNotices?(sessionId:string):AsrLanguageNotice[];
   setPartialListener?(sessionId:string,listener:(result:TranscriptResult)=>void):()=>void;
   createSession(session: AsrSession): Promise<void>;

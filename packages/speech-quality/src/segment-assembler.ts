@@ -36,6 +36,7 @@ export interface SegmentAssemblerOptions {
   emitMaxDurationRevisions?: boolean;
   emitSemanticContinuationRevisions?: boolean;
   semanticSourceLanguage?: string;
+  lateSpeakerRevisions?:boolean;
 }
 
 export interface SegmentPushResult {
@@ -80,6 +81,7 @@ export class SegmentAssembler {
       semanticSourceLanguage: options.semanticSourceLanguage,
       maxSemanticParts: this.maxBufferedSegments,
       maxSemanticCharacters: this.maxBufferedCharacters,
+      lateSpeakerRevisions:options.lateSpeakerRevisions,
     });
   }
 
@@ -154,6 +156,13 @@ export class SegmentAssembler {
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
     this.continuationRevisions.clear(sessionId);
+  }
+
+  refreshSpeakers(sessionId:string,project:(parts:SpeechTranscript[])=>SpeechTranscript[],nowMs=Date.now()):SegmentPushResult {
+    const result=this.continuationRevisions.refreshSpeakers(sessionId,project,nowMs);
+    if(!result.transcript)return {ready:[]};
+    this.remember(this.stateFor(sessionId),result.transcript,result.consumedSegmentIds??[],nowMs,false);
+    return {ready:[result.transcript],supersededSegmentIds:result.supersededSegmentIds};
   }
 
   previewContinuation(

@@ -11,7 +11,7 @@ it("records bounded numeric PCM levels without treating a nonzero sample as spee
   expect(publicPcm16Level(Buffer.alloc(0))).toBeUndefined();expect(publicPcm16Level(Buffer.alloc(1))).toBeUndefined();
 });
 
-it("does not inspect or log PCM without both QA gates and never logs its bytes",()=>{
+it("does not inspect or log PCM without explicit diagnostics and never logs its bytes",()=>{
   const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),pcm=Buffer.from([3,0,252,255]);
   const sample=vi.spyOn(pcm,"readInt16LE");
   vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED",undefined);vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED",undefined);
@@ -71,12 +71,11 @@ it("retains only non-content Qwen boundary fields and hashes the supplier item",
   expect(JSON.stringify(payload)).not.toContain(input.itemId);
 });
 
-it("emits nothing unless both explicit QA trace and one-shot gates are enabled",()=>{
+it("can diagnose an ordinary session without enabling the cancelled one-shot guard",()=>{
   const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});
   const value={sessionId:"session",stage:"provider_audio" as const,startSample:0,endSample:1600};
   logPublicAsrBoundary(value);expect(info).not.toHaveBeenCalled();
-  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");logPublicAsrBoundary(value);expect(info).not.toHaveBeenCalled();
-  vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");logPublicAsrBoundary(value);
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");logPublicAsrBoundary(value);
   expect(info).toHaveBeenCalledOnce();expect(info.mock.calls[0]![0]).toMatchObject({stage:"provider_audio",startSample:0,endSample:1600});
 });
 
@@ -95,7 +94,16 @@ it("gates lifecycle metadata and never lets a logger failure block shutdown",()=
   vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED",undefined);
   logPublicSessionEnd(event);expect(info).not.toHaveBeenCalled();
   vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");
-  logPublicSessionEnd(event);expect(info).not.toHaveBeenCalled();
-  vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
   expect(()=>logPublicSessionEnd(event)).not.toThrow();expect(info).toHaveBeenCalledOnce();
+});
+
+it("captures the actual pre-assembly anonymous speaker and late-repair trigger without content",()=>{
+  const input={segmentId:"part",text:"DO_NOT_LOG",language:"zh" as const,revision:1,turnId:"turn_1",
+    speaker:{speakerId:"unknown",role:"unknown" as const,source:"unknown" as const},timing:{startMs:49785,endMs:52352,source:"estimated" as const}};
+  expect(publicAsrAssemblyTracePayload("session","push",{ready:[input]},input)).toMatchObject({
+    inputSpeakerId:"unknown",inputTurnId:"turn_1",inputTiming:{startMs:49785,endMs:52352,overlap:false}});
+  const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","false");
+  logPublicAsrAssembly("session","speaker",{ready:[input],supersededSegmentIds:["tail"]});
+  expect(info).toHaveBeenCalledOnce();expect(JSON.stringify(info.mock.calls)).not.toContain("DO_NOT_LOG");
 });

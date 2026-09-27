@@ -1,6 +1,9 @@
 import { parseDeviceSpeakerEvidence, type AudioFrame, type DeviceSpeakerEvidenceEvent } from "@translation/contracts";
 import { acceptedAudioRange } from "../connection/accepted-audio-range.js";
 import type { SpeakerAttributionProvider, SpeakerSessionInput, SpeakerSpan } from "./speaker-attribution-provider.js";
+import type {TranscriptResult} from "../asr/asr-provider.js";
+import {attributeSpeakerTranscripts,type SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
+import {retainRecentSpeakerSpans} from "./speaker-evidence-retention.js";
 
 /** No microphone, model, embeddings, identity lookup or network calls here.
  * Reuses the original speaker-aware ASR adapter with bounded phone annotations. */
@@ -12,11 +15,12 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
   private sequence = 0;
   private through = 0;
   private pending: SpeakerSpan[] = [];
+  private recent: SpeakerSpan[] = [];
   constructor(private readonly sessionId: string, private readonly sampleRate: 16000 | 24000) {}
 
   async createSession(input: SpeakerSessionInput) {
     if (input.sessionId !== this.sessionId || input.options.allowVoiceIdentity) throw Error("device_speaker_scope");
-    this.active = true; this.sequence = 0; this.through = 0; this.pending = [];
+    this.active = true; this.sequence = 0; this.through = 0; this.pending = []; this.recent=[];
   }
   accept(value: DeviceSpeakerEvidenceEvent, acceptedSamples: number): boolean {
     if (!this.active) return false;
@@ -27,7 +31,17 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
     const spans = event.spans.map(span => ({speakerId:`device-speaker-${span.speaker + 1}`,
       startMs:span.startSample/rate,endMs:span.endSample/rate,confidence:span.confidence,overlap:span.overlap,final:true}));
     this.pending.push(...spans); this.sequence = event.sequence; this.through = event.throughSample;
+    this.recent=retainRecentSpeakerSpans(this.recent,spans).slice(-6000);
     return true;
+  }
+  /** Read-only projection of the same validated evidence used by the timeline.
+   * No new identity/turn, ASR replay, metadata event or inference side effect. */
+  refresh(transcripts:TranscriptResult[],boundaries:SpeakerBoundaryGuard[]=[]):TranscriptResult[] {
+    return transcripts.map(t=>{
+      if(!this.active||!t.timing||t.timing.endMs>this.through/(this.sampleRate/1000))
+        return {...t,speaker:{speakerId:"unknown",role:"unknown",source:"unknown"}};
+      return attributeSpeakerTranscripts([t],this.recent,()=>undefined,boundaries,()=>true,{deviceBoundaryPolicy:true})[0];
+    });
   }
   async pushAudio(frame: AudioFrame): Promise<SpeakerSpan[]> {
     if (!this.active || frame.sessionId !== this.sessionId || frame.sampleRate !== this.sampleRate) return [];
@@ -43,7 +57,7 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
     const result = this.pending; this.pending = []; return result;
   }
   async closeSession(sessionId: string) {
-    if (sessionId === this.sessionId) { this.active = false; this.pending = []; }
+    if (sessionId === this.sessionId) { this.active = false; this.pending = []; this.recent=[]; }
   }
   async healthCheck() { return false; } // Server-side presence is not device qualification.
 }

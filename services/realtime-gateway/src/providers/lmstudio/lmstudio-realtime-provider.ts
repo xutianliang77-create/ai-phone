@@ -13,7 +13,7 @@ import { isUsableTranslation, providerUsage } from "./lmstudio-translation-outpu
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 import { routeAsrTranscript } from "./lmstudio-asr-transcript-routing.js";
 import { RealtimeTranscriptRefiner } from "./lmstudio-asr-refinement.js";
-import { SegmentAssembler } from "../../segments/segment-assembler.js";
+import { SegmentAssembler, type SegmentPushResult } from "../../segments/segment-assembler.js";
 import { errorMessage, providerError, realtimeLogTranslationFailure, targetLanguageForTranscript, terminologyFor, transcriptFinalEvent, translationFailed } from "./lmstudio-realtime-helpers.js";
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
 import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
@@ -43,14 +43,17 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly publicSession?: RealtimeProviderSession;
   private publicSessionClaimed = false;
   private readonly deviceSpeakerReceiver?: LmStudioRealtimeProviderOptions["deviceSpeakerReceiver"];
+  private readonly deviceSpeakerRefresh?:LmStudioRealtimeProviderOptions["deviceSpeakerRefresh"];
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
+    this.deviceSpeakerRefresh=this.publicSession&&this.deviceSpeakerReceiver?options.deviceSpeakerRefresh:undefined;
     this.semanticSegments = new SegmentAssembler({
       maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
       emitSemanticContinuationRevisions:!!this.publicSession,
       semanticSourceLanguage:this.publicSession?.sourceLanguage,
+      lateSpeakerRevisions:!!this.deviceSpeakerRefresh,
     });
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
@@ -64,6 +67,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       emitMaxDurationRevisions: true,
       emitSemanticContinuationRevisions:!!this.publicSession,
       semanticSourceLanguage:this.publicSession?.sourceLanguage,
+      lateSpeakerRevisions:!!this.deviceSpeakerRefresh,
     });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),
@@ -102,6 +106,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     const session = this.sessions.get(event.sessionId);
     return !!session && this.isCurrent(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
   }
+  deviceSpeakerBoundaryGuards(sessionId:string){
+    return this.publicSession?this.asrProvider.deviceSpeakerBoundaryGuards?.(sessionId)??[]:[];
+  }
 
   async *sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent> {
     const session = this.sessions.get(frame.sessionId);
@@ -129,6 +136,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       return;
     }
     if(!this.isCurrent(session))return;
+    yield* this.refreshSpeakerSegments(session);
     if (transcripts.length === 0) {
       yield* asrLanguageNotices(this.asrProvider,session,this.name);
       yield* this.flushExpiredSemanticSegments(session);
@@ -208,6 +216,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       return;
     }
     if(!this.isCurrent(session))return;
+    yield* this.refreshSpeakerSegments(session);
     for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
     if(this.isCurrent(session))yield* asrLanguageNotices(this.asrProvider,session,this.name);
     yield* this.flushSemanticSegments(session);
@@ -251,6 +260,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
+    transcript=this.deviceSpeakerRefresh?.([transcript])[0]??transcript;
     const text = cleanRealtimeText(transcript.text);
     if (!text) {
       if (transcript.isFinal === true) yield* continuationTombstones(session, transcript, [transcript.segmentId]);
@@ -269,14 +279,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         ...assembled.partial,
       };
     }
-    if(!this.isCurrent(session))return;
-    for (const event of continuationTombstones(session, assembled.ready[0] ?? transcript, assembled.supersededSegmentIds)) {
-      if(!this.isCurrent(session))return;yield event;
-    }
-    if(!this.isCurrent(session))return;
-    for (const readyTranscript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
-      yield* this.translateTranscript(session, readyTranscript, emitTranscript);
-    }
+    yield* this.deliverAssembly(session,assembled,emitTranscript,transcript);
   }
 
   private async *flushSemanticSegments(
@@ -286,20 +289,14 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     if(!this.isCurrent(session))return;
     const assembled = this.semanticSegmentsFor(session).flushWithReplacements(session.sessionId);
     if(this.publicSession)logPublicAsrAssembly(session.sessionId,"end",assembled);
-    if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
-    for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
-      yield* this.translateTranscript(session, transcript, emitTranscript);
-    }
+    yield* this.deliverAssembly(session,assembled,emitTranscript);
   }
 
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
     if(!this.isCurrent(session))return;
     const assembled = this.semanticSegmentsFor(session).drainExpiredWithReplacements(session.sessionId);
     if(this.publicSession)logPublicAsrAssembly(session.sessionId,"timeout",assembled);
-    if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
-    for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
-      yield* this.translateTranscript(session, transcript);
-    }
+    yield* this.deliverAssembly(session,assembled);
     if(!this.isCurrent(session))return;
     for (const transcript of this.speakerBoundaryRepair.repairPending(session)) yield* this.translateTranscript(session, transcript);
   }
@@ -308,6 +305,22 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     return session.asrEndpointMode === "listening"
       ? this.listeningSemanticSegments
       : this.semanticSegments;
+  }
+
+  private async *refreshSpeakerSegments(session:RealtimeProviderSession):AsyncGenerator<ServerRealtimeEvent> {
+    if(!this.deviceSpeakerRefresh||!this.isCurrent(session))return;
+    const assembled=this.semanticSegmentsFor(session).refreshSpeakers(session.sessionId,this.deviceSpeakerRefresh);
+    logPublicAsrAssembly(session.sessionId,"speaker",assembled);
+    yield* this.deliverAssembly(session,assembled);
+  }
+
+  private async *deliverAssembly(session:RealtimeProviderSession,assembled:SegmentPushResult,emitTranscript=true,fallback?:TranscriptResult):AsyncGenerator<ServerRealtimeEvent> {
+    if(!this.isCurrent(session))return;
+    const parent=assembled.ready[0]??fallback;
+    if(parent)yield* continuationTombstones(session,parent,assembled.supersededSegmentIds);
+    for(const transcript of this.speakerBoundaryRepair.repairReady(session,assembled.ready)){
+      if(!this.isCurrent(session))return;yield* this.translateTranscript(session,transcript,emitTranscript);
+    }
   }
 
   private async *translateTranscript(

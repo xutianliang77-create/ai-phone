@@ -5,6 +5,13 @@ import {isObjectEnumerationContinuation} from "./semantic-object-boundary.js";
 /** Conservative lexical evidence, not a model-specific endpoint or a guessed
  * speaker. A public supplier's full stop alone does not close a logical clause. */
 export function isSemanticContinuationCandidate(value:SpeechTranscript,fixedSourceLanguage?:string) {
+  return isSemanticContinuationTextCandidate(value,fixedSourceLanguage)&&!!value.speaker&&
+    value.speaker.speakerId!=="unknown"&&value.speaker.role!=="unknown"&&value.speaker.source!=="unknown"&&
+    (value.timing!.activeSpeakerIds??[]).every(id=>id===value.speaker!.speakerId);
+}
+
+/** Retention only: an unknown speaker can be revisited, never treated as known. */
+export function isSemanticContinuationTextCandidate(value:SpeechTranscript,fixedSourceLanguage?:string) {
   return (value.language==="zh"||value.language==="en")&&
     (!fixedSourceLanguage||fixedSourceLanguage==="auto"||value.language===fixedSourceLanguage)&&
     (value.endpointReason===undefined||value.endpointReason==="silence")&&
@@ -13,11 +20,9 @@ export function isSemanticContinuationCandidate(value:SpeechTranscript,fixedSour
     // but use actual provider confirmation (or the fixed session source) here.
     (value.mixedLanguage!==true||value.automaticLanguageStatus==="detected"||
       value.automaticLanguageStatus===undefined&&fixedSourceLanguage===value.language)&&
-    !!value.turnId&&!!value.speaker&&
-    value.speaker.speakerId!=="unknown"&&value.speaker.role!=="unknown"&&value.speaker.source!=="unknown"&&
+    !!value.turnId&&
     !!value.timing&&Number.isFinite(value.timing.startMs)&&Number.isFinite(value.timing.endMs)&&
     value.timing.endMs>value.timing.startMs&&value.timing.overlap!==true&&
-    (value.timing.activeSpeakerIds??[]).every(id=>id===value.speaker!.speakerId)&&
     /[.。]$/u.test(value.text.trim())&&!shouldHoldForNextSegment(value.text,value.language)&&
     // Short answers remain independent and immediate; this does not filter,
     // delete or rewrite their recognized text.

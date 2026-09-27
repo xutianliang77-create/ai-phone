@@ -5,6 +5,7 @@ import type {
 import type { SpeakerSpan } from "./speaker-attribution-provider.js";
 import { evaluateSpeakerSpan } from "./speaker-segment-aligner.js";
 import { attributeDeviceSpeakerBoundary } from "./device-speaker-boundary-attribution.js";
+import {deviceSpeakerAlignment} from "./device-speaker-alignment.js";
 
 export interface SpeakerBoundaryGuard {
   boundaryMs: number;
@@ -34,6 +35,10 @@ export function attributeSpeakerTranscripts(
     if (crossedBoundaries.length > 0) {
       if(options.deviceBoundaryPolicy)return attributeDeviceSpeakerBoundary(transcript,spans,crossedBoundaries,isConfirmedSpeakerId);
       return mixedSpeakerFallback(transcript, crossedBoundaries);
+    }
+    if(options.deviceBoundaryPolicy){
+      const alignment=deviceSpeakerAlignment(transcript.timing,spans);
+      return alignment?{...transcript,...alignment}:{...transcript,speaker:{speakerId:"unknown",role:"unknown" as const,source:"unknown" as const}};
     }
     if (transcript.speaker?.speakerId !== undefined &&
       transcript.speaker.speakerId !== "unknown") {

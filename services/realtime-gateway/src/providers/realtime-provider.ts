@@ -54,6 +54,7 @@ export interface TextSegmentInput {
 }
 
 export interface RealtimeProvider {
+  deviceSpeakerBoundaryGuards?(sessionId:string):import("../asr/asr-provider.js").AsrSpeakerBoundaryEvidence["boundaries"];
   acceptDeviceSpeakerEvidence?(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number): boolean;
   setEventListener?(sessionId:string,listener:(event:ServerRealtimeEvent)=>void):()=>void;
   name: string;

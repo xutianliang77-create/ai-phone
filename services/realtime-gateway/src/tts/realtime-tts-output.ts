@@ -20,6 +20,7 @@ interface RealtimeTtsOutputQueueOptions {
   maxPendingOutputs?: number;
   onDrop?: (event: TranslationEvent) => void;
   acceptVoice?: (enabled:boolean,presetId?:string)=>boolean;
+  retireSupersededSegments?:boolean;
 }
 interface PendingOutput {
   event: TranslationEvent;
@@ -40,6 +41,7 @@ export class RealtimeTtsOutputQueue {
    * the inherited output queue, so a later correction cannot speak an older
    * translation while the session remains active. */
   private readonly revisionBySegment = new Map<string, number>();
+  private readonly retiredSegments = new Set<string>();
   private readonly operations = new Set<Promise<void>>();
 
   constructor(private readonly options: RealtimeTtsOutputQueueOptions) {}
@@ -58,6 +60,8 @@ export class RealtimeTtsOutputQueue {
   }
 
   enqueue(event: ServerRealtimeEvent, send: (event: ServerRealtimeEvent) => void) {
+    if(this.options.retireSupersededSegments&&event.type==="transcript.final"&&event.text===""&&
+      event.sessionId===this.options.sessionId&&!this.closed){this.retire(event.segmentId,event.revision);return;}
     if (event.type !== "translation.final" || event.sessionId !== this.options.sessionId
       || !this.options.voiceOutput
       || !this.options.synthesizer.enabled
@@ -68,6 +72,7 @@ export class RealtimeTtsOutputQueue {
     const prior = revision === undefined
       ? undefined
       : this.revisionBySegment.get(event.segmentId);
+    if(revision===undefined&&this.retiredSegments.has(event.segmentId))return;
     if (prior !== undefined && revision! <= prior) return;
     const queued = prior === undefined ? undefined : [...this.pending].find(item => !item.started && item.event.segmentId === event.segmentId);
     const replacesActive = prior !== undefined && this.active?.event.segmentId === event.segmentId;
@@ -78,6 +83,7 @@ export class RealtimeTtsOutputQueue {
       return;
     }
     if (revision !== undefined) this.revisionBySegment.set(event.segmentId, revision);
+    this.retiredSegments.delete(event.segmentId);
     if (queued && !replacesActive) {
       queued.event = event;
       queued.send = send;
@@ -94,6 +100,17 @@ export class RealtimeTtsOutputQueue {
       return;
     }
     this.schedule(event, send);
+  }
+
+  private retire(segmentId:string,revision:number|undefined){
+    if(!Number.isSafeInteger(revision)||revision!<0||revision!<=(this.revisionBySegment.get(segmentId)??-1))return;
+    this.revisionBySegment.set(segmentId,revision!);this.retiredSegments.add(segmentId);
+    if(this.active?.event.segmentId===segmentId){
+      const retained=[...this.pending].filter(item=>!item.started&&item.event.segmentId!==segmentId&&this.isCurrentRevision(item.event));
+      this.cancelPending();for(const item of retained)this.schedule(item.event,item.send);
+    }else{
+      for(const item of this.pending)if(item.event.segmentId===segmentId)this.pending.delete(item);
+    }
   }
 
   private schedule(event: TranslationEvent, send: (event: ServerRealtimeEvent) => void) {
@@ -136,6 +153,7 @@ export class RealtimeTtsOutputQueue {
     this.resetGeneration();
     this.options.synthesizer.closeSession(this.options.sessionId);
     this.revisionBySegment.clear();
+    this.retiredSegments.clear();
   }
 
   cancelPending() {
@@ -169,7 +187,7 @@ export class RealtimeTtsOutputQueue {
   }
 
   private isCurrentRevision(event: TranslationEvent) {
-    return event.revision === undefined || this.revisionBySegment.get(event.segmentId) === event.revision;
+    return !this.retiredSegments.has(event.segmentId)&&(event.revision === undefined || this.revisionBySegment.get(event.segmentId) === event.revision);
   }
 
   private canEmit(generation: number) {

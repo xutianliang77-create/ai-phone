@@ -7,10 +7,10 @@ import {DEFAULT_MINIMUM_CONFIDENCE} from "./speech-turn-coordinator.js";
 /** Phone-only alignment policy. A sequential switch is not simultaneous speech.
  * An estimated edge may use the inherited 160ms minimum-evidence threshold;
  * an interior/uncertain switch remains unknown, never a guessed speaker. */
-export function attributeDeviceSpeakerBoundary(
-  transcript:TranscriptResult,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],
+export function attributeDeviceSpeakerBoundary<T extends Pick<TranscriptResult,"timing"|"speaker"|"turnId"|"tokenTimings">>(
+  transcript:T,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],
   isConfirmed:(id:string)=>boolean,
-):TranscriptResult {
+):T {
   const timing=transcript.timing!;
   const clipped=spans.map(span=>({...span,startMs:Math.max(timing.startMs,span.startMs),endMs:Math.min(timing.endMs,span.endMs)}))
     .filter(span=>span.endMs>span.startMs);
@@ -24,7 +24,7 @@ export function attributeDeviceSpeakerBoundary(
     overlap,activeSpeakerIds:overlap?[...new Set([...(timing.activeSpeakerIds??[]),...concurrent])]:[]}};
 }
 
-function alignEstimatedEdge(transcript:TranscriptResult,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],isConfirmed:(id:string)=>boolean) {
+function alignEstimatedEdge<T extends Pick<TranscriptResult,"timing"|"speaker"|"turnId"|"tokenTimings">>(transcript:T,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],isConfirmed:(id:string)=>boolean) {
   const timing=transcript.timing!,minimumEvidence=MINIMUM_SPEAKER_EVIDENCE_MS;
   if(timing.source!=="estimated"||transcript.tokenTimings?.length||boundaries.length!==1)return;
   const boundary=boundaries[0],before=boundary.boundaryMs-timing.startMs,after=timing.endMs-boundary.boundaryMs;
