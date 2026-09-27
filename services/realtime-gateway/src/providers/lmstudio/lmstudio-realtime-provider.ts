@@ -49,6 +49,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
     this.semanticSegments = new SegmentAssembler({
       maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
+      emitSemanticContinuationRevisions:!!this.publicSession,
     });
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
@@ -60,6 +61,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
       maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
       emitMaxDurationRevisions: true,
+      emitSemanticContinuationRevisions:!!this.publicSession,
     });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),

@@ -1,0 +1,9 @@
+{
+  "events": [
+    {"type":"transcript.final","sessionId":"semantic","segmentId":"first","turnId":"turn_3","revision":1,"text":"会议结束以后，我会整理会议纪要。","language":"zh","speaker":{"speakerId":"device-speaker-1","source":"diarization","role":"speaker"},"timing":{"startMs":17824,"endMs":20992,"source":"estimated"}},
+    {"type":"translation.final","sessionId":"semantic","segmentId":"first","turnId":"turn_3","revision":1,"text":"I will prepare the minutes.","language":"en","speaker":{"speakerId":"device-speaker-1","source":"diarization","role":"speaker"},"timing":{"startMs":17824,"endMs":20992,"source":"estimated"}},
+    {"type":"transcript.final","sessionId":"semantic","segmentId":"second","turnId":"turn_3","revision":2,"text":"","language":"zh"},
+    {"type":"transcript.final","sessionId":"semantic","segmentId":"first","turnId":"turn_3","revision":2,"text":"会议结束以后，我会整理会议纪要，并在下班前发给大家确认。","language":"zh","speaker":{"speakerId":"device-speaker-1","source":"diarization","role":"speaker"},"timing":{"startMs":17824,"endMs":24128,"source":"estimated"}},
+    {"type":"translation.final","sessionId":"semantic","segmentId":"first","turnId":"turn_3","revision":2,"text":"I will prepare the minutes and send them before work ends.","language":"en","speaker":{"speakerId":"device-speaker-1","source":"diarization","role":"speaker"},"timing":{"startMs":17824,"endMs":24128,"source":"estimated"}}
+  ]
+}

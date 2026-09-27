@@ -1,5 +1,22 @@
 {
   "schemaVersion": 1,
+  "latestSemanticContinuationRepair20260927": {
+    "status": "source_host_pass_not_deployed",
+    "baseCommit": "1adc86eda7775ab11030c22b4813e5e0328b85bd",
+    "verifiedSourceSnapshot": "336aa494c63a862a10c5a61ceccc9c65f41d426e2332e85e27054638d8ed423c",
+    "gatewayTestsPassed": 1077,
+    "relatedTestsPassed": 420,
+    "mobileTargetedTestsPassed": 45,
+    "sharedGatewayFlutterFixturePassed": true,
+    "dualVersionChecksPassed": 40,
+    "firstOutputRemainsImmediate": true,
+    "defaultPrivateBehaviorPreserved": true,
+    "realModelsCalled": false,
+    "deployed": false,
+    "deviceAccepted": false,
+    "guardReenabled": false,
+    "externalReport": "outer artifacts/closeout-regression/20260927-ios-54337a2/SEGMENTATION_REPAIR.md"
+  },
   "latestShortDeviceRun20260927": {
     "status": "short_journey_storage_pass_segmentation_rejected_by_user",
     "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",

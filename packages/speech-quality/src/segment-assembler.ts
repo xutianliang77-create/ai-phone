@@ -19,6 +19,7 @@ interface EmittedSegment {
 }
 
 interface SessionAssemblyState {
+  sessionId: string;
   pending?: PendingSegment;
   emitted: EmittedSegment[];
   consumedRevisions: Map<string, number>;
@@ -33,6 +34,7 @@ export interface SegmentAssemblerOptions {
   maxRememberedFinals?: number;
   duplicateTextWindowMs?: number;
   emitMaxDurationRevisions?: boolean;
+  emitSemanticContinuationRevisions?: boolean;
 }
 
 export interface SegmentPushResult {
@@ -73,6 +75,9 @@ export class SegmentAssembler {
     this.continuationRevisions = new MaxDurationContinuationRevisionCoordinator({
       enabled: options.emitMaxDurationRevisions === true,
       maxWindowMs: this.maxContinuationBufferMs,
+      semanticContinuations: options.emitSemanticContinuationRevisions === true,
+      maxSemanticParts: this.maxBufferedSegments,
+      maxSemanticCharacters: this.maxBufferedCharacters,
     });
   }
 
@@ -80,15 +85,10 @@ export class SegmentAssembler {
     const state = this.stateFor(sessionId);
     const continuation = this.continuationRevisions.push(sessionId, transcript, nowMs);
     if (continuation.handled) {
-      if (!continuation.transcript) return { ready: [] };
-      this.remember(
-        state,
-        continuation.transcript,
-        continuation.consumedSegmentIds ?? [continuation.transcript.segmentId],
-        nowMs,
-      );
+      const ready=continuation.transcripts??(continuation.transcript?[continuation.transcript]:[]);
+      for(const item of ready)this.remember(state,item,continuation.consumedSegmentIds??[item.segmentId],nowMs,false);
       return {
-        ready: [continuation.transcript],
+        ready,
         ...(continuation.supersededSegmentIds
           ? { supersededSegmentIds: continuation.supersededSegmentIds }
           : {}),
@@ -143,9 +143,10 @@ export class SegmentAssembler {
   }
 
   flushWithReplacements(sessionId: string, nowMs = Date.now()): SegmentPushResult {
-    this.continuationRevisions.clear(sessionId);
     const state = this.sessions.get(sessionId);
-    return state?.pending ? this.releasePending(state, nowMs) : { ready: [] };
+    const result=state?.pending ? this.releasePending(state, nowMs) : { ready: [] };
+    this.continuationRevisions.clear(sessionId);
+    return result;
   }
 
   clear(sessionId: string) {
@@ -246,7 +247,9 @@ export class SegmentAssembler {
     transcript: SpeechTranscript,
     consumedIds: string[],
     emittedAtMs: number,
+    rememberSemantic = true,
   ) {
+    if(rememberSemantic)this.continuationRevisions.rememberSemantic(state.sessionId,transcript,emittedAtMs,consumedIds.length);
     state.emitted.push({
       fingerprint: canonicalSegmentText(transcript.text),
       emittedAtMs,
@@ -266,6 +269,7 @@ export class SegmentAssembler {
 
   private stateFor(sessionId: string) {
     const state = this.sessions.get(sessionId) ?? {
+      sessionId,
       emitted: [],
       consumedRevisions: new Map<string, number>(),
     };

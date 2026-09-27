@@ -1,5 +1,13 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## CO11-04 公有断句适配：源码/HOST通过，未部署（2026-09-27）
+
+复用原SegmentAssembler和同ID revision/tombstone链，为公有Provider启用明确接续词的保守合并；首段仍立即输出，同已知speaker/turn/language、非重叠和连续时间才合并。沿原3段/180字符及默认5秒窗口，追加不延长窗口；换人/换向/未知/超窗不合并。默认/私有和硬截断路径保持原行为，不更换模型、不改手机或供应商VAD、不伪造max_duration。更正保留尾句，分组依据失效时用高revision恢复独立文本；无法保持精确字符对齐的token timing不伪造。
+
+原手机失败文本本地重放已从2条变为首段ID/revision2的一条完整句；这是HOST重放，不是新声学验收。相关40文件420项、Gateway全量125文件1077项、手机定向45项、共享Gateway→Flutter事件fixture、双版本40/40以及相关编译/类型/分析/行数门禁通过。源码快照336aa494c63a862a10c5a61ceccc9c65f41d426e2332e85e27054638d8ed423c；细节及初始失败保留在外层SEGMENTATION_REPAIR.md与co04-semantic-*原始结果。
+
+合法合并是新内容版本，会沿原MT/TTS attempt记录新revision，不新建ASR或客户收费会话；已播声音不能撤回，不能把队列替代通过等同听感/延迟通过。新源码尚未构建同源iOS、部署或安装，现役仍54337a2/2026092701。用户取消的测试守卫保持停用，未关闭在线入口；CO11-04/15仍需受影响的同源真机复核。
+
 ## 同源短测结果：断句项未通过（2026-09-27 13:54）
 
 用户实际完成54337a2/2026092701在线静音70秒固定音旅程。手机与服务端18条原译文、语言/revision/speaker及规范化时间轴全部一致，pending0、尾句完整；仅一笔78秒账本，ASR1/MT18 confirmed、TTS0，runtime/provider/meter uncertain均false。签名device-speaker选择与实际标签都已出现，不再只是模型ready；11条speaker1、1条speaker2、6条unknown不当作独立精度验收。

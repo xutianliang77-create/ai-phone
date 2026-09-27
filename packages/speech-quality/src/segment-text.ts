@@ -9,8 +9,8 @@ import { mergedLanguageEvidence } from "./segment-language-evidence.js";
 
 export interface MergeTranscriptPartsOptions {
   allowSingleCharacterCjkOverlap?: boolean;
+  joinSemanticContinuation?: boolean;
 }
-
 export function mergeTranscriptParts(
   parts: SpeechTranscript[],
   options: MergeTranscriptPartsOptions = {},
@@ -72,6 +72,7 @@ function mergeTranscriptContent(
       first.language,
       parts[index - 1].endpointReason === "max_duration",
       options.allowSingleCharacterCjkOverlap === true,
+      options.joinSemanticContinuation === true,
     );
   }
   return merged;
@@ -83,11 +84,13 @@ function mergeTranscriptContentPart(
   language: string,
   hardContinuation: boolean,
   allowSingleCharacterCjkOverlap: boolean,
+  semanticContinuation: boolean,
 ): MergedTranscriptContent {
   const previous = normalizedPreviousText(
     previousState.text,
     language,
     hardContinuation,
+    semanticContinuation,
   );
   const previousTokens = remapTokens(
     previousState.tokenTimings,
@@ -165,7 +168,9 @@ function normalizedPreviousText(
   text: string,
   language: string,
   hardContinuation: boolean,
+  semanticContinuation: boolean,
 ) {
+  if(semanticContinuation)return text.trim().replace(/[.。]+$/u,language==="zh"?"，":",");
   return hardContinuation
     ? text.trim().replace(/[.。]+$/u, "").trim()
     : stripIncompleteJoinPunctuation(text.trim(), language);
