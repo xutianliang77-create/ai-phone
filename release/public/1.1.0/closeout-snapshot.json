@@ -1,5 +1,19 @@
 {
   "schemaVersion": 1,
+  "latestQaGuardCancellation20260927": {
+    "status": "cancelled_and_qa_entry_reopened",
+    "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",
+    "iosBuild": "2026092701",
+    "qaNewSessionsEnabled": true,
+    "automaticMaintenanceTimer": false,
+    "automaticTestAppTermination": false,
+    "qaOneShotGuardEnabled": false,
+    "qaConfigSha256": "3c5a1d14160a7e30ae2b5724b84b6f1a6888de146efa4e9309ed8999c8667b09",
+    "modelConfigurationAndQualificationUnchanged": true,
+    "modelCalls": 0,
+    "deviceAcceptanceClaimed": false,
+    "externalReport": "outer artifacts/closeout-regression/20260927-ios-54337a2/cancel-guard/result.json"
+  },
   "latestTermsAndReadiness20260927": {
     "status": "two_prerequisites_verified_not_quality_acceptance",
     "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",
