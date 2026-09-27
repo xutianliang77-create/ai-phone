@@ -1,7 +1,7 @@
 import type { SpeechTranscript } from "./speech-transcript.js";
 import { mergeTranscriptParts } from "./segment-text.js";
 import {isSemanticContinuationCandidate,startsSemanticContinuation} from "./semantic-continuation-boundary.js";
-import {PendingSpeakerContinuations} from "./pending-speaker-continuations.js";
+import {PendingSpeakerContinuations,type LateSpeakerExpiry} from "./pending-speaker-continuations.js";
 
 interface ProvisionalContinuation {
   transcript: SpeechTranscript;
@@ -34,7 +34,7 @@ export class MaxDurationContinuationRevisionCoordinator {
     semanticSourceLanguage?: string;
     maxSemanticParts?: number;
     maxSemanticCharacters?: number;
-    lateSpeakerRevisions?:boolean;
+    lateSpeakerRevisions?:boolean;onLateSpeakerExpiry?:(id:string,info:LateSpeakerExpiry)=>void;
   }) {
     this.pendingSpeakers=new PendingSpeakerContinuations({...options,enabled:options.semanticContinuations&&options.lateSpeakerRevisions},
       (a,b)=>canReviseContinuation(a,b,options,true));

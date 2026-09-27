@@ -12,6 +12,20 @@ function part(id:string,text:string,start=0):SpeechTranscript {
 const a=()=>part("a","我们需要 Alpha1。");
 const b=()=>part("b","Beta2 和 Gamma3。",1000);
 describe("bounded late speaker metadata reuses semantic revisions",()=>{
+  it("explains the observed 4245ms second clause and 5008ms confirmed metadata boundary",()=>{
+    for(const evidenceAt of [4999,5008]){
+      const expired:unknown[]=[];
+      const s=new SegmentAssembler({emitSemanticContinuationRevisions:true,lateSpeakerRevisions:true,semanticSourceLanguage:"auto",
+        onLateSpeakerExpiry:(id,info)=>expired.push({id,...info})});
+      const first={...part("first","我们要测试 Qwen Three ASR。"),mixedLanguage:true,timing:{startMs:48312,endMs:50885,source:"estimated" as const}};
+      const second={...part("second","Hy-MT2 和 VoxCPM2 的在线模型链路。"),timing:{startMs:50885,endMs:55008,source:"estimated" as const}};
+      s.push("s",first,0);s.refreshSpeakers("s",project,681);s.push("s",second,4245);
+      const result=s.refreshSpeakers("s",project,evidenceAt);
+      if(evidenceAt===4999){expect(result.ready).toMatchObject([{segmentId:"first",revision:2}]);expect(expired).toEqual([]);}
+      else{expect(result.ready).toEqual([]);expect(expired).toMatchObject([{id:"s",elapsedMs:5008,maxWindowMs:5000,parts:[{segmentId:"first",automaticLanguageStatus:"detected",mixedLanguage:true},{segmentId:"second"}]}]);}
+      expect(JSON.stringify(expired)).not.toContain("Qwen");
+    }
+  });
   it("emits originals immediately, then one replacement, suppressing stale originals",()=>{
     const s=create();expect(s.push("s",a(),0).ready).toEqual([a()]);expect(s.push("s",b(),1000).ready).toEqual([b()]);
     const result=s.refreshSpeakers("s",project,2000);

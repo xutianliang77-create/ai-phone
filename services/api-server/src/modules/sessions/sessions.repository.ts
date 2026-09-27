@@ -15,8 +15,6 @@ import {
 import type { SessionRecord } from "./session-record.js";
 import type { CallLegRecord } from "../call-links/call-link-record.js";
 import {
-  applySessionSegmentPatch,
-  createSessionSegment,
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
@@ -24,6 +22,7 @@ import { orderSessionSegmentsChronologically } from
   "./session-segment-order.js";
 import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
 import { sessionMatchesQuery } from "./sessions-runtime-views.js";
+import {applyStoredSessionSegmentPatch} from "./session-segment-write.js";
 
 export type { SessionRecord } from "./session-record.js";
 
@@ -166,7 +165,7 @@ export function markSessionForAccountDeletion(
 export function saveSegments(sessionId: string, segments: SessionSegmentDto[]) {
   const session = findSession(sessionId);
   if (!session) return null;
-  session.segments = mergeSessionSegments(session.segments, segments);
+  session.segments = mergeSessionSegments(session.segments, segments,{retiredSegmentRevisions:session.retiredSegmentRevisions,versionedSpeakerMetadata:session.processingAuthorization?.processingMode==="online"});
   session.review = null;
   session.lastActivityAt = new Date().toISOString();
   persistSessionMutation(session);
@@ -261,13 +260,7 @@ export function upsertSegment(
 ) {
   const session = findSession(sessionId);
   if (!session) return null;
-  const existing = session.segments.find((segment) => segment.id === patch.segmentId);
-  if (existing) {
-    applySessionSegmentPatch(existing, patch);
-  } else {
-    session.segments.push(createSessionSegment(patch));
-  }
-  session.segments = orderSessionSegmentsChronologically(session.segments);
+  applyStoredSessionSegmentPatch(session,patch);
   session.review = null;
   session.lastActivityAt = new Date().toISOString();
   persistSessionMutation(session);

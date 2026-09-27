@@ -13,6 +13,7 @@ import {
 } from "../sessions/sessions-runtime.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
+import {segmentRetirementAck} from "../sessions/session-segment-retirement.js";
 import {syncKey} from "../sessions/session-result-sync-contract.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession, realtimeCreationBlocker } from "./realtime.service.js";
@@ -112,8 +113,11 @@ export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordina
       if(current?.processingAuthorization&&current.publicRuntime?.stoppedAt) {
         return sendError(reply,409,"public_stop_watermark_sealed","Stopped public output is sealed");
       }
+      if(body.retired&&current&&current.processingAuthorization?.processingMode!=="online")
+        return sendError(reply,409,"public_segment_retirement_required","Retirement requires a public online session");
       const session = await upsertSegment(body.sessionId, {
       segmentId: body.segmentId,
+      retired: body.retired,
       speechId: body.speechId,
       turnId: body.turnId,
       revision: body.revision,
@@ -143,7 +147,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordina
       });
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
-      return { sessionId: session.id, segmentCount: session.segments.length };
+      return body.retired?segmentRetirementAck(session,body.segmentId):{ sessionId: session.id, segmentCount: session.segments.length };
     });
   });
 

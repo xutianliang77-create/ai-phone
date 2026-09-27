@@ -1,9 +1,20 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {realtimeLogger} from "./realtime-metrics.js";
-import {logPublicAsrBoundary,publicAsrBoundaryTracePayload,logPublicSessionEnd,publicSessionEndTracePayload,publicPcm16Level,publicAsrAssemblyTracePayload,logPublicAsrAssembly} from "./public-asr-boundary-trace.js";
+import {logPublicAsrBoundary,publicAsrBoundaryTracePayload,logPublicSessionEnd,publicSessionEndTracePayload,publicPcm16Level,publicAsrAssemblyTracePayload,logPublicAsrAssembly,logPublicLateSpeakerExpiry} from "./public-asr-boundary-trace.js";
 
 afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();});
+
+it("records only bounded expiry/language/watermark facts and cannot fail processing",()=>{
+  const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});
+  const decision={elapsedMs:5008,maxWindowMs:5000,parts:[{segmentId:"part",language:"zh",automaticLanguageStatus:"detected",mixedLanguage:true,speakerId:"unknown",startMs:0,endMs:1000,text:"DO_NOT_LOG"}]};
+  logPublicLateSpeakerExpiry("session",decision);expect(info).not.toHaveBeenCalled();
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");
+  logPublicLateSpeakerExpiry("session",decision,{sequence:8,receivedAtMs:20000,throughMs:1000});
+  expect(info.mock.calls[0]?.[0]).toMatchObject({stage:"late_speaker_expired",elapsedMs:5008,maxWindowMs:5000,evidence:{sequence:8,throughMs:1000}});
+  expect(JSON.stringify(info.mock.calls)).not.toContain("DO_NOT_LOG");
+  info.mockImplementation(()=>{throw Error("logger unavailable");});expect(()=>logPublicLateSpeakerExpiry("session",decision)).not.toThrow();
+});
 
 it("records an intermediate boundary even when no text is released, without enabling guards",()=>{
   const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});

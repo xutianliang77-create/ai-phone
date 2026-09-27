@@ -6,6 +6,7 @@ import { ResultSyncError, resultSyncHash } from "./session-result-sync-contract.
 import { PUBLIC_EVIDENCE_GAP_MS, PUBLIC_RECOVERY_MS, runtimePolicy, stopWatermark,
   type PublicRuntimeEvidence } from "./public-session-lifecycle.js";
 import { hasPublicProviderReconciliation } from "./public-provider-reconciliation.js";
+import {sessionSegmentRevisionWatermarks} from "./session-segment-retirement.js";
 
 /** Called only from the existing internal authenticated server boundary.
  * No client timestamps, duration or providerUsage are accepted. */
@@ -63,7 +64,7 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
       new Date(timestamp+PUBLIC_RECOVERY_MS).toISOString();
     if(b.phase==="stopped") {
       evidence.stoppedAt=now.toISOString();evidence.recoveryUntil=new Date(timestamp+PUBLIC_RECOVERY_MS).toISOString();
-      evidence.finalRevisions=Object.fromEntries(current.segments.map(s=>[s.id,s.revision??0]));
+      evidence.finalRevisions=sessionSegmentRevisionWatermarks(current);
     }
     const next=structuredClone(current);next.publicRuntime=evidence;next.lastActivityAt=now.toISOString();
     if(next.publicRecoveryOwnership&&(evidence.phase!=="disconnected"||

@@ -25,7 +25,7 @@ import {
 import { continuationTombstones } from "./lmstudio-continuation-events.js";
 import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
 import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-speaker-repair.js";
-import {logPublicAsrAssembly} from "../../metrics/public-asr-boundary-trace.js";
+import {logPublicAsrAssembly,logPublicLateSpeakerExpiry} from "../../metrics/public-asr-boundary-trace.js";
 const PUBLIC_CONTINUATION_BUFFER_MS=3000;
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
@@ -44,6 +44,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private publicSessionClaimed = false;
   private readonly deviceSpeakerReceiver?: LmStudioRealtimeProviderOptions["deviceSpeakerReceiver"];
   private readonly deviceSpeakerRefresh?:LmStudioRealtimeProviderOptions["deviceSpeakerRefresh"];
+  private speakerEvidenceClock?:{sequence:number;receivedAtMs:number;throughMs:number};
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
@@ -54,6 +55,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       emitSemanticContinuationRevisions:!!this.publicSession,
       semanticSourceLanguage:this.publicSession?.sourceLanguage,
       lateSpeakerRevisions:!!this.deviceSpeakerRefresh,
+      onLateSpeakerExpiry:this.publicSession?(id,info)=>logPublicLateSpeakerExpiry(id,info,this.speakerEvidenceClock):undefined,
     });
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
@@ -68,6 +70,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       emitSemanticContinuationRevisions:!!this.publicSession,
       semanticSourceLanguage:this.publicSession?.sourceLanguage,
       lateSpeakerRevisions:!!this.deviceSpeakerRefresh,
+      onLateSpeakerExpiry:this.publicSession?(id,info)=>logPublicLateSpeakerExpiry(id,info,this.speakerEvidenceClock):undefined,
     });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),
@@ -104,7 +107,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   }
   acceptDeviceSpeakerEvidence(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) {
     const session = this.sessions.get(event.sessionId);
-    return !!session && this.isCurrent(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
+    const accepted=!!session && this.isCurrent(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
+    if(accepted)this.speakerEvidenceClock={sequence:event.sequence,receivedAtMs:Date.now(),throughMs:event.throughSample/(event.sampleRate/1000)};
+    return accepted;
   }
   deviceSpeakerBoundaryGuards(sessionId:string){
     return this.publicSession?this.asrProvider.deviceSpeakerBoundaryGuards?.(sessionId)??[]:[];
@@ -236,6 +241,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     return this.sessions.get(session.sessionId)===session&&!this.translationAborts.get(session)?.signal.aborted;
   }
   private clearSessionState(sessionId:string){
+    if(this.publicSession?.sessionId===sessionId)this.speakerEvidenceClock=undefined;
     this.transcriptRefiner.clear(sessionId);
     this.semanticSegments.clear(sessionId);
     this.listeningSemanticSegments.clear(sessionId);
@@ -266,12 +272,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       if (transcript.isFinal === true) yield* continuationTombstones(session, transcript, [transcript.segmentId]);
       return;
     }
-    const assembled = this.semanticSegmentsFor(session).push(session.sessionId, {
-      ...transcript,
-      text,
-      ...analyzeTurnLanguage(text, transcript.language),
-    });
-    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"push",assembled,transcript);
+    const input={...transcript,text,...analyzeTurnLanguage(text,transcript.language)};
+    const assembled = this.semanticSegmentsFor(session).push(session.sessionId,input);
+    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"push",assembled,input);
     if (assembled.partial && emitTranscript) {
       yield {
         type: "transcript.partial",

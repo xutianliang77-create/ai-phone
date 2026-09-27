@@ -49,7 +49,7 @@ export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
 }
 
 type AssemblyTrigger="push"|"timeout"|"end"|"speaker"|"audio_boundary";
-type AssemblyInput=Pick<import("../asr/asr-provider.js").TranscriptResult,"segmentId"|"text"|"revision"|"speaker"|"turnId"|"timing">;
+type AssemblyInput=Pick<import("../asr/asr-provider.js").TranscriptResult,"segmentId"|"text"|"revision"|"speaker"|"turnId"|"timing"|"automaticLanguageStatus"|"mixedLanguage">;
 const traceId=(v:unknown):v is string=>typeof v==="string"&&/^[A-Za-z0-9_.:-]{1,200}$/.test(v);
 
 /** Distinguish held/merged/superseded finals from lost data without persisting
@@ -66,11 +66,26 @@ export function publicAsrAssemblyTracePayload(sessionId:string,trigger:AssemblyT
   return {sessionId,stage:"assembly",trigger,
     ...(input&&traceId(input.segmentId)?{inputSegmentId:input.segmentId,inputTextCharCount:input.text.length}:{}),
     ...(input&&traceId(input.turnId)?{inputTurnId:input.turnId}:{}),
+    ...(input?.automaticLanguageStatus&&["detected","mixed","unknown"].includes(input.automaticLanguageStatus)?{inputAutomaticLanguageStatus:input.automaticLanguageStatus}:{}),
+    ...(typeof input?.mixedLanguage==="boolean"?{inputMixedLanguage:input.mixedLanguage}:{}),
     ...(input?.speaker&&/^(?:device-speaker-[1-4]|unknown)$/.test(input.speaker.speakerId)?{inputSpeakerId:input.speaker.speakerId}:{}),
     ...(input?.timing?{inputTiming:{...item(input),overlap:input.timing.overlap===true}}:{}),
     readyCount:result.ready.length,ready:result.ready.slice(0,16).map(item),
     ...(result.partial?{held:item(result.partial)}:{}),
     supersededSegmentIds:(result.supersededSegmentIds??[]).filter(traceId).slice(0,16)};
+}
+
+export function logPublicLateSpeakerExpiry(sessionId:string,info:{elapsedMs:number;maxWindowMs:number;parts:Array<{segmentId:string;revision?:number;language:string;automaticLanguageStatus?:string;mixedLanguage?:boolean;speakerId?:string;startMs?:number;endMs?:number}>},evidence?:{sequence:number;receivedAtMs:number;throughMs:number}) {
+  if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=="true"||!traceId(sessionId))return;
+  const number=(v:unknown)=>typeof v==="number"&&Number.isFinite(v)&&v>=0?v:undefined;
+  try{realtimeLogger.info({sessionId,stage:"late_speaker_expired",elapsedMs:number(info.elapsedMs),maxWindowMs:number(info.maxWindowMs),
+    parts:info.parts.slice(0,3).filter(p=>traceId(p.segmentId)).map(p=>({segmentId:p.segmentId,revision:number(p.revision),
+      language:/^[a-z]{2,3}(?:-Hant)?$/.test(p.language)?p.language:undefined,
+      automaticLanguageStatus:["detected","mixed","unknown"].includes(p.automaticLanguageStatus??"")?p.automaticLanguageStatus:undefined,
+      mixedLanguage:typeof p.mixedLanguage==="boolean"?p.mixedLanguage:undefined,
+      speakerId:/^(?:device-speaker-[1-4]|unknown)$/.test(p.speakerId??"")?p.speakerId:undefined,
+      startMs:number(p.startMs),endMs:number(p.endMs)})),
+    ...(evidence?{evidence:{sequence:number(evidence.sequence),receivedAtMs:number(evidence.receivedAtMs),throughMs:number(evidence.throughMs)}}:{})},"Public ASR QA boundary");}catch{/* Optional non-content diagnostics cannot fail audio or output. */}
 }
 
 export function logPublicAsrAssembly(sessionId:string,trigger:AssemblyTrigger,result:SegmentPushResult,input?:AssemblyInput){

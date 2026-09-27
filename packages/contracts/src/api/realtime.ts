@@ -145,6 +145,8 @@ export interface SaveTextTranslationSessionRequest {
 export interface UpsertSessionSegmentRequest {
   sessionId: string;
   segmentId: string;
+  /** Internal public-session retirement; requires a positive transcript revision. */
+  retired?: true;
   speechId?: string;
   turnId?: string;
   revision?: number;

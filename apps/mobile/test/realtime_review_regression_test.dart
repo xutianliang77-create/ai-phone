@@ -178,11 +178,11 @@ void main() {
           'requiresLocalReadiness': true
         }
       };
-      final lost = Completer<http.Response>();
-      h.post = (_) => lost.future;
-      final first = h.create(
-          prepareSpeaker: () async => readiness.$1,
-          timeout: const Duration(milliseconds: 60));
+      // Exercise a response timeout AFTER dispatch. A 60 ms total deadline
+      // could instead expire during local file preparation on a loaded host,
+      // leaving no original POST and never testing retry identity at all.
+      h.post = (_) async => throw TimeoutException('Synthetic lost POST reply');
+      final first = h.create(prepareSpeaker: () async => readiness.$1);
       http.Request? original;
       try {
         await expectLater(
@@ -200,13 +200,6 @@ void main() {
         expect(requests.last.body, original.body,
             reason: 'Retry cannot silently add a new optional model');
       } finally {
-        if (!lost.isCompleted) {
-          lost.complete(http.Response(
-              original == null
-                  ? '{}'
-                  : jsonEncode(creation.response(original, 'owner')),
-              200));
-        }
         await pumpEventQueue();
         h.close();
       }

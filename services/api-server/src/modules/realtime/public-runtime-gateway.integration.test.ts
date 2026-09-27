@@ -20,6 +20,11 @@ import type {RealtimeProvider} from "../../../../realtime-gateway/src/providers/
 import {AudioFrameBatcher} from "../../../../realtime-gateway/src/connection/audio-frame-batcher.js";
 import {handleAudioBoundary} from "../../../../realtime-gateway/src/connection/audio-boundary-control.js";
 import {handleControlEvent} from "../../../../realtime-gateway/src/connection/session-control-handler.js";
+import {flushProviderSession} from "../../../../realtime-gateway/src/connection/session-control-handler.js";
+import {DeviceSpeakerAttributionProvider} from "../../../../realtime-gateway/src/speaker/device-speaker-attribution-provider.js";
+import {DeviceSpeakerTimeline} from "../../../../realtime-gateway/src/speaker/device-speaker-timeline.js";
+import {SpeakerAwareAsrProvider} from "../../../../realtime-gateway/src/asr/speaker-aware-asr-provider.js";
+import {deviceSpeakerProfile,type AudioFrame,type ServerRealtimeEvent} from "@translation/contracts";
 const start=Date.parse("2026-09-08T00:00:00Z"),id="public-producer-test";
 const binding={sessionId:id,ownerId:"guest-user",deploymentId:"public-test",modelPolicyRevision:"policy-v1",
   leaseId:"lease",captureId:"capture",languagePolicyKey:"policy:1",sampleRate:16000 as const};
@@ -56,6 +61,53 @@ beforeEach(async()=>{
   }));
 });
 afterEach(async()=>{deleteSession(id);await app.close();vi.unstubAllGlobals();vi.unstubAllEnvs();vi.useRealTimers();vi.restoreAllMocks();});
+
+it("persists actual late-merge retirement and its new timeline through original Gateway/API/history",async()=>{
+  const input={sessionId:id,sourceLanguage:"zh" as const,targetLanguage:"en" as const,voiceOutput:false,asrEndpointMode:"conversation" as const,
+    speakerAttribution:{mode:"diarization" as const,maxSpeakers:4 as const,deviceProfile:deviceSpeakerProfile.id,allowVoiceIdentity:false}};
+  const originals=["会议结束以后，我会整理会议纪要。","并在下班前发给大家确认。"].map((text,i)=>({segmentId:i?"child":"parent",revision:1,isFinal:true,text,language:"zh" as const,
+    timing:{startMs:i*1000,endMs:(i+1)*1000,source:"estimated" as const}}));
+  let n=0,sequence=0,evidence=0;
+  const base={createSession:async()=>{},closeSession:vi.fn(async()=>{}),healthCheck:async()=>true,transcribe:async()=>originals[n++]??null,flush:async()=>null};
+  const device=new DeviceSpeakerAttributionProvider(id,16000),asr=new SpeakerAwareAsrProvider(base,device,undefined,undefined,{enabled:false,maxSessions:0,maxDurationMs:0,maxRecords:0});
+  const provider=new LmStudioRealtimeProvider({baseUrl:"https://synthetic-model.test",model:"synthetic",timeoutMs:1000,publicSession:input,asrProvider:asr,
+    deviceSpeakerReceiver:device.accept.bind(device),deviceSpeakerRefresh:p=>device.refresh(p,asr.deviceSpeakerBoundaryGuards(id)),
+    translationClient:{supportsAttemptContext:true,healthCheck:async()=>true,translate:async({text})=>`Translated: ${text}`}});
+  const sink=bindPublicSessionEventSink(createSessionEventSink(env),binding),errors:unknown[]=[],client:ServerRealtimeEvent[]=[];
+  const tracker=new RealtimeFlushTracker();let timeline:DeviceSpeakerTimeline;
+  const dispatcher=new RealtimeEventDispatcher({eventSink:sink,sendClient:e=>client.push(e),afterSend:e=>{tracker.record(e);timeline?.observe(e);},onSyncError:(_e,error)=>errors.push(error)});
+  timeline=new DeviceSpeakerTimeline(id,dispatcher.send,()=>provider.deviceSpeakerBoundaryGuards(id));
+  const drain=async()=>{await dispatcher.drain();await sink.drain();};
+  const feed=async()=>{const frame:AudioFrame={type:"audio.frame",sessionId:id,sequence:++sequence,timestampMs:Date.now(),format:"pcm16",sampleRate:16000,data:Buffer.alloc(32000).toString("base64")};
+    sink.acceptAudio(frame);for await(const e of provider.sendAudio(frame))dispatcher.send(e);await drain();};
+  const annotate=(a:number,b:number)=>{const event={type:"speaker.evidence" as const,sessionId:id,profile:deviceSpeakerProfile.id,modelRevision:deviceSpeakerProfile.revision,
+    sampleRate:16000 as const,sequence:++evidence,throughSample:b*16,spans:[{speaker:0,startSample:a*16,endSample:b*16,confidence:.98,overlap:false}]};
+    expect(provider.acceptDeviceSpeakerEvidence(event,sequence*16000)).toBe(true);timeline.accept(event);};
+  createSession({sessionId:id,userId:"guest-user",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:false,planCode:"free",maxDurationSeconds:120,issuedAt:0,expiresAt:9999999999});
+  await provider.createSession(input);dispatcher.send({type:"session.started",sessionId:id});await drain();
+  clock(1);await feed();annotate(0,1000);await drain();
+  expect(current().segments[0].speakerRevision).toBe(1);
+  await flushProviderSession(provider,id,dispatcher.send,{reason:"audio_boundary",failOnError:true});await drain();
+  clock(2);await feed();annotate(1000,2000);await drain();clock(3);await feed();
+  expect(errors).toEqual([]);expect(current().segments).toHaveLength(1);
+  expect(current().segments[0]).toMatchObject({id:"parent",revision:2,sourceText:"会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",timing:{startMs:0,endMs:2000}});
+  expect(client).toContainEqual(expect.objectContaining({type:"transcript.final",segmentId:"child",text:"",revision:2}));
+  // Delayed old recognition, translation and metadata may not resurrect the retired child.
+  for(const e of [{...originals[1],type:"transcript.final" as const,sessionId:id},
+    {type:"translation.final" as const,sessionId:id,segmentId:"child",revision:1,text:"stale MT",language:"en" as const},
+    {type:"speaker.updated" as const,sessionId:id,segmentId:"child",revision:1,speakerRevision:999,speaker:{speakerId:"device-speaker-2",role:"speaker" as const,source:"diarization" as const}}])dispatcher.send(e);
+  await drain();expect(current().segments).toHaveLength(1);
+  clock(4);const finalizer=new RealtimeSessionFinalizer({sessionId:id,provider,flushTracker:tracker,
+    audioBatcher:{stopAccepting:vi.fn(),flush:async()=>{}},send:dispatcher.send,drainSessionSync:drain,onError:(_s,e)=>errors.push(e),
+    confirmed:{beforeFlush:()=>sink.confirmAudio(),stopUncertain:()=>sink.stopUncertain()}});
+  await Promise.all([finalizer.finalize("client_request"),finalizer.finalize("client_request")]);
+  const history=await app.inject({method:"GET",url:`/sessions/${id}`});expect(history.statusCode).toBe(200);
+  expect(history.json().segments).toHaveLength(1);expect(history.json().segments[0].timing.endMs).toBe(2000);
+  expect(current().publicRuntime?.finalRevisions?.child).toBe(2);
+  expect((await app.inject({method:"POST",url:"/internal/realtime/segments",headers:{authorization:`Bearer ${env.internalApiSecret}`},payload:{sessionId:id,segmentId:"parent",revision:3,retired:true}})).statusCode).toBe(409);
+  expect(getStoreSnapshot().billingLedger.filter(l=>l.idempotencyKey===`settle:${id}`)).toHaveLength(1);
+  expect(errors).toEqual([]);expect(base.closeSession).toHaveBeenCalledOnce();
+});
 
 it("runs original dispatcher/finalizer through the public sink into real API handlers and one settlement",async()=>{
   const sink=bindPublicSessionEventSink(createSessionEventSink(env),binding);

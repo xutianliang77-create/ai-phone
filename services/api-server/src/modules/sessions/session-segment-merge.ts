@@ -13,9 +13,12 @@ import type {
 } from "@translation/contracts";
 import { orderSessionSegmentsChronologically } from
   "./session-segment-order.js";
+import {applySpeakerPatch,newerSpeakerValue,mergedSpeakerRevision} from "./session-segment-speaker-merge.js";
+import {blockedBySegmentRetirement} from "./session-segment-retirement.js";
 
 export interface SessionSegmentPatch {
   segmentId: string;
+  retired?: true;
   speechId?: string;
   turnId?: string;
   revision?: number;
@@ -47,17 +50,19 @@ export interface SessionSegmentPatch {
 export function mergeSessionSegments(
   existingSegments: SessionSegmentDto[],
   incomingSegments: SessionSegmentDto[],
+  options: {retiredSegmentRevisions?:Record<string,number>;versionedSpeakerMetadata?:boolean} = {},
 ) {
   const merged = [...existingSegments];
   const indexById = new Map(merged.map((segment, index) => [segment.id, index]));
   for (const incoming of incomingSegments) {
+    if(blockedBySegmentRetirement(options.retiredSegmentRevisions,incoming.id,incoming.revision,incoming.sourceText))continue;
     const index = indexById.get(incoming.id);
     if (index === undefined) {
       indexById.set(incoming.id, merged.length);
       merged.push(incoming);
       continue;
     }
-    merged[index] = mergeCompleteSegment(merged[index], incoming);
+    merged[index] = mergeCompleteSegment(merged[index], incoming,options.versionedSpeakerMetadata===true);
   }
   return orderSessionSegmentsChronologically(merged);
 }
@@ -65,6 +70,7 @@ export function mergeSessionSegments(
 export function applySessionSegmentPatch(
   segment: SessionSegmentDto,
   patch: SessionSegmentPatch,
+  options: {versionedSpeakerMetadata?:boolean} = {},
 ) {
   const currentRevision = segment.revision ?? 0;
   const incomingRevision = patch.revision ?? 0;
@@ -81,6 +87,7 @@ export function applySessionSegmentPatch(
     patch,
     currentRevision,
     incomingRevision,
+    options.versionedSpeakerMetadata===true,
   );
 
   if (isCurrentPipeline) {
@@ -136,6 +143,7 @@ export function createSessionSegment(patch: SessionSegmentPatch): SessionSegment
 function mergeCompleteSegment(
   existing: SessionSegmentDto,
   incoming: SessionSegmentDto,
+  versionedSpeakerMetadata = false,
 ): SessionSegmentDto {
   const existingRevision = existing.revision ?? 0;
   const incomingRevision = incoming.revision ?? 0;
@@ -170,7 +178,7 @@ function mergeCompleteSegment(
     revision: existing.revision === undefined && incoming.revision === undefined
       ? undefined
       : Math.max(existingRevision, incomingRevision),
-    speakerRevision: maximumOptional(existing.speakerRevision, incoming.speakerRevision),
+    speakerRevision: mergedSpeakerRevision(existing,incoming,versionedSpeakerMetadata),
     pipelineGeneration:
       existing.pipelineGeneration === undefined &&
         incoming.pipelineGeneration === undefined
@@ -202,8 +210,8 @@ function mergeCompleteSegment(
       ? incoming.providerUsage
       : existing.providerUsage ?? incoming.providerUsage,
     refinement: existing.refinement ?? incoming.refinement,
-    speaker: newerSpeakerValue(existing, incoming, "speaker", incomingIsNewer),
-    timing: newerSpeakerValue(existing, incoming, "timing", incomingIsNewer),
+    speaker: newerSpeakerValue(existing, incoming, "speaker", incomingIsNewer,versionedSpeakerMetadata),
+    timing: newerSpeakerValue(existing, incoming, "timing", incomingIsNewer,versionedSpeakerMetadata),
     tokenTimings: incomingIsNewer
       ? incoming.tokenTimings
       : existing.tokenTimings ?? incoming.tokenTimings,
@@ -263,63 +271,6 @@ function applyRecognitionFields(
   if (patch.stage && patch.stage !== "translation") segment.stage = patch.stage;
 }
 
-function applySpeakerPatch(
-  segment: SessionSegmentDto,
-  patch: SessionSegmentPatch,
-  currentTranscriptRevision: number,
-  incomingTranscriptRevision: number,
-) {
-  if (!patch.speaker && !patch.timing) return;
-  // Keep 1.0's unversioned metadata-only update, but an explicitly bound
-  // speaker revision may never overwrite a newer recognition revision.
-  if (patch.revision !== undefined && incomingTranscriptRevision < currentTranscriptRevision) return;
-  const explicitRevision = patch.speakerRevision;
-  if (explicitRevision === undefined) {
-    if (
-      segment.speakerRevision !== undefined ||
-      incomingTranscriptRevision < currentTranscriptRevision
-    ) return;
-  } else if (explicitRevision < (segment.speakerRevision ?? 0)) {
-    return;
-  }
-  if (patch.speaker) segment.speaker = patch.speaker;
-  if (patch.timing) segment.timing = patch.timing;
-  if (explicitRevision !== undefined) {
-    segment.speakerRevision = explicitRevision;
-  }
-}
-
-function newerSpeakerValue<
-  Key extends "speaker" | "timing",
->(
-  existing: SessionSegmentDto,
-  incoming: SessionSegmentDto,
-  key: Key,
-  incomingIsNewer: boolean,
-): SessionSegmentDto[Key] {
-  if (
-    existing.speakerRevision === undefined &&
-    incoming.speakerRevision === undefined
-  ) {
-    return incomingIsNewer
-      ? incoming[key] ?? existing[key]
-      : existing[key] ?? incoming[key];
-  }
-  const existingRevision = existing.speakerRevision ?? 0;
-  const incomingRevision = incoming.speakerRevision ?? 0;
-  return incomingRevision > existingRevision
-    ? incoming[key] ?? existing[key]
-    : existing[key] ?? incoming[key];
-}
-
-function maximumOptional(
-  first: number | undefined,
-  second: number | undefined,
-) {
-  if (first === undefined) return second;
-  if (second === undefined) return first;
-  return Math.max(first, second);
-}
 
 function applyTranslationFields(
   segment: SessionSegmentDto,

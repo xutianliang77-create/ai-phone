@@ -1,5 +1,31 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## 保存修复与贯通回归（2026-09-28，优先于下方诊断检查点）
+
+按用户要求先修两处已证实保存缺陷，再核查实时未合并条件，没有调VAD／模型／5秒策略或制作部署包。公共Sink将原版本化空文本撤回写入既有API；原事务保存retired revision并禁止旧原文／译文／metadata／快照复活。正文版本内比较speakerRevision，新正文的完整timing与speaker可更新，私有1.0默认行为保留。停止水位包含撤回版本，未确认保存不得假成功。
+
+实际Gateway事件→真实HTTP API→独立Beelink PG→关闭并重建runtime→历史回读通过；规范化字幕表也只剩parent/rev2/完整0–2000ms，重复结束只有一笔4秒测试结算，模型attempt0。将同一输出直接交给原Flutter，另复现已撤回子句被旧ASR rev1复活；已在公有Controller加本会话撤回版本屏障，高版本原文仍可恢复、新会话清空，实时与历史现一致。不是另建App或替换保存链。
+
+模型枚举句仍须区分：两段ASR相差4245ms，原5秒窗口只剩755ms；只读outbox记录第二段speaker入库在首段assembly之后5008ms。原代码离线4999ms合并/5008ms过期。但入库不是精确到达，历史日志无法区分证据晚到与处理排队，不声称该真机因果已唯一证明；新增可选非正文trace记录实际语言证据、expiry及有效speaker到达／样本水位。窗口、Sortformer与模型/VAD均不改。末尾unknown/overlap拒绝强并仍是现有策略，不伪造同人。
+
+HOST：后端/共享397文件2702通过、7专用PG项默认跳过，本次实际PG另1通过；Flutter895通过，Dart分析零输出、Node build、双版本40/40和行数/diff通过。首轮Flutter894/1为旧60ms测试总超时发生在POST之前；保留失败回执，改为POST发出后注入响应超时且保留同键/同body断言后全量通过。当前实现指纹4abffea20ba2fce6cfc5f444f0cc84b2e68e34659b01a5c5be77a2673f14aa69；后端前一指纹只有该Flutter测试差异，产品实现一致。
+
+自有临时PG库已删除、15596隧道关闭、临时连接凭据删除；主QA计数39/38/36/446前后不变，旧79秒失败会话/17对18段数据未改写。完整回执在外层artifacts/closeout-regression/20260928-persistence-repair/RESULT.md及verification.json，原始命令persistence-*。
+
+当前服务端仍1554e23/iOS2026092801；本轮未部署、安装、真实模型调用、push或DEVICE签收。CO11-04/06/07对应源码缺陷修复，不将CO11-15/16/18改为完成。下一步是同源候选下受影响的合并/历史/朗读验证，不能重复安装或盲调VAD替代原因取证。无SQL迁移；后续回滚须排空会话并成套回退写入方，避免旧代码不识别新撤回语义。
+
+## 音频边界修复已同源应用（2026-09-28，当前运行检查点）
+
+1554e2387c066624efa8173dcf701fe4fbbcc3cc/tree08a9f7cced422934e26dc4f86b72560f0acc2d19已构建、双资格、部署并同Bundle升级手机为2026092801。服务端镜像62ca1c7ab3d094d11a4439ccd58724e975eb7e56f60cb8e6afd40342bf94e683，运行envSHA52f388b51e8c04d31771268174f1bf28332b4d29369a6ebaf952ccff520ededc；12个本批改变的源码/编译文件与HOST逐项一致。App SHA32ac5f0863bb343309f794c139feba7f32d7aa583dba16e242fd47aa8d2dafc8，7个local define、原Fastest/VAD及Runner/App符号匹配。手机PID31030后续仍在，原设置保留，模型冷加载93333ms后ready。
+
+新静音/朗读资格各8原译文、唯一29秒，静音无TTS，朗读26块545600字节8完整段；四方向与r2模型/词库/Volume+4不变。双资格分别至北京时间2026-09-29 00:29/00:31，非会话时长限制。在线入口持续开放、取消的守卫未恢复；旧120d容器app-pre-1554e23、环境/资格和2704包保留。临时资格容器已停止，临时Bearer已删除。
+
+本轮70秒静音已经完成，用户确认暂停其他声源、手动结束，但反馈实时字幕和历史两处仍分段不佳。public-5ed533…350d4正常ended，尾句完整、pending0、唯一79秒、ASR1/MT19 confirmed、TTS0；观察/播放已退出。记录11次audio_boundary及1次speaker合并，会议纪要句确已revision2，故不是旧包或策略未执行。但手机本地17段、服务器18段：服务器旧child未撤回、父句时间仍20.224秒而手机为23.232秒，另confidence沿用旧值。
+
+在当前部署1554的编译模块中以无真实HTTP/模型调用、无数据库写入的对象对照复现：公共Sink与API Sink都忽略原空文本撤回；API旧speakerRevision阻止新正文revision的timing/speaker更新。只读PG核实父revision2/speakerRevision1、child revision1/speakerRevision1与上述路径相符。模型枚举句另仍为两条，两段初始unknown、前句mixedLanguage且到达间隔4245ms；现有词法规则接受该列举，语言证据/晚到水位及具体拒绝条件未完整留存，不能把全部实时短句只归因于保存问题。该轮仍未通过，先收敛撤回/元数据保存与未合并句原因，再做贯通回归；未进行朗读/长测或新代码修改部署。
+
+新证据在外层artifacts/closeout-regression/20260928-boundary-1554e23/short-retest-assessment.json、persistence-defect-replay.json及RESULT.md；下节“尚未部署”仅是其原源码阶段检查点。未push、合并、迁库、改旧账或发布，在线入口及取消守卫的状态未变。
+
 ## 会话内音频边界清空接续状态：源码修复通过（2026-09-28）
 
 120d3d2/2704已应用并完成静音70秒固定音：手机/服务器22条原译文、标签、revision及规范化timing一致，尾句完整、pending0、唯一95秒结算；用户明确拒绝断句，另确认有其他声源/补说话，故本轮不用于声学精度或静音误识别签收，朗读/长测未继续。新诊断证明22条初始assembly均unknown，最终标签后补而正文未合并。

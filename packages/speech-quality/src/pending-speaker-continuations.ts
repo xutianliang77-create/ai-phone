@@ -3,12 +3,16 @@ import {mergeTranscriptParts} from "./segment-text.js";
 import {isSemanticContinuationCandidate,isSemanticContinuationTextCandidate,startsSemanticContinuation} from "./semantic-continuation-boundary.js";
 
 interface Pending {parts:SpeechTranscript[];emittedAtMs:number;}
+export interface LateSpeakerExpiry {
+  elapsedMs:number;maxWindowMs:number;
+  parts:Array<{segmentId:string;revision?:number;language:string;automaticLanguageStatus?:SpeechTranscript["automaticLanguageStatus"];mixedLanguage?:boolean;speakerId?:string;startMs?:number;endMs?:number}>;
+}
 /** Bounded retention inside the existing assembler. Originals are emitted
  * immediately; only validated late metadata can make a later text merge legal. */
 export class PendingSpeakerContinuations {
   private readonly pending=new Map<string,Pending>();
   constructor(private readonly options:{enabled?:boolean;maxWindowMs:number;maxSemanticParts?:number;
-    maxSemanticCharacters?:number;semanticSourceLanguage?:string},
+    maxSemanticCharacters?:number;semanticSourceLanguage?:string;onLateSpeakerExpiry?:(id:string,info:LateSpeakerExpiry)=>void},
     private readonly canJoin:(a:SpeechTranscript,b:SpeechTranscript)=>boolean){}
 
   remember(id:string,t:SpeechTranscript,now:number,partCount:number){
@@ -60,6 +64,11 @@ export class PendingSpeakerContinuations {
   private active(id:string,now:number){
     const item=this.pending.get(id);
     if(item&&now-item.emittedAtMs<=Math.min(5000,this.options.maxWindowMs))return item;
+    if(item&&this.options.onLateSpeakerExpiry){
+      try{this.options.onLateSpeakerExpiry(id,{elapsedMs:now-item.emittedAtMs,maxWindowMs:Math.min(5000,this.options.maxWindowMs),
+        parts:item.parts.map(p=>({segmentId:p.segmentId,revision:p.revision,language:p.language,automaticLanguageStatus:p.automaticLanguageStatus,
+          mixedLanguage:p.mixedLanguage,speakerId:p.speaker?.speakerId,startMs:p.timing?.startMs,endMs:p.timing?.endMs}))});}catch{/* Diagnostics never change the bounded decision. */}
+    }
     this.clear(id);return undefined;
   }
 }

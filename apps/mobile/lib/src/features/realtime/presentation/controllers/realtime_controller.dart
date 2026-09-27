@@ -133,6 +133,7 @@ class RealtimeController extends ChangeNotifier {
       ? _segments.where((s) => !_asrDraftIds.contains(s.id)).toList()
       : _segments;
   final Map<String, SegmentDraft> _drafts = <String, SegmentDraft>{};
+  final Map<String, int> _retiredPublicSegmentRevisions = <String, int>{};
   StreamSubscription<GatewayRealtimeEvent>? _eventSubscription;
   StreamSubscription<dynamic>? _audioSubscription;
   StreamSubscription<AsrTextSegment>? _asrSubscription;

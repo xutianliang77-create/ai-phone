@@ -1,0 +1,460 @@
+{
+  "formatVersion": 1,
+  "provenance": "actual Gateway events and HTTP/PostgreSQL API history; synthetic ASR/MT, no model call",
+  "wireSha256": "55f69baef05d6cf2f74c77d593e9323d62fb6a1167488435ee394e8afd2b1737",
+  "events": [
+    {
+      "type": "session.started",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75"
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "parent",
+      "turnId": "turn_1",
+      "revision": 1,
+      "text": "会议结束以后，我会整理会议纪要。",
+      "rawText": "会议结束以后，我会整理会议纪要。",
+      "language": "zh",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "refinement": {
+        "provider": "off",
+        "promptVersion": "asr_refine_v2",
+        "confidence": 0.7,
+        "latencyMs": 0,
+        "operations": [],
+        "protectedTermsKept": [
+          "会议纪要"
+        ],
+        "warnings": []
+      },
+      "speaker": {
+        "speakerId": "unknown",
+        "role": "unknown",
+        "source": "unknown"
+      },
+      "timing": {
+        "startMs": 0,
+        "endMs": 1000,
+        "source": "estimated"
+      }
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "parent",
+      "turnId": "turn_1",
+      "revision": 1,
+      "text": "Translated: 会议结束以后，我会整理会议纪要。",
+      "language": "en",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "providerUsage": {
+        "provider": "lmstudio",
+        "model": "synthetic",
+        "latencyMs": 0,
+        "inputCharacters": 16,
+        "outputCharacters": 28,
+        "estimatedInputTokens": 16,
+        "estimatedOutputTokens": 17,
+        "estimatedTotalTokens": 33
+      },
+      "speaker": {
+        "speakerId": "unknown",
+        "role": "unknown",
+        "source": "unknown"
+      },
+      "timing": {
+        "startMs": 0,
+        "endMs": 1000,
+        "source": "estimated"
+      }
+    },
+    {
+      "type": "speaker.updated",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "parent",
+      "turnId": "turn_1",
+      "revision": 1,
+      "speakerRevision": 1,
+      "speaker": {
+        "speakerId": "device-speaker-1",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.98
+      },
+      "timing": {
+        "startMs": 0,
+        "endMs": 1000,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      }
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "turnId": "turn_1",
+      "revision": 1,
+      "text": "并在下班前发给大家确认。",
+      "rawText": "并在下班前发给大家确认。",
+      "language": "zh",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "refinement": {
+        "provider": "off",
+        "promptVersion": "asr_refine_v2",
+        "confidence": 0.7,
+        "latencyMs": 0,
+        "operations": [],
+        "protectedTermsKept": [],
+        "warnings": []
+      },
+      "speaker": {
+        "speakerId": "unknown",
+        "role": "unknown",
+        "source": "unknown"
+      },
+      "timing": {
+        "startMs": 1000,
+        "endMs": 2000,
+        "source": "estimated"
+      }
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "turnId": "turn_1",
+      "revision": 1,
+      "text": "Translated: 并在下班前发给大家确认。",
+      "language": "en",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "providerUsage": {
+        "provider": "lmstudio",
+        "model": "synthetic",
+        "latencyMs": 0,
+        "inputCharacters": 12,
+        "outputCharacters": 24,
+        "estimatedInputTokens": 13,
+        "estimatedOutputTokens": 14,
+        "estimatedTotalTokens": 27
+      },
+      "speaker": {
+        "speakerId": "unknown",
+        "role": "unknown",
+        "source": "unknown"
+      },
+      "timing": {
+        "startMs": 1000,
+        "endMs": 2000,
+        "source": "estimated"
+      }
+    },
+    {
+      "type": "speaker.updated",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "turnId": "turn_1",
+      "revision": 1,
+      "speakerRevision": 1,
+      "speaker": {
+        "speakerId": "device-speaker-1",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.98
+      },
+      "timing": {
+        "startMs": 1000,
+        "endMs": 2000,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      }
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "turnId": "turn_1",
+      "revision": 2,
+      "text": "",
+      "language": "zh"
+    },
+    {
+      "type": "transcript.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "parent",
+      "turnId": "turn_1",
+      "revision": 2,
+      "text": "会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+      "rawText": "会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+      "language": "zh",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "refinement": {
+        "provider": "off",
+        "promptVersion": "asr_refine_v2",
+        "confidence": 0.7,
+        "latencyMs": 0,
+        "operations": [],
+        "protectedTermsKept": [
+          "会议纪要"
+        ],
+        "warnings": []
+      },
+      "speaker": {
+        "speakerId": "device-speaker-1",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.98
+      },
+      "timing": {
+        "startMs": 0,
+        "endMs": 2000,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      }
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "parent",
+      "turnId": "turn_1",
+      "revision": 2,
+      "text": "Translated: 会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+      "language": "en",
+      "dominantLanguage": "zh",
+      "detectedLanguages": [
+        "zh"
+      ],
+      "mixedLanguage": false,
+      "providerUsage": {
+        "provider": "lmstudio",
+        "model": "synthetic",
+        "latencyMs": 0,
+        "inputCharacters": 28,
+        "outputCharacters": 40,
+        "estimatedInputTokens": 27,
+        "estimatedOutputTokens": 28,
+        "estimatedTotalTokens": 55
+      },
+      "speaker": {
+        "speakerId": "device-speaker-1",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.98
+      },
+      "timing": {
+        "startMs": 0,
+        "endMs": 2000,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      }
+    },
+    {
+      "segmentId": "child",
+      "revision": 1,
+      "isFinal": true,
+      "text": "并在下班前发给大家确认。",
+      "language": "zh",
+      "timing": {
+        "startMs": 1000,
+        "endMs": 2000,
+        "source": "estimated"
+      },
+      "type": "transcript.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75"
+    },
+    {
+      "type": "translation.final",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "revision": 1,
+      "text": "stale MT",
+      "language": "en"
+    },
+    {
+      "type": "speaker.updated",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "revision": 1,
+      "speakerRevision": 999,
+      "speaker": {
+        "speakerId": "device-speaker-2",
+        "role": "speaker",
+        "source": "diarization"
+      }
+    },
+    {
+      "type": "speaker.updated",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "segmentId": "child",
+      "revision": 1,
+      "speakerRevision": 1,
+      "speaker": {
+        "speakerId": "device-speaker-1",
+        "role": "speaker",
+        "source": "diarization",
+        "confidence": 0.98
+      },
+      "timing": {
+        "startMs": 1000,
+        "endMs": 2000,
+        "source": "estimated",
+        "overlap": false,
+        "activeSpeakerIds": []
+      }
+    },
+    {
+      "type": "session.ended",
+      "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+      "reason": "client_request",
+      "billableSeconds": 4,
+      "flush": {
+        "status": "empty",
+        "transcriptFinalCount": 0,
+        "translationFinalCount": 0,
+        "translationFailedCount": 0,
+        "unresolvedSegmentCount": 0,
+        "pipelineErrorCount": 0,
+        "audioFlushed": true,
+        "providerFlushed": true
+      },
+      "diagnostics": {
+        "version": 1,
+        "audio": {
+          "receivedFrameCount": 0,
+          "processedBatchCount": 0,
+          "droppedFrameCount": 0
+        },
+        "speakerTurns": {
+          "confirmedBoundaryCount": 0,
+          "commitHitCount": 0,
+          "commitMissCount": 0,
+          "commitErrorCount": 0,
+          "endpointRaceCount": 0,
+          "averageConfirmationLatencyMs": 0,
+          "maxConfirmationLatencyMs": 0,
+          "committedAudioMs": 0,
+          "endpointReasons": {},
+          "unresolvedCommitMissCount": 0,
+          "boundaryOutcomeCounts": {},
+          "coordinatorDecisionCounts": {
+            "no_span": 2,
+            "initial_speaker_confirmed": 1
+          },
+          "confirmedSpeakerCount": 1
+        },
+        "speakerAssemblyRepair": {
+          "enabled": false,
+          "cachedParentCount": 0,
+          "boundaryEvidenceArrivalCount": 0,
+          "repairAttemptCount": 0,
+          "repairAcceptedCount": 0,
+          "delayedRepairAcceptedCount": 0,
+          "repairRejectedCount": 0,
+          "revisionEmittedCount": 0,
+          "expiredParentCount": 0,
+          "pendingParentCount": 0,
+          "rejectionReasonCounts": {},
+          "averageWaitMs": 0,
+          "maxWaitMs": 0,
+          "noopEvaluationCount": 0,
+          "noopAcceptedCount": 0,
+          "noopRejectionReasonCounts": {}
+        }
+      }
+    }
+  ],
+  "history": {
+    "sessionId": "co11-segment-cd907bbe-2c2c-4556-9987-086038156d75",
+    "mode": "conversation",
+    "status": "ended",
+    "kind": "realtime",
+    "title": "会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+    "sourceLanguage": "zh",
+    "targetLanguage": "en",
+    "speakerCount": 1,
+    "consumedSeconds": 4,
+    "createdAt": "2026-09-27T18:21:17.592Z",
+    "endedAt": "2026-09-27T18:21:21.592Z",
+    "segmentCount": 1,
+    "segments": [
+      {
+        "id": "parent",
+        "model": "synthetic",
+        "stage": "translation",
+        "timing": {
+          "endMs": 2000,
+          "source": "estimated",
+          "overlap": false,
+          "startMs": 0,
+          "activeSpeakerIds": []
+        },
+        "turnId": "turn_1",
+        "rawText": "会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+        "speaker": {
+          "role": "speaker",
+          "source": "diarization",
+          "speakerId": "device-speaker-1",
+          "confidence": 0.98
+        },
+        "provider": "lmstudio",
+        "revision": 2,
+        "latencyMs": 0,
+        "refinement": {
+          "provider": "off",
+          "warnings": [],
+          "latencyMs": 0,
+          "confidence": 0.7,
+          "operations": [],
+          "promptVersion": "asr_refine_v2",
+          "protectedTermsKept": [
+            "会议纪要"
+          ]
+        },
+        "sourceText": "会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+        "mixedLanguage": false,
+        "providerUsage": {
+          "model": "synthetic",
+          "provider": "lmstudio",
+          "latencyMs": 0,
+          "inputCharacters": 28,
+          "outputCharacters": 40,
+          "estimatedInputTokens": 27,
+          "estimatedTotalTokens": 55,
+          "estimatedOutputTokens": 28
+        },
+        "sourceLanguage": "zh",
+        "targetLanguage": "en",
+        "translatedText": "Translated: 会议结束以后，我会整理会议纪要，并在下班前发给大家确认。",
+        "dominantLanguage": "zh",
+        "detectedLanguages": [
+          "zh"
+        ]
+      }
+    ],
+    "review": null
+  }
+}

@@ -51,6 +51,7 @@ extension RealtimeControllerStart on RealtimeController {
     _segments.clear();
     _asrDraftIds.clear();
     _drafts.clear();
+    _retiredPublicSegmentRevisions.clear();
     _speechEchoSegmentIds.clear();
     _publicAudioRevisionBySegment.clear();
     _publicAudioSequenceBySegment.clear();

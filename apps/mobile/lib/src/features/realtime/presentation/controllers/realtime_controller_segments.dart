@@ -36,6 +36,10 @@ extension RealtimeControllerSegments on RealtimeController {
           (revision == null || revision < currentRevision)) {
         return;
       }
+      if (_session?.syncBinding != null && revision != null && revision > 0) {
+        final previous = _retiredPublicSegmentRevisions[id] ?? 0;
+        if (revision > previous) _retiredPublicSegmentRevisions[id] = revision;
+      }
       _cancelPublicAudioForRevision(id, revision ?? 0);
       _removeSegment(id);
       return;
@@ -43,6 +47,12 @@ extension RealtimeControllerSegments on RealtimeController {
     if (translatedText != null && nextTranslatedText == null) return;
     if (appendSourceText != null && nextAppendSourceText == null) return;
     if (appendTranslatedText != null && nextAppendTranslatedText == null) {
+      return;
+    }
+    final retiredRevision = _retiredPublicSegmentRevisions[id];
+    if (retiredRevision != null &&
+        (revision == null || revision <= retiredRevision ||
+            !_drafts.containsKey(id) && nextSourceText == null)) {
       return;
     }
 

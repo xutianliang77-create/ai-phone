@@ -3,6 +3,7 @@ import { parseRealtimeProcessingRequest, type RealtimeSegmentSyncAck } from "@tr
 import { getStoreSnapshot, persistStoreSnapshot, runStoreTransaction } from "../../infrastructure/storage/json-store.js";
 import { mutateSessionRecord,findSession } from "./sessions-runtime.repository.js";
 import { mergeSessionSegments } from "./session-segment-merge.js";
+import {blockedBySegmentRetirement} from "./session-segment-retirement.js";
 import type { SessionRecord } from "./session-record.js";
 import { parseResultSync, resultSyncHash, ResultSyncError, RESULT_SYNC_CONSENT_VERSION,
   syncKey, syncTextProjection, type ResultSyncState } from "./session-result-sync-contract.js";
@@ -138,6 +139,7 @@ export function syncSessionResults(sessionId: string, ownerId: string, body: unk
         (language.source === "auto" || segment.sourceLanguage === language.source);
       if (!validDirection) throw new ResultSyncError("result_sync_language_mismatch");
       const old = state.revisions[segment.id];
+      if(blockedBySegmentRetirement(current.retiredSegmentRevisions,segment.id,segment.revision,segment.sourceText))throw new ResultSyncError("result_sync_revision_conflict");
       if (old && (segment.revision! < old.revision || segment.revision === old.revision &&
           resultSyncHash(segment) !== old.contentHash)) throw new ResultSyncError("result_sync_revision_conflict");
       const existing = current.segments.find(s => s.id === segment.id);
@@ -148,7 +150,7 @@ export function syncSessionResults(sessionId: string, ownerId: string, body: unk
       }
     }
     const next = structuredClone(current);
-    next.segments = mergeSessionSegments(next.segments, request.segments);
+    next.segments = mergeSessionSegments(next.segments, request.segments,{retiredSegmentRevisions:next.retiredSegmentRevisions,versionedSpeakerMetadata:true});
     for (const segment of request.segments) {
       const saved = next.segments.find(s => s.id === segment.id)!;
       if (resultSyncHash(syncTextProjection(saved)) !== resultSyncHash(segment)) {

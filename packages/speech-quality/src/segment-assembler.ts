@@ -36,7 +36,7 @@ export interface SegmentAssemblerOptions {
   emitMaxDurationRevisions?: boolean;
   emitSemanticContinuationRevisions?: boolean;
   semanticSourceLanguage?: string;
-  lateSpeakerRevisions?:boolean;
+  lateSpeakerRevisions?:boolean;onLateSpeakerExpiry?:(id:string,info:import("./pending-speaker-continuations.js").LateSpeakerExpiry)=>void;
 }
 
 export interface SegmentPushResult {
@@ -81,7 +81,7 @@ export class SegmentAssembler {
       semanticSourceLanguage: options.semanticSourceLanguage,
       maxSemanticParts: this.maxBufferedSegments,
       maxSemanticCharacters: this.maxBufferedCharacters,
-      lateSpeakerRevisions:options.lateSpeakerRevisions,
+      lateSpeakerRevisions:options.lateSpeakerRevisions,onLateSpeakerExpiry:options.onLateSpeakerExpiry,
     });
   }
 

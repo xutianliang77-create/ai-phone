@@ -35,6 +35,8 @@ export interface SessionRecord {
   lastActivityAt?: string;
   endedAt?: string;
   segments: SessionSegmentDto[];
+  /** Retired caption revisions are durable but are not visible history segments. */
+  retiredSegmentRevisions?: Record<string, number>;
   callLink?: CallLinkMetadata;
   callLegs?: CallLegRecord[];
   playbacks?: CallPlaybackDto[];

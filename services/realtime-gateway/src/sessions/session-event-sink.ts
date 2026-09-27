@@ -5,7 +5,7 @@ import type {
   PublicRuntimeAck,
   AudioFrame,
   PublicModelAttemptEvent,PublicModelAttemptAck,
-  PublicAdmissionQuery,PublicAdmissionReceipt,
+  PublicAdmissionQuery,PublicAdmissionReceipt,SessionSegmentRetirementAck,
 } from "@translation/contracts";
 import {modelAttemptKey,matchesPublicAdmissionReceipt} from "@translation/contracts";
 import {abortable,readPublicJson} from "../providers/lmstudio/lmstudio-public-protocol.js";
@@ -14,6 +14,7 @@ import type { RealtimeEnv } from "../config/env.js";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 export interface SessionEventSink {
+  retireSegment?(input:{sessionId:string;segmentId:string;revision:number}):Promise<void>;
   configuration?(query:PublicAdmissionQuery,signal?:AbortSignal):Promise<unknown>;
   credentials?(query:PublicAdmissionQuery,component:"asr"|"translation"|"tts",gatewayCredential:string,signal?:AbortSignal):Promise<unknown>;
   admission?(query:PublicAdmissionQuery):Promise<PublicAdmissionReceipt>;
@@ -215,6 +216,15 @@ class ApiSessionEventSink implements SessionEventSink {
         ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
       }, 3);
     }
+  }
+
+  async retireSegment(input:{sessionId:string;segmentId:string;revision:number}) {
+    this.requirePublicTransport();
+    if(!Number.isSafeInteger(input.revision)||input.revision<1)throw Error("public_segment_retirement_invalid");
+    const ack=await this.post("/internal/realtime/segments",{...input,retired:true},3,true,true) as SessionSegmentRetirementAck;
+    if(!ack||ack.sessionId!==input.sessionId||ack.segmentId!==input.segmentId||
+      !Number.isSafeInteger(ack.revision)||ack.revision<input.revision||typeof ack.retired!=="boolean"||
+      !ack.retired&&ack.revision<=input.revision)throw Error("public_segment_retirement_unconfirmed");
   }
 
   async touch(sessionId: string, status: "active" | "paused") {

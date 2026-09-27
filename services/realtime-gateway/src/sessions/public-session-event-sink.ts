@@ -80,8 +80,13 @@ export class PublicSessionEventSink implements SessionEventSink {
       if(!this.phase)throw Error("public_runtime_not_started");
       const revision="revision" in snapshot?snapshot.revision??0:0;
       if(!Number.isSafeInteger(revision)||Number(revision)<0)throw Error("invalid_public_revision");
-      if((snapshot.type==="transcript.final"||snapshot.type==="translation.final")&&!cleanRealtimeText(snapshot.text))return;
-      await this.sink.record(snapshot);
+      if(snapshot.type==="transcript.final"&&snapshot.text===""&&Number(revision)>0){
+        if(!this.sink.retireSegment)throw Error("public_segment_retirement_unavailable");
+        await this.sink.retireSegment({sessionId:snapshot.sessionId,segmentId:snapshot.segmentId,revision:Number(revision)});
+      }else{
+        if((snapshot.type==="transcript.final"||snapshot.type==="translation.final")&&!cleanRealtimeText(snapshot.text))return;
+        await this.sink.record(snapshot);
+      }
       if(snapshot.type==="transcript.final")logPublicAsrBoundary({sessionId:this.binding.sessionId,stage:"persisted",
         segmentId:snapshot.segmentId,revision:Number(revision),acceptedSamples:samples,
         textCharCount:snapshot.text.length,language:snapshot.language});

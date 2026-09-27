@@ -7,6 +7,7 @@ export * from "./api/call-links.js";
 export * from "./api/model-routing.js";
 export * from "./api/plans.js";
 export * from "./api/realtime.js";
+export * from "./api/session-segment-retirement.js";
 export * from "./api/voice-presets.js";
 export * from "./call-room/events.js";
 export * from "./communication/envelopes.js";

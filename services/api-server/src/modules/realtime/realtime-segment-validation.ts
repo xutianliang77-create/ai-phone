@@ -14,6 +14,11 @@ import { isValidTurnLanguageProfile } from
 export function isValidSegmentPatch(
   body: Partial<UpsertSessionSegmentRequest>,
 ): body is UpsertSessionSegmentRequest {
+  if(!body||typeof body!=="object"||Array.isArray(body))return false;
+  if(body.retired!==undefined)return body.retired===true&&
+    Object.keys(body).every(k=>["sessionId","segmentId","revision","retired"].includes(k))&&
+    [body.sessionId,body.segmentId].every(v=>typeof v==="string"&&v.trim()===v&&v.length>0&&v.length<=240)&&
+    Number.isSafeInteger(body.revision)&&Number(body.revision)>0;
   return (
     typeof body.sessionId === "string" &&
     typeof body.segmentId === "string" &&

@@ -19,12 +19,11 @@ import * as legacy from "./sessions.repository.js";
 import type { SessionRecord } from "./session-record.js";
 import { createPreparedSessionWithBinding } from "../realtime/public-creation-binding.js";
 import {
-  applySessionSegmentPatch,
-  createSessionSegment,
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
 import { orderSessionSegmentsChronologically } from "./session-segment-order.js";
+import {applyStoredSessionSegmentPatch} from "./session-segment-write.js";
 import {
   sessionMatchesQuery,
   sessionSpeakerSummary,
@@ -190,7 +189,7 @@ export function transitionSessionState(
 
 export function saveSegments(sessionId: string, segments: SessionSegmentDto[]) {
   return updateSession(sessionId, "segments-save", segments, (next) => {
-    next.segments = mergeSessionSegments(next.segments, segments);
+    next.segments = mergeSessionSegments(next.segments, segments,{retiredSegmentRevisions:next.retiredSegmentRevisions,versionedSpeakerMetadata:next.processingAuthorization?.processingMode==="online"});
     next.review = null;
     next.lastActivityAt = new Date().toISOString();
   }, () => legacy.saveSegments(sessionId, segments));
@@ -257,10 +256,7 @@ export function renameSessionSpeaker(
 
 export function upsertSegment(sessionId: string, patch: SessionSegmentPatch) {
   return updateSession(sessionId, "segment-upsert", patch, (next) => {
-    const existing = next.segments.find((segment) => segment.id === patch.segmentId);
-    if (existing) applySessionSegmentPatch(existing, patch);
-    else next.segments.push(createSessionSegment(patch));
-    next.segments = orderSessionSegmentsChronologically(next.segments);
+    applyStoredSessionSegmentPatch(next,patch);
     next.review = null;
     next.lastActivityAt = new Date().toISOString();
   }, () => legacy.upsertSegment(sessionId, patch));
