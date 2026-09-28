@@ -85,13 +85,15 @@ class SegmentDraft {
       rawText: rawText ?? this.rawText,
       optimizedText: optimizedText ?? this.optimizedText,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
-      targetLanguage:
-          clearTranslation ? null : targetLanguage ?? this.targetLanguage,
+      // A current failure clears stale translation data, not the freshly
+      // supplied direction/provider of that failure. Recognition-only updates
+      // still clear old metadata when they do not supply a replacement.
+      targetLanguage: targetLanguage ?? (clearTranslation ? null : this.targetLanguage),
       confidence: confidence ?? this.confidence,
       stage: stage ?? this.stage,
-      provider: clearTranslation ? null : provider ?? this.provider,
-      model: clearTranslation ? null : model ?? this.model,
-      latencyMs: clearTranslation ? null : latencyMs ?? this.latencyMs,
+      provider: provider ?? (clearTranslation ? null : this.provider),
+      model: model ?? (clearTranslation ? null : this.model),
+      latencyMs: latencyMs ?? (clearTranslation ? null : this.latencyMs),
       refinement: refinement ?? this.refinement,
       speaker: speaker ?? this.speaker,
       timing: timing ?? this.timing,

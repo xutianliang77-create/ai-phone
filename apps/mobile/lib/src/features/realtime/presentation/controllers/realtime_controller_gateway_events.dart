@@ -29,6 +29,11 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       return;
     }
     if (event.type == 'translation.failed' && event.segmentId != null) {
+      final currentRevision = _drafts[event.segmentId!]?.recognitionRevision;
+      if (event.revision != null && currentRevision != null &&
+          event.revision! < currentRevision) {
+        return;
+      }
       if (event.revision != null && event.revision! >= 0) {
         // Keep the source subtitle, but a failed current revision must not
         // leave an earlier translation visible or playable.

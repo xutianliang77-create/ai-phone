@@ -3,7 +3,7 @@ import type {SessionEndReason} from "@translation/contracts";
 import type {SegmentPushResult} from "@translation/speech-quality";
 import {realtimeLogger} from "./realtime-metrics.js";
 
-type Stage="accepted"|"provider_audio"|"speech_start"|"speech_stop"|"completed"|"emitted"|"persisted";
+type Stage="accepted"|"provider_audio"|"speech_start"|"speech_stop"|"completed"|"emitted"|"persisted"|"phone_speech_start"|"phone_boundary";
 interface Boundary {
   sessionId:string;stage:Stage;itemId?:string;segmentId?:string;
   sequence?:number;startSample?:number;endSample?:number;acceptedSamples?:number;
@@ -46,6 +46,21 @@ export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
     const audioLevel=pcm&&(value.stage==="accepted"||value.stage==="provider_audio")?publicPcm16Level(pcm):undefined;
     realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel}:{})},"Public ASR QA boundary");
   }catch{/* QA diagnostics must not advance a watermark then abort the audio path. */}
+}
+
+interface LanguageTrace {
+  sessionId:string;segmentId:string;revision:number;
+  stage:'language_observation'|'language_decision'|'language_routing';
+  sourceTextSha256?:string;observationTextSha256?:string;projection?:string;
+  dominant?:string|null;hypotheses?:Record<string,number>;canonicalHypotheses?:Record<string,number>;substantial?:boolean;
+  status?:string;language?:string;confidence?:number;reason?:string;
+  startMs?:number;endMs?:number;tokenTimingCount?:number;childCount?:number;
+}
+/** Same opt-in non-content trace as PCM/assembly; diagnostics must never abort
+ * receipt acceptance, language resolution, audio delivery or normal End. */
+export function logPublicAsrLanguage(value:LanguageTrace){
+  if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=='true')return;
+  try{realtimeLogger.info(value,'Public ASR language evidence');}catch{/* diagnostic only */}
 }
 
 type AssemblyTrigger="push"|"timeout"|"end"|"speaker"|"audio_boundary";

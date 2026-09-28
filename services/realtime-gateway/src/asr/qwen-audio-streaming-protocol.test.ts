@@ -54,6 +54,22 @@ describe('selected Qwen Audio streaming contract, no automatic route enabled',()
     const result=decode(event);expect(result.kind).toBe('result');
     if(result.kind==='result'){expect(result.sentence.text).toBe(final().payload.output.sentence.text);expect(result.sentence.tokenTimings).toBeUndefined();}
   });
+  it('retains exact token times and character offsets through whitespace-only sentence formatting',()=>{
+    const event=final(),s=event.payload.output.sentence;
+    s.text='  你好。 Hello everyone.  ';s.begin_time=0;s.end_time=3000;
+    s.words=[{text:'你好',punctuation:'。',begin_time:0,end_time:1000,fixed:true},
+      {text:'Hello ',punctuation:'',begin_time:1200,end_time:2000,fixed:true},
+      {text:'everyone',punctuation:'. ',begin_time:2100,end_time:3000,fixed:true}];
+    const result=decode(event);
+    expect(result.kind).toBe('result');
+    if(result.kind==='result')expect(result.sentence.tokenTimings).toEqual([
+      {text:'你好。',characterStart:2,characterEnd:5,startMs:0,endMs:1000},
+      {text:'Hello',characterStart:6,characterEnd:11,startMs:1200,endMs:2000},
+      {text:'everyone.',characterStart:12,characterEnd:21,startMs:2100,endMs:3000}]);
+    s.words[2].punctuation='?';
+    const mismatch=decode(event);
+    if(mismatch.kind==='result')expect(mismatch.sentence.tokenTimings).toBeUndefined();
+  });
   it.each(['task','time','word','usage','error'])('rejects malformed %s without inventing source language',kind=>{
     const event=final();if(kind==='task')event.header.task_id='other';
     if(kind==='time')event.payload.output.sentence.end_time=999999;

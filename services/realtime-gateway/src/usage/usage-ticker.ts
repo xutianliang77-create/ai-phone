@@ -48,7 +48,13 @@ export function createUsageTickDecision(
   );
   const remainingByBalance =
     balanceSeconds === null ? remainingByDuration : Math.max(0, balanceSeconds - billableSeconds);
-  const remainingSeconds = Math.min(remainingByDuration, remainingByBalance);
+  // The rolling reservation authorizes this session's execution, not the
+  // customer's whole balance. Display free account funds plus this session's
+  // hold, excluding other sessions' holds and consumption not yet settled.
+  const accountSeconds = session.claims.publicRuntime
+    ? publicDisplayBalance(balance, balanceSeconds!) : balanceSeconds;
+  const remainingSeconds = Math.min(remainingByDuration,
+    accountSeconds === null ? remainingByBalance : Math.max(0, accountSeconds - billableSeconds));
   const quotaExhausted = balanceSeconds !== null && remainingByBalance <= 0;
   const timeLimitReached = Number.isFinite(remainingByDuration) && remainingByDuration <= 0;
 
@@ -69,6 +75,15 @@ export function createUsageTickDecision(
         ? { endReason: "time_limit" as const }
         : {}),
   };
+}
+
+function publicDisplayBalance(balance: UsageBalanceSnapshot | null | undefined, authorizedSeconds: number) {
+  const available = normalizeBalanceSeconds(balance?.availableSeconds);
+  const remaining = normalizeBalanceSeconds(balance?.remainingSeconds);
+  if (available === null || remaining === null || !Number.isSafeInteger(available + authorizedSeconds)) {
+    return authorizedSeconds;
+  }
+  return Math.min(remaining, available + authorizedSeconds);
 }
 
 function normalizeBalanceSeconds(value: unknown) {

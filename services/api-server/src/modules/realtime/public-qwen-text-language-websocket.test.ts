@@ -76,3 +76,30 @@ it('old/unsupported clients are rejected before credentials or ASR, not silently
   expect(t.apiFetchFn.mock.calls.some(c=>String(c[0]).endsWith('/credentials'))).toBe(false);
   expect(current().status).toBe('created');expect(current().publicRuntime).toBeUndefined();
 });
+it('mixed-language children retire one parent, save both directions and end with one ASR and one settlement',async()=>{
+  const t=await setup();await waitFor(()=>messages.some(e=>e.type==='session.started'));
+  vi.setSystemTime(now.getTime()+1000);
+  ws!.send(JSON.stringify({type:'audio.frame',sessionId:t.issued.sessionId,sequence:1,timestampMs:0,format:'pcm16',sampleRate:16000,data:Buffer.alloc(3200).toString('base64')}));
+  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer.bytes===3200);
+  const text='你好，这是中文测试。Hello everyone.';
+  peer.sentence(1,text,false);
+  peer.receive('result-generated',{output:{sentence:{sentence_id:1,text,sentence_end:true,begin_time:0,end_time:text.length*3,
+    words:Array.from(text).map((text,index)=>({text,punctuation:'',begin_time:index*3,end_time:(index+1)*3,fixed:true}))}}});
+  await waitFor(()=>messages.filter(e=>e.type==='text.language.request').length===2);
+  vi.setSystemTime(now.getTime()+4000);ws!.send(JSON.stringify({type:'session.end',sessionId:t.issued.sessionId}));
+  await waitFor(()=>!!current().publicRuntime?.meterStoppedAt);
+  for(const request of messages.filter(e=>e.type==='text.language.request')){
+    const {text:part,...binding}=request,zh=part.includes('你好');
+    ws!.send(JSON.stringify({...binding,type:'text.language.result',evidence:'text_only_not_acoustic',
+      dominant:zh?'zh-Hans':'en',hypotheses:zh?{'zh-Hans':0.74,'zh-Hant':0.25}:{en:0.99}}));
+  }
+  await waitFor(()=>messages.some(e=>e.type==='session.ended'));await waitFor(()=>getSession(t.issued.sessionId)===null);
+  expect(current().segments.map(s=>[s.sourceLanguage,s.targetLanguage])).toEqual([['zh','en'],['en','zh']]);
+  expect(current().segments.map(s=>s.sourceText).join('')).toBe(text);
+  expect(Object.keys(current().retiredSegmentRevisions??{})).toEqual([`${peer.taskId}:1`]);
+  expect(current().segments.every(s=>!!s.translatedText)).toBe(true);
+  expect(t.modelFetchFn).toHaveBeenCalledTimes(2);expect(t.asrSocketFactory).toHaveBeenCalledTimes(1);
+  expect(current().consumedSeconds).toBe(4);
+  expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${t.issued.sessionId}`)).toHaveLength(1);
+  expect(messages.filter(e=>e.type==='error'||e.type==='translation.failed')).toEqual([]);
+});

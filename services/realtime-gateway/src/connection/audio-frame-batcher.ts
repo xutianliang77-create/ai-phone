@@ -1,6 +1,7 @@
 import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
-import {inheritAcceptedAudioRange} from "./accepted-audio-range.js";
+import {acceptedAudioRange,inheritAcceptedAudioRange} from "./accepted-audio-range.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import {logPublicAsrBoundary} from '../metrics/public-asr-boundary-trace.js';
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 
 interface AudioFrameBatcherOptions {
@@ -41,6 +42,7 @@ export class AudioFrameBatcher {
   private queueEpoch=0;
   private lastAcceptedSequence=-1;
   private lastSpeechStartSequence=-1;
+  private lastAcceptedAudio?:{startSample:number;endSample:number;sampleRate:number};
   private boundary?:{sequence:number;task:Promise<void>};
   private pendingBoundaries=0;
   private processingFailure?:Error;
@@ -64,6 +66,8 @@ export class AudioFrameBatcher {
     }
     this.receivedFrameCount += 1;
     this.lastAcceptedSequence=frame.sequence;
+    const range=acceptedAudioRange(snapshot);
+    this.lastAcceptedAudio=range?{...range,sampleRate:snapshot.sampleRate}:undefined;
     this.pending.push(snapshot);
     this.trimPendingAudio();
     if(this.accepting)this.scheduleProcessing();
@@ -101,6 +105,8 @@ export class AudioFrameBatcher {
     if(this.boundary?.sequence===sequence)return this.boundary.task;
     if(!this.accepting||this.closed||!Number.isSafeInteger(sequence)||sequence<0||sequence!==this.lastAcceptedSequence||
       sequence<=(this.boundary?.sequence??-1)||this.pendingBoundaries>=4)throw Error("audio_boundary_not_at_received_tail");
+    if(this.lastAcceptedAudio)logPublicAsrBoundary({sessionId:this.options.sessionId,sequence,
+      ...this.lastAcceptedAudio,stage:'phone_boundary'});
     this.clearTimer();this.queueEpoch++;this.processQueued=false;this.forceNextProcess=false;
     const captured=this.pending.splice(0);this.pendingBoundaries++;
     const task=this.processing.then(async()=>{if(this.processingFailure)throw this.processingFailure;if(captured.length)await this.sendBatch(mergeFrames(captured));await commit();}).finally(()=>{this.pendingBoundaries--;});
@@ -119,7 +125,10 @@ export class AudioFrameBatcher {
     if(!this.options.acceptFrame||!this.accepting||this.closed||!Number.isSafeInteger(sequence)||sequence<0)return "rejected";
     if(sequence===this.lastSpeechStartSequence)return "duplicate";
     if(sequence!==this.lastAcceptedSequence||sequence<this.lastSpeechStartSequence)return "rejected";
-    this.lastSpeechStartSequence=sequence;return "new";
+    this.lastSpeechStartSequence=sequence;
+    if(this.lastAcceptedAudio)logPublicAsrBoundary({sessionId:this.options.sessionId,sequence,
+      ...this.lastAcceptedAudio,stage:'phone_speech_start'});
+    return "new";
   }
 
   private canAppend(frame: AudioFrame) {

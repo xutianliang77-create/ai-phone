@@ -3,6 +3,26 @@ import type { RealtimeSession } from "../sessions/realtime-session.js";
 import { createUsageTickDecision } from "./usage-ticker.js";
 
 describe("usage ticker", () => {
+  it.each([
+    [99999, 99939, 60, 99959, false, false],
+    [100, 0, 60, 20, true, false], // Another session holds the other 40 seconds.
+    [99999, 99959, 40, 99959, false, true], // Balance never bypasses permission.
+  ])("separates public account display from rolling authorization (%s)",
+    (remainingSeconds, availableSeconds, authorizedSeconds, display, lowBalance, shouldEnd) => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(100_000);
+        const session = createTestSession({holdSeconds:30});
+        session.claims.publicRuntime = {deploymentId:"public",leaseId:"lease",captureId:"capture",
+          languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
+        session.activeStartedAt = 60_000;
+        const decision = createUsageTickDecision(session, {remainingSeconds, availableSeconds, authorizedSeconds});
+        expect(decision.event.remainingSeconds).toBe(display);
+        expect(decision.event.lowBalance === true).toBe(lowBalance);
+        expect(decision.shouldEnd).toBe(shouldEnd);
+        expect(decision.event.billableSeconds).toBe(40);
+      } finally { vi.useRealTimers(); }
+    });
   it.each([undefined, NaN, Infinity, -1, 1.5])(
     "cannot substitute account balance for an invalid public reservation (%s)",
     authorizedSeconds => {

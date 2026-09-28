@@ -57,6 +57,13 @@ extension RealtimeControllerSegments on RealtimeController {
     }
 
     final current = _drafts[id] ?? SegmentDraft(id);
+    // A late failed translation must not replace the current direction/provider
+    // or clear the translation of a newer recognition revision.
+    if (clearTranslation && revision != null &&
+        current.recognitionRevision != null &&
+        revision < current.recognitionRevision!) {
+      return;
+    }
     if (nextTranslatedText != null &&
         revision != null &&
         current.recognitionRevision != null &&

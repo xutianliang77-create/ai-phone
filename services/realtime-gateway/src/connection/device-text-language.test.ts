@@ -2,6 +2,8 @@ import {it,expect,vi,afterEach} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {isDeviceTextLanguageResult,type DeviceTextLanguageRequest} from '@translation/contracts';
 import {DeviceTextLanguageBroker} from './device-text-language.js';
+import {textForLanguageObservation} from './text-language-evidence.js';
+import {realtimeLogger} from '../metrics/realtime-metrics.js';
 const fixture=JSON.parse(readFileSync(new URL('../../../../packages/contracts/fixtures/device-text-language-v1.json',import.meta.url),'utf8'));
 const response=(r:DeviceTextLanguageRequest,dominant:string|null='fr',hypotheses:Record<string,number>={fr:0.98,en:0.01})=>{
   const {text,...binding}=r;return {...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant,hypotheses};
@@ -27,12 +29,35 @@ it('binds same session, segment, revision, hash, nonce; duplicate replies cannot
 it.each([
   ['Okay.','en',{en:0.99},'ambiguous'],['Hello everyone.','en',{en:0.51,fr:0.49},'ambiguous'],
   ['这是中文测试。','zh-Hans',{'zh-Hans':0.99},'detected'],
+  ['你叫什么名字？','zh-Hans',{'zh-Hans':0.7366148,'zh-Hant':0.2612020,ja:0.002183},'detected'],
+  ['我叫天亮。','zh-Hant',{'zh-Hant':0.7371357,'zh-Hans':0.2599954,ja:0.0028689},'detected'],
+  ['可。','zh-Hant',{'zh-Hant':0.76081395,'zh-Hans':0.2078113,ja:0.0313747},'ambiguous'],
+  ['这里依然不明确。','zh-Hans',{'zh-Hans':0.5,'zh-Hant':0.2,ja:0.3},'ambiguous'],
+  ['これは日本語のテストです。','ja',{ja:0.96,'zh-Hans':0.02,'zh-Hant':0.01},'unsupported'],
   ['Buongiorno a tutti.','it',{it:0.99},'unsupported'],
   ['Hello everyone.',null,{},'ambiguous'],
 ] as const)('retains uncertainty/third language instead of guessing the output pair: %s',async(text,dominant,hypotheses,status)=>{
   let r!:DeviceTextLanguageRequest;const broker=new DeviceTextLanguageBroker('s',['zh','en','fr'],v=>{r=v;return true;});
   const p=broker.identify('seg',1,text);broker.accept(response(r,dominant,{...hypotheses}));
   const value=await p;expect(value.status==='detected'?'detected':value.reason).toBe(status);broker.close();
+});
+it('reuses v1 identifier masking only in the bound observation, without manufacturing a language',async()=>{
+  const text='我们要测试 Qwen3 ASR、 HiMT2 和 VoxCPM2 的在线模型链路。';
+  const projected=textForLanguageObservation(text);
+  expect(projected.length).toBe(text.length);
+  expect(projected).toContain('我们要测试');expect(projected).not.toMatch(/Qwen3|ASR|HiMT2|VoxCPM2/);
+  expect(textForLanguageObservation('Please review the report.')).toBe('Please review the report.');
+  expect(textForLanguageObservation('Bonjour tout le monde.')).toBe('Bonjour tout le monde.');
+  let r!:DeviceTextLanguageRequest;
+  const broker=new DeviceTextLanguageBroker('s',['zh','en'],v=>{r=v;return true;});
+  const decision=broker.identify('terms',1,text);
+  expect(r.text).toBe(projected);
+  broker.accept(response(r,'zh-Hans',{'zh-Hans':0.98,'zh-Hant':0.01}));
+  await expect(decision).resolves.toEqual({status:'detected',language:'zh',confidence:0.99});
+  const termsOnly=broker.identify('only',1,'Qwen3 ASR Hy-MT2 VoxCPM2');
+  broker.accept(response(r,'en',{en:1}));
+  await expect(termsOnly).resolves.toEqual({status:'unknown',reason:'ambiguous'});
+  broker.close();
 });
 it('invalidates an old revision and a disconnected socket; timeout is bounded',async()=>{
   vi.useFakeTimers();const requests:DeviceTextLanguageRequest[]=[];
@@ -42,4 +67,20 @@ it('invalidates an old revision and a disconnected socket; timeout is bounded',a
   await vi.advanceTimersByTimeAsync(101);await expect(next).resolves.toMatchObject({reason:'timeout'});
   const pending=broker.identify('tail',1,'Hello everyone.');broker.close();
   await expect(pending).resolves.toMatchObject({reason:'unavailable'});expect(broker.accept(response(requests.at(-1)!))).toBe(false);
+});
+it('logs bounded text-free reasons and log failure cannot strand language resolution or End',async()=>{
+  vi.stubEnv('PUBLIC_ASR_BOUNDARY_TRACE_ENABLED','true');
+  const log=vi.spyOn(realtimeLogger,'info').mockImplementation(()=>{});
+  let request!:DeviceTextLanguageRequest;
+  const broker=new DeviceTextLanguageBroker('s',['zh','en'],r=>{request=r;return true;});
+  try{
+    const p=broker.identify('private',1,'PRIVATE customer words.');broker.accept(response(request,'en',{en:0.99}));
+    await expect(p).resolves.toMatchObject({status:'detected'});
+    expect(log.mock.calls).toHaveLength(2);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE');
+    expect(log.mock.calls[1][0]).toMatchObject({stage:'language_decision',status:'detected'});
+    log.mockImplementation(()=>{throw Error('synthetic_log_failure');});
+    const next=broker.identify('next',1,'Hello everyone.');broker.accept(response(request,'en',{en:0.99}));
+    await expect(next).resolves.toMatchObject({status:'detected'});
+  }finally{broker.close();log.mockRestore();vi.unstubAllEnvs();}
 });

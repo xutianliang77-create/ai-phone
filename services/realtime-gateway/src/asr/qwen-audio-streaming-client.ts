@@ -10,9 +10,11 @@ import {deferred} from './streaming-asr-state.js';
 import {abortable} from '../providers/abortable.js';
 import {cleanRealtimeText} from '../protocol/realtime-text.js';
 import {realtimeLogger} from '../metrics/realtime-metrics.js';
+import {logPublicAsrLanguage} from '../metrics/public-asr-boundary-trace.js';
 import {streamingAsrFailureDiagnostic,streamingAsrProviderContext,streamingAsrCloseContext,streamingAsrTransportContext,
   streamingAsrCancellationContext,type StreamingAsrFailureContext} from './streaming-asr-diagnostics.js';
 import {decodeQwenAudioEvent,qwenAudioFinishTask,qwenAudioRunTask,QwenAudioCumulativeUsage,type QwenAudioSentence} from './qwen-audio-streaming-protocol.js';
+import {routeQwenAudioLanguage,type RoutedAudioSentence} from './qwen-audio-language-routing.js';
 
 export interface QwenAudioStreamingOptions extends Omit<StreamingAsrOptions,'wireProfile'> {
   textLanguage?:DeviceTextLanguageBroker;
@@ -147,19 +149,26 @@ export class QwenAudioStreamingClient {
     this.languagePending++;
     // Start LID immediately, independently of PCM ingestion; preserve final order
     // when delivering to the original assembler/MT path.
-    const decision=!cleanRealtimeText(sentence.text)?Promise.resolve({status:'unknown' as const,reason:'ambiguous' as const}):
-      this.options.language==='auto'?this.options.textLanguage!.identify(id,1,sentence.text):
-      Promise.resolve({status:'detected' as const,language:this.options.language,confidence:1});
+    const routed:Promise<RoutedAudioSentence[]>=!cleanRealtimeText(sentence.text)
+      ? Promise.resolve([{id,sentence,decision:{status:'unknown',reason:'ambiguous'}}])
+      : this.options.language==='auto'?routeQwenAudioLanguage(sentence,id,this.options.textLanguage!):
+        Promise.resolve([{id,sentence,decision:{status:'detected',language:this.options.language,confidence:1}}]);
     this.languageWork=this.languageWork.then(async()=>{
-      const language=await decision;
+      const results=await routed;
       if(this.failure||this.stop.signal.aborted)return;
-      const text=cleanRealtimeText(sentence.text);
-      if(!text){this.notices.push({segmentId:id,revision:1,language:'unknown',unconfirmedText:'',discarded:true});return;}
-      if(language.status!=='detected'){
-        this.notices.push({segmentId:id,revision:1,language:'unknown',unconfirmedText:sentence.text,
-          timing:{startMs:sentence.startMs,endMs:sentence.endMs!,source:'model'}});return;
+      if(this.completed.length+this.notices.length+results.length+(results.length>1?1:0)>256)throw Error('qwen_audio_result_capacity');
+      if(results.length>1)this.notices.push({segmentId:id,revision:1,language:'unknown',unconfirmedText:'',discarded:true});
+      for(const {id:childId,sentence:child,decision:language} of results){
+        logPublicAsrLanguage({sessionId:this.options.sessionId,segmentId:childId,revision:1,stage:'language_routing',startMs:child.startMs,endMs:child.endMs,
+          tokenTimingCount:child.tokenTimings?.length??0,childCount:results.length,...language});
+        const text=cleanRealtimeText(child.text);
+        if(!text){this.notices.push({segmentId:childId,revision:1,language:'unknown',unconfirmedText:'',discarded:true});continue;}
+        if(language.status!=='detected'){
+          this.notices.push({segmentId:childId,revision:1,language:'unknown',unconfirmedText:child.text,
+            timing:{startMs:child.startMs,endMs:child.endMs!,source:'model'}});continue;
+        }
+        this.completed.push(this.transcript(child,childId,language.language));
       }
-      this.completed.push(this.transcript(sentence,id,language.language));
     }).catch(()=>this.fail('qwen_audio_result_failed')).finally(()=>{this.languagePending--;});
   }
   private startedSeen=false;

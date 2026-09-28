@@ -7,12 +7,13 @@ import {DeviceTextLanguageBroker} from '../connection/device-text-language.js';
 import {markAcceptedAudioRange} from '../connection/accepted-audio-range.js';
 const fixture=JSON.parse(readFileSync(new URL('../../../../packages/contracts/fixtures/qwen-audio-streaming-wire-20260928.json',import.meta.url),'utf8'));
 
-it('actual vendor wire + device text LID follows ORIGINAL MT routing incl reverse/third languages, once per attempt',async()=>{
-  let socket!:SyntheticQwenAudioSocket,replyIndex=0;
+it.each(['wire','mixed','terms'])('actual vendor wire + device text LID follows ORIGINAL MT incl reverse/third languages (%s)',async mode=>{
+  const mixed=mode==='mixed',terms=mode==='terms';
+  let socket!:SyntheticQwenAudioSocket;
   const attempts:PublicModelAttemptEvent[]=[],requests:Array<{Source:string;Target:string}>=[];
   const sources=['zh','en','ja','fr'] as const,pair=['zh','en'] as const;
   const textLanguage=new DeviceTextLanguageBroker('session',sources,r=>{
-    const {text,...binding}=r,language=['en','ja','fr','zh-Hans'][replyIndex++];
+    const {text,...binding}=r,language=text.includes('こんにちは')||text.includes('会議')?'ja':text.includes('réunion')?'fr':/[\u4e00-\u9fff]/u.test(text)?'zh-Hans':'en';
     queueMicrotask(()=>textLanguage.accept({...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:language,hypotheses:{[language]:0.99}}));return true;
   });
   const plan={asr:{execution:'public',scopeKey:'asr',reason:'online_selected'},translation:{execution:'public',scopeKey:'mt',reason:'online_selected'},tts:{execution:'disabled'}} as const;
@@ -38,16 +39,33 @@ it('actual vendor wire + device text LID follows ORIGINAL MT routing incl revers
     const frame:AudioFrame={type:'audio.frame',sessionId:'session',sequence:1,timestampMs:0,format:'pcm16',sampleRate:16000,data:Buffer.alloc(896000).toString('base64')};
     markAcceptedAudioRange(frame,{startSample:0,endSample:448000});
     for await(const event of provider.sendAudio(frame))events.push(event);
-    const rawEvents=fixture.events;
+    const rawEvents=structuredClone(fixture.events);
+    if(mixed||terms){
+      const first=rawEvents.find((e:any)=>e.payload.output?.sentence?.sentence_end).payload.output.sentence;
+      first.text=mixed?'你好，这是中文测试。Hello everyone.':'我们要测试 Qwen3 ASR、 HiMT2 和 VoxCPM2 的在线模型链路。';first.begin_time=0;first.end_time=first.text.length*100;
+      first.words=Array.from(first.text as string).map((text,index)=>({text,punctuation:'',begin_time:index*100,end_time:(index+1)*100,fixed:true}));
+    }
     for(const raw of rawEvents.filter((e:any)=>e.header.event==='result-generated'))socket.receive(raw.header.event,raw.payload);
     const ending=(async()=>{for await(const event of provider.flushSession('session',{finishSession:true}))events.push(event);})();
     await new Promise(resolve=>setImmediate(resolve));
     const finished=rawEvents.find((e:any)=>e.header.event==='task-finished');socket.receive('task-finished',finished.payload);await ending;
     expect(events.filter(e=>e.type==='error'||e.type==='translation.failed')).toEqual([]);
-    expect(requests.map(r=>[r.Source,r.Target])).toEqual([['en','zh'],['ja','zh'],['fr','zh'],['zh','en']]);
-    expect(events.filter(e=>e.type==='transcript.final'&&e.text).map(e=>e.language)).toEqual(['en','ja','fr','zh']);
+    expect(requests.map(r=>[r.Source,r.Target])).toEqual([...(mixed?[['zh','en']]:[]),terms?['zh','en']:['en','zh'],['ja','zh'],['fr','zh'],['zh','en']]);
+    const finals=events.filter(e=>e.type==='transcript.final'&&e.text);
+    expect(finals.map(e=>e.language)).toEqual([...(mixed?['zh']:[]),terms?'zh':'en','ja','fr','zh']);
+    if(terms){
+      expect(finals[0].rawText).toContain('HiMT2');
+      expect(finals[0].text).toContain('Hy-MT2');
+      expect(finals[0].refinement.operations).toContain('term_correction');
+      expect(finals[0].rawTokenTimings?.length).toBeGreaterThan(0);
+    }
+    if(mixed){
+      const retired=events.filter(e=>e.type==='transcript.final'&&!e.text);
+      expect(retired).toHaveLength(1);
+      expect(events.filter(e=>e.type==='transcript.final'&&e.text).slice(0,2).every(e=>e.segmentId!==retired[0].segmentId)).toBe(true);
+    }
     expect(options.socketFactory).toHaveBeenCalledTimes(1);
     expect(attempts.filter(e=>e.component==='asr'&&e.state==='confirmed')).toEqual([expect.objectContaining({metadata:expect.objectContaining({usage:{promptTokens:686,completionTokens:50,totalTokens:736,audioSeconds:25}})})]);
-    expect(attempts.filter(e=>e.component==='translation'&&e.state==='confirmed')).toHaveLength(4);
+    expect(attempts.filter(e=>e.component==='translation'&&e.state==='confirmed')).toHaveLength(mixed?5:4);
   }finally{await provider.closeSession('session');}
 });

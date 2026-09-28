@@ -97,10 +97,18 @@ function finalWordTimings(s:Record<string,any>):AsrTokenTimingDto[]|undefined {
       !finite(word.begin_time)||!finite(word.end_time)||word.end_time<word.begin_time||word.begin_time<s.begin_time||word.end_time>s.end_time||
       word.fixed!==undefined&&typeof word.fixed!=='boolean')fail('qwen_audio_words_invalid');
     if(word.fixed===false)return; // Unstable timing is not authoritative.
-    const text=word.text+(word.punctuation??'');
-    if(!s.text.startsWith(text,at))return; // Preserve text without invented alignment.
-    if(text.trim())tokens.push({text,startMs:word.begin_time,endMs:word.end_time,characterStart:at,characterEnd:at+text.length});
-    at+=text.length;
+    // Words and sentence formatting may disagree only on whitespace. Align
+    // monotonically, preserving every non-space character and the vendor's
+    // actual token times. Never repair a word, punctuation or spelling here.
+    while(at<s.text.length&&/\s/u.test(s.text[at]))at++;
+    const start=at;
+    for(const character of word.text+(word.punctuation??'')){
+      if(/\s/u.test(character))continue;
+      while(at<s.text.length&&/\s/u.test(s.text[at]))at++;
+      if(!s.text.startsWith(character,at))return;
+      at+=character.length;
+    }
+    if(at>start)tokens.push({text:s.text.slice(start,at),startMs:word.begin_time,endMs:word.end_time,characterStart:start,characterEnd:at});
   }
-  return at===s.text.length&&isAsrTokenTimings(tokens)?tokens:undefined;
+  return !s.text.slice(at).trim()&&isAsrTokenTimings(tokens)?tokens:undefined;
 }

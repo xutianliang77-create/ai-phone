@@ -3,8 +3,30 @@ import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
 import type { RealtimeProvider, RealtimeProviderSession } from "../providers/realtime-provider.js";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import {markAcceptedAudioRange} from "./accepted-audio-range.js";
+import {realtimeLogger} from '../metrics/realtime-metrics.js';
 
 describe("audio frame batcher", () => {
+  it('records only accepted phone marker watermarks and diagnostics cannot stop audio',async()=>{
+    vi.stubEnv('PUBLIC_ASR_BOUNDARY_TRACE_ENABLED','true');
+    const log=vi.spyOn(realtimeLogger,'info').mockImplementation(()=>{}),sent:AudioFrame[]=[],errors:unknown[]=[];
+    let samples=0;
+    const batcher=new AudioFrameBatcher({sessionId:'sess_1',provider:providerSpy(sent),send:()=>{},onError:e=>errors.push(e),
+      acceptFrame:f=>{markAcceptedAudioRange(f,{startSample:samples,endSample:samples+960});samples+=960;}});
+    try{
+      expect(batcher.confirmSpeechStart(1)).toBe('rejected');
+      batcher.enqueue(frame(1));expect(batcher.confirmSpeechStart(1)).toBe('new');
+      expect(batcher.confirmSpeechStart(1)).toBe('duplicate');expect(batcher.confirmSpeechStart(2)).toBe('rejected');
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls[0][0]).toMatchObject({stage:'phone_speech_start',sequence:1,startSample:0,endSample:960});
+      await batcher.boundaryThrough(1,async()=>{});
+      expect(log.mock.calls[1][0]).toMatchObject({stage:'phone_boundary',sequence:1,endSample:960});
+      expect(JSON.stringify(log.mock.calls)).not.toContain(frame(1).data);
+      log.mockImplementation(()=>{throw Error('synthetic_log_failure');});
+      batcher.enqueue(frame(2));expect(batcher.confirmSpeechStart(2)).toBe('new');
+      await batcher.boundaryThrough(2,async()=>{});
+      expect(errors).toEqual([]);expect(sent).toHaveLength(2);
+    }finally{await batcher.close();log.mockRestore();vi.unstubAllEnvs();}
+  });
   it("keeps capped public uploads at realtime pace including a translation stall",async()=>{
     vi.useFakeTimers();
     try {

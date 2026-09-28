@@ -134,8 +134,9 @@ describe("connection timer extraction", () => {
     expect(t.reserveAllowance.mock.calls.map(call=>call[1])).toEqual([40,50,60]);
     expect(t.getBalance).not.toHaveBeenCalled();
     expect(t.sendRealtime).toHaveBeenCalledWith(expect.objectContaining({
-      type:"usage.tick",billableSeconds:30,remainingSeconds:30,
+      type:"usage.tick",billableSeconds:30,remainingSeconds:270,
     }));
+    expect(t.sendRealtime.mock.calls[0][0]).not.toHaveProperty('lowBalance');
     expect(t.endRealtimeSession).not.toHaveBeenCalled();
   });
   it("ends a public session at its held quota and fails closed if allowance cannot be read",async()=>{
