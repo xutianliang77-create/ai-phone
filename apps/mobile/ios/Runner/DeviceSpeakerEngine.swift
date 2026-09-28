@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreML
 import Foundation
+import CryptoKit
 #if canImport(FluidAudio)
 import FluidAudio
 #endif
@@ -38,6 +39,8 @@ actor DeviceSpeakerEngine {
   private var cancelled = false
   private var activity: DeviceSpeakerActivityDecoder
   private var totalProcessingMs = 0.0, maximumProcessingMs = 0.0
+  private let tracing: Bool
+  private let trace = CoreMlNemotronDiagnosticRecorder(metadataOnly: true, maximumTimelineEvents: 4096)
   private let inputFormat: AVAudioFormat
   private let outputFormat: AVAudioFormat
   private let converter: AVAudioConverter?
@@ -46,12 +49,14 @@ actor DeviceSpeakerEngine {
   #endif
 
   init(sessionId: String, sampleRate: Int, model: MLModel, profile: DeviceSpeakerModelVariant = .fastest,
-       activityConfiguration: DeviceSpeakerActivityConfiguration = .init(), cacheUpdateFrames:Int? = nil) throws {
+       activityConfiguration: DeviceSpeakerActivityConfiguration = .init(), cacheUpdateFrames:Int? = nil,
+       diagnosticCaptureEnabled: Bool = false) throws {
     guard !sessionId.isEmpty, sessionId.count <= 240, [16000, 24000].contains(sampleRate),
       let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
       let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)
       else { throw DeviceSpeakerFailure.invalidAudio }
     self.sessionId = sessionId; self.sampleRate = sampleRate
+    tracing = diagnosticCaptureEnabled
     self.profile=profile; activity=DeviceSpeakerActivityDecoder(configuration:activityConfiguration)
     inputFormat = input; outputFormat = output
     converter = sampleRate == 16000 ? nil : AVAudioConverter(from: input, to: output)
@@ -63,6 +68,11 @@ actor DeviceSpeakerEngine {
       }
     }
     diarizer = try DeviceSpeakerStreamingRuntime(model:model,profile:profile,cacheUpdateFrames:cacheUpdateFrames)
+    if tracing { trace.start(enabled: true, sessionId: "speaker-" + sessionId, configuration: [
+      "kind": "online_speaker_metadata", "productSessionId": sessionId, "inputSampleRate": sampleRate,
+      "profile": profile.rawValue, "revision": DeviceSpeakerModelResources.revision,
+      "activity": activityConfiguration.json, "inference": diarizer.inferenceSettings, "pcmCaptured": false
+    ], modelDirectory: nil) }
     #else
     throw DeviceSpeakerFailure.unsupported
     #endif
@@ -85,6 +95,9 @@ actor DeviceSpeakerEngine {
       CoreMlNemotronAudioInput.convertPcm(buffer: pcm, converter: converter, format: outputFormat)
     guard converted.error == nil else { throw DeviceSpeakerFailure.invalidAudio }
     inputSamples += count
+    if tracing { trace.record(type: "pcm.batch", payload: ["startSample": startSample,
+      "endSample": inputSamples, "sampleRate": sampleRate,
+      "pcmSha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()]) }
     #if canImport(FluidAudio)
     diarizer.addAudio(CoreMlNemotronAudioInput.floatSamples(from: converted.buffer))
     return try processedObservations(diarizer.process())
@@ -111,6 +124,7 @@ actor DeviceSpeakerEngine {
         throughSample:through,spans:[],profile:profile))
     }
     cancelled = true; diarizer.cleanup(); converter?.reset()
+    if tracing { trace.record(type: "speaker.finish", payload: diagnostics()); trace.finish() }
     return result
     #else
     throw DeviceSpeakerFailure.unsupported
@@ -118,6 +132,7 @@ actor DeviceSpeakerEngine {
   }
 
   func cancel() {
+    if tracing { trace.record(type: "speaker.cancel", payload: diagnostics()); trace.finish() }
     cancelled = true; converter?.reset()
     #if canImport(FluidAudio)
     diarizer.cleanup()
@@ -133,6 +148,13 @@ actor DeviceSpeakerEngine {
   private func processedObservations(_ chunk: DiarizerChunkResult?) throws -> [DeviceSpeakerObservation] {
     guard let chunk else { return [] }
     let value = try activity.consume(chunk.finalizedPredictions,startFrame:chunk.startFrame)
+    if tracing {
+      for frame in 0..<chunk.finalizedFrameCount {
+        trace.record(type: "speaker.raw_frame", payload: ["startFrame": chunk.startFrame + frame,
+          "startSample": (chunk.startFrame + frame) * sampleRate * 80 / 1000, "sampleRate": sampleRate,
+          "probabilities": Array(chunk.finalizedPredictions[(frame * 4)..<(frame * 4 + 4)])])
+      }
+    }
     return try observations(DiarizerChunkResult(startFrame:value.startFrame,finalizedPredictions:value.probabilities,
       finalizedFrameCount:value.probabilities.count/4))
   }
@@ -161,6 +183,7 @@ actor DeviceSpeakerEngine {
       through = end; sequence += 1
       output.append(DeviceSpeakerObservation(sessionId: sessionId, sequence: sequence,
         sampleRate: sampleRate, throughSample: through, spans: spans, profile:profile))
+      if tracing { trace.record(type: "speaker.evidence", payload: output.last!.json) }
     }
     return output
   }

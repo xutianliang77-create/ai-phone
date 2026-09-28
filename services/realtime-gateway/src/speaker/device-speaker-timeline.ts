@@ -2,6 +2,7 @@ import type { DeviceSpeakerEvidenceEvent, ServerRealtimeEvent } from "@translati
 import { reconcileSpeakerRevision, type RevisableSpeakerSegment } from "./speaker-revision-reconciler.js";
 import type { SpeakerRevisionSpan } from "./speaker-revision-provider.js";
 import type {SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
+import {traceDeviceSpeakerAssociation} from '../metrics/public-audio-evidence-trace.js';
 
 /** Reuses 1.0's metadata-only speaker.updated path for delayed phone evidence.
  * Never re-runs ASR/MT, changes text, infers identity or invents word timings. */
@@ -47,6 +48,7 @@ export class DeviceSpeakerTimeline {
       windowStartMs:start,windowEndMs:this.through,provider:"on_device",model:"sortformer_v2_1_fastest",
       speakerCount:new Set(this.spans.map(s => s.speakerId)).size,
       spans:this.spans.map(s => ({...s,startMs:s.startMs-start,endMs:s.endMs-start}))},eligible,this.labels,this.boundaries());
+    traceDeviceSpeakerAssociation(this.sessionId,this.through,this.generation,eligible,result);
     for (const update of result.updates) {
       const segment = this.segments.get(update.segmentId)!;
       this.segments.set(update.segmentId,{...segment,speaker:update.speaker,timing:update.timing,

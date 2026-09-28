@@ -27,6 +27,13 @@ const infoPlist = readFileSync(
 );
 
 describe("traceable iOS candidate contract", () => {
+  it('makes local metadata tracing explicit, profile-only, and records its build flag',()=>{
+    expect(script).toContain('ENABLE_ONLINE_EVIDENCE_TRACE="${ENABLE_ONLINE_EVIDENCE_TRACE:-false}"');
+    expect(script).toContain('--dart-define="ENABLE_ONLINE_EVIDENCE_TRACE=$ENABLE_ONLINE_EVIDENCE_TRACE"');
+    expect(script).toContain('"$ENABLE_ONLINE_EVIDENCE_TRACE" == true && "$BUILD_MODE" != profile');
+    expect(writer).toContain('onlineEvidenceTrace:');
+    expect(writer).toContain('pcmCaptured: false');
+  });
   it("enforces the committed package lock before building without a second resolution", () => {
     expect(script).toContain("flutter pub get --offline --enforce-lockfile");
     expect(script).toContain('diff --quiet -- apps/mobile/pubspec.lock');

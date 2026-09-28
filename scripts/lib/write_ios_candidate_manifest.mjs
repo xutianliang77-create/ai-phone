@@ -24,6 +24,8 @@ const manifest = {
   productProfile: required("PRODUCT_PROFILE"),
   publicDeploymentId: required("PUBLIC_DEPLOYMENT_ID"),
   iosLocalProfileSha256: required("IOS_LOCAL_PROFILE_SHA256"),
+  onlineEvidenceTrace: {enabled: process.env.ENABLE_ONLINE_EVIDENCE_TRACE === 'true',
+    localMetadataOnly: true, pcmCaptured: false, maximumEventsPerNativeRecorder: 4096},
   ...(process.env.ENABLE_DEVICE_SPEAKER === "true" ? {deviceSpeaker: {
     enabledInCandidate: true, requiresServerRollout: true, anonymousOnly: true, maxSpeakers: 4,
     profile: "sortformer_v2_1_fastest", revision: "ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1"

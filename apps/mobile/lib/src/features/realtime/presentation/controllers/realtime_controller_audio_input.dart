@@ -33,6 +33,11 @@ extension _RealtimeControllerAudioInput on RealtimeController {
           'vadNegativeThreshold': _config.deviceAsrVadNegativeThreshold,
           'endpointMinSpeechMs': _config.deviceAsrEndpointMinSpeechMs,
           'endpointSilenceMs': _config.deviceAsrEndpointSilenceMs,
+          if (_session?.syncBinding != null &&
+              const bool.fromEnvironment('ENABLE_ONLINE_EVIDENCE_TRACE')) ...{
+            'diagnosticCaptureEnabled': true,
+            'diagnosticSessionId': _session!.sessionId,
+          },
         },
       ));
     } catch (_) {

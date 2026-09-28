@@ -4,6 +4,7 @@ import type { SpeakerAttributionProvider, SpeakerSessionInput, SpeakerSpan } fro
 import type {TranscriptResult} from "../asr/asr-provider.js";
 import {attributeSpeakerTranscripts,type SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
 import {retainRecentSpeakerSpans} from "./speaker-evidence-retention.js";
+import {traceAcceptedDeviceSpeaker} from '../metrics/public-audio-evidence-trace.js';
 
 /** No microphone, model, embeddings, identity lookup or network calls here.
  * Reuses the original speaker-aware ASR adapter with bounded phone annotations. */
@@ -27,6 +28,7 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
     const event = parseDeviceSpeakerEvidence(value, {sessionId:this.sessionId,sampleRate:this.sampleRate,acceptedSamples});
     if (!event || event.sequence <= this.sequence || event.throughSample <= this.through ||
       event.spans.some(span => span.startSample < this.through) || this.pending.length + event.spans.length > 512) return false;
+    traceAcceptedDeviceSpeaker(event,acceptedSamples);
     const rate = this.sampleRate / 1000;
     const spans = event.spans.map(span => ({speakerId:`device-speaker-${span.speaker + 1}`,
       startMs:span.startSample/rate,endMs:span.endSample/rate,confidence:span.confidence,overlap:span.overlap,final:true}));

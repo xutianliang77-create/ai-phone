@@ -5,7 +5,17 @@ final class CoreMlNemotronDiagnosticRecorder {
   private let lock = NSLock()
   private let sampleRate = 16_000
   private let maxAudioSamples = 16_000 * 60 * 20
-  private let maxTimelineEvents = 20_000
+  private let maxTimelineEvents: Int
+  private let metadataOnly: Bool
+  private let outputDirectory: URL?
+
+  // Existing 1.0 callers keep audio capture and the original bound. Online QA
+  // reuses this recorder for bounded local metadata only, never microphone PCM.
+  init(metadataOnly: Bool = false, maximumTimelineEvents: Int = 20_000, outputDirectory: URL? = nil) {
+    self.metadataOnly = metadataOnly
+    maxTimelineEvents = max(2, min(20_000, maximumTimelineEvents))
+    self.outputDirectory = outputDirectory
+  }
 
   private var enabled = false
   private var sessionId = "diagnostic"
@@ -51,7 +61,7 @@ final class CoreMlNemotronDiagnosticRecorder {
   func appendAudio(_ samples: [Float]) {
     lock.lock()
     defer { lock.unlock() }
-    guard enabled, !samples.isEmpty else { return }
+    guard enabled, !metadataOnly, !samples.isEmpty else { return }
     let existingSamples = pcm16.count / MemoryLayout<Int16>.size
     let remaining = max(0, maxAudioSamples - existingSamples)
     guard remaining > 0 else {
@@ -101,7 +111,7 @@ final class CoreMlNemotronDiagnosticRecorder {
       let baseName = "coreml-nemotron-\(localSessionId)-\(stamp)"
       let audioURL = directory.appendingPathComponent("\(baseName).wav")
       let jsonURL = directory.appendingPathComponent("\(baseName).json")
-      try wavData(pcm16: localPcm16).write(to: audioURL, options: .atomic)
+      if !metadataOnly { try wavData(pcm16: localPcm16).write(to: audioURL, options: .atomic) }
       let document: [String: Any] = [
         "schemaVersion": 1,
         "sessionId": localSessionId,
@@ -109,7 +119,8 @@ final class CoreMlNemotronDiagnosticRecorder {
         "endedAt": iso8601(Date()),
         "configuration": sanitizedJsonValue(localConfiguration),
         "audio": [
-          "path": audioURL.path,
+          "path": metadataOnly ? NSNull() : audioURL.path as Any,
+          "captured": !metadataOnly,
           "sampleRate": sampleRate,
           "samples": localPcm16.count / MemoryLayout<Int16>.size,
           "truncated": localAudioTruncated
@@ -122,8 +133,9 @@ final class CoreMlNemotronDiagnosticRecorder {
         options: [.prettyPrinted, .sortedKeys]
       )
       try json.write(to: jsonURL, options: .atomic)
+      if metadataOnly { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: jsonURL.path) }
       lock.lock()
-      lastAudioPath = audioURL.path
+      lastAudioPath = metadataOnly ? nil : audioURL.path
       lastJsonPath = jsonURL.path
       lastEventCount = localTimeline.count
       lastAudioSamples = localPcm16.count / MemoryLayout<Int16>.size
@@ -170,6 +182,10 @@ final class CoreMlNemotronDiagnosticRecorder {
   }
 
   private func diagnosticDirectory() throws -> URL {
+    if let outputDirectory {
+      try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+      return outputDirectory
+    }
     guard let documents = FileManager.default.urls(
       for: .documentDirectory,
       in: .userDomainMask

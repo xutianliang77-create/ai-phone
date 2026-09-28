@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreML
 import Foundation
+import CryptoKit
 #if canImport(FluidAudio)
 import FluidAudio
 #endif
@@ -20,6 +21,20 @@ final class AppleOnlineEndpointSession {
   private var busy = false
   private var sequence = -1
   private var pending: [Float] = []
+  private let trace = CoreMlNemotronDiagnosticRecorder(metadataOnly: true, maximumTimelineEvents: 4096)
+  private var tracing = false, inputSamples = 0, analysisSamples = 0
+
+  func startDiagnostics(sessionId: String) {
+    guard !sessionId.isEmpty, sessionId.count <= 240 else { return }
+    tracing = true
+    trace.start(enabled: true, sessionId: "vad-" + id, configuration: [
+      "kind": "online_vad_metadata", "productSessionId": sessionId, "endpointId": id,
+      "inputSampleRate": Int(inputFormat.sampleRate), "parameters": configuration.parameters,
+      "analysisSampleRate": 16000, "pcmCaptured": false,
+      "inputClock": "endpoint_capture_not_gateway", "correlateBy": "sequence_and_pcmSha256",
+      "analysisMapping": inputFormat.sampleRate == 16000 ? "same_rate_cumulative_samples" : "resampler_output_clock"
+    ], modelDirectory: nil)
+  }
   #if canImport(FluidAudio)
   private var vad: VadManager?
   private var state = VadStreamState.initial()
@@ -60,13 +75,19 @@ final class AppleOnlineEndpointSession {
     #if canImport(FluidAudio)
     guard let vad else { throw AppleSpeechFailure.sileroMissing }
     let bytes = [UInt8](data), count = data.count / 2
+    let inputStart = inputSamples
     guard let pcm = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: AVAudioFrameCount(count)),
       let channel = pcm.floatChannelData?[0] else { throw AppleSpeechFailure.invalidConfiguration }
     pcm.frameLength = AVAudioFrameCount(count)
     for i in 0..<count { channel[i] = Float(Int16(bitPattern: UInt16(bytes[i * 2]) | UInt16(bytes[i * 2 + 1]) << 8)) / 32768 }
     let converted = CoreMlNemotronAudioInput.convertPcm(buffer: pcm, converter: converter, format: outputFormat)
     guard converted.error == nil else { throw AppleSpeechFailure.invalidConfiguration }
-    pending.append(contentsOf: CoreMlNemotronAudioInput.floatSamples(from: converted.buffer))
+    let convertedSamples = CoreMlNemotronAudioInput.floatSamples(from: converted.buffer)
+    pending.append(contentsOf: convertedSamples)
+    inputSamples += count
+    if tracing { trace.record(type: "pcm.batch", payload: ["sequence": next, "startSample": inputStart,
+      "endSample": inputSamples, "inputSampleRate": Int(inputFormat.sampleRate), "convertedCount": convertedSamples.count,
+      "pcmSha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()]) }
     var ended = false
     var started = false
     while pending.count >= AppleSpeechConfiguration.vadFrameSamples {
@@ -78,6 +99,12 @@ final class AppleOnlineEndpointSession {
       // Feed the WHOLE 256 ms VAD window, not just the latest 40 ms capture packet.
       let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
         provider: "fluidaudio_silero")
+      if tracing { trace.record(type: "vad.frame", payload: ["startSample": analysisSamples,
+        "endSample": analysisSamples + frame.count, "sampleRate": 16000, "inputThroughSample": inputSamples,
+        "probability": Double(result.probability), "hasSpeech": decision.hasSpeech, "rms": decision.rms,
+        "speechStarted": decision.speechStarted, "finalized": decision.shouldFinalize,
+        "confirmedSpeechSamples": decision.confirmedSpeechSamples, "trailingSilenceSamples": decision.trailingSilenceSamples]) }
+      analysisSamples += frame.count
       ended = decision.shouldFinalize || ended
       started = decision.speechStarted || started
     }
@@ -87,5 +114,10 @@ final class AppleOnlineEndpointSession {
     throw AppleSpeechFailure.sileroMissing
     #endif
   }
-  func invalidate() { active = false; pending.removeAll(); converter?.reset() }
+  func invalidate() {
+    active = false
+    if tracing { trace.record(type: "endpoint.stop", payload: ["inputSamples": inputSamples,
+      "analysisSamples": analysisSamples, "unprocessedAnalysisTail": pending.count, "lastSequence": sequence]); trace.finish(); tracing = false }
+    pending.removeAll(); converter?.reset()
+  }
 }

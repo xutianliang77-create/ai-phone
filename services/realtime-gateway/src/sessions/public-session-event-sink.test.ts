@@ -1,4 +1,5 @@
 import {afterEach,describe,it,expect,vi} from "vitest";
+import {createHash} from 'node:crypto';
 import type {AudioFrame,PublicRuntimeObservation,ServerRealtimeEvent} from "@translation/contracts";
 import {bindPublicSessionEventSink} from "./session-event-sink.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
@@ -30,7 +31,7 @@ describe("public branch of original session sink",()=>{
       expect.objectContaining({phase:"stopped",meterStopped:true,lastAcceptedSample:160,finalRevision:3}),
     ]);
   });
-  it("logs exact accepted sequence and sample range only under the one-shot QA gates",async()=>{
+  it("logs exact accepted sequence and sample range only under the explicit diagnostic gate",async()=>{
     const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),{sink}=fixture();
     await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());
     expect(info.mock.calls.some(call=>call[1]==="Public ASR QA boundary")).toBe(false);
@@ -38,6 +39,7 @@ describe("public branch of original session sink",()=>{
     sink.acceptAudio(frame(1));
     expect(info.mock.calls.filter(call=>call[1]==="Public ASR QA boundary").map(call=>call[0]))
       .toEqual([{sessionId:"s",stage:"accepted",sequence:1,startSample:160,endSample:320,acceptedSamples:320,
+        pcmSha256:createHash('sha256').update(Buffer.alloc(320)).digest('hex'),
         audioLevel:{sampleCount:160,zeroSamples:160,peakAbs:0,rms:0}}]);
   });
   it("confirms the phase at queue execution, not the stale phase before a pending pause",async()=>{

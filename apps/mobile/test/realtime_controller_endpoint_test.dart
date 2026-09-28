@@ -121,6 +121,9 @@ void main() {
     expect(capture.startedConfigs.single.publicEndpointing, isTrue);
     expect(capture.startedConfigs.single.endpointOptions.keys,
         contains('vadThreshold'));
+    const diagnostic = bool.fromEnvironment('ENABLE_ONLINE_EVIDENCE_TRACE');
+    expect(capture.startedConfigs.single.endpointOptions['diagnosticCaptureEnabled'], diagnostic ? true : null);
+    expect(capture.startedConfigs.single.endpointOptions['diagnosticSessionId'], diagnostic ? 'sess_1' : null);
     capture.emit(1, endpoint: true);
     capture.emit(2);
     await pumpEventQueue();
@@ -133,6 +136,7 @@ void main() {
     addTearDown(controller.disposeAsync);
     await controller.start();
     expect(capture.startedConfigs.single.publicEndpointing, isFalse);
+    expect(capture.startedConfigs.single.endpointOptions.containsKey('diagnosticCaptureEnabled'), isFalse);
     capture.emit(1, endpoint: true);
     await pumpEventQueue();
     expect(repo.order, ['frame:1']);

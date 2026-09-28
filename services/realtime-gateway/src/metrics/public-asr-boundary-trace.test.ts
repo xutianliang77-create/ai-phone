@@ -38,7 +38,7 @@ it("does not inspect or log PCM without explicit diagnostics and never logs its 
   logPublicAsrBoundary(value,pcm);expect(sample).not.toHaveBeenCalled();expect(info).not.toHaveBeenCalled();
   vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
   logPublicAsrBoundary(value,pcm);
-  expect(info.mock.calls[0]![0]).toEqual({...value,audioLevel:{sampleCount:2,zeroSamples:0,peakAbs:4,rms:3.536}});
+  expect(info.mock.calls[0]![0]).toEqual({...value,pcmSha256:createHash('sha256').update(pcm).digest('hex'),audioLevel:{sampleCount:2,zeroSamples:0,peakAbs:4,rms:3.536}});
   expect(info.mock.calls[0]![0]).not.toHaveProperty("pcm");expect(info.mock.calls[0]![0]).not.toHaveProperty("data");
 });
 

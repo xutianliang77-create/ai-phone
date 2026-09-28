@@ -110,7 +110,9 @@ class NativeDeviceSpeakerDiarizer implements DeviceSpeakerDiarizer {
   @override
   Future<void> start(String sessionId, int sampleRate) async {
     final result = await _channel.invokeMapMethod<String, Object?>('start',
-        {'sessionId': sessionId, 'sampleRate': sampleRate}).timeout(const Duration(seconds: 5));
+        {'sessionId': sessionId, 'sampleRate': sampleRate,
+          if (const bool.fromEnvironment('ENABLE_ONLINE_EVIDENCE_TRACE'))
+            'diagnosticCaptureEnabled': true}).timeout(const Duration(seconds: 5));
     if (result?['sessionId'] != sessionId || result?['ready'] != true) {
       throw StateError('device_speaker_start_failed');
     }

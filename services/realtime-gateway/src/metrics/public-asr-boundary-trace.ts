@@ -44,7 +44,8 @@ export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
   if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=="true")return;
   try{
     const audioLevel=pcm&&(value.stage==="accepted"||value.stage==="provider_audio")?publicPcm16Level(pcm):undefined;
-    realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel}:{})},"Public ASR QA boundary");
+    const pcmSha256=audioLevel&&pcm?createHash('sha256').update(pcm).digest('hex'):undefined;
+    realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel,pcmSha256}:{})},"Public ASR QA boundary");
   }catch{/* QA diagnostics must not advance a watermark then abort the audio path. */}
 }
 

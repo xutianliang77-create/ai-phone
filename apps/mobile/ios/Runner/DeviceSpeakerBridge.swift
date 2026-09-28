@@ -66,7 +66,8 @@ final class DeviceSpeakerBridge: NSObject, FlutterStreamHandler {
       case "start":
         guard let id = args["sessionId"] as? String, let rate = args["sampleRate"] as? Int,
           let model, sessionId == nil else { throw DeviceSpeakerFailure.busy }
-        engine = try DeviceSpeakerEngine(sessionId: id, sampleRate: rate, model: model)
+        engine = try DeviceSpeakerEngine(sessionId: id, sampleRate: rate, model: model,
+          diagnosticCaptureEnabled: args["diagnosticCaptureEnabled"] as? Bool == true)
         sessionId = id; sampleRate = rate; receivedSamples = 0; queuedSamples = 0; chain = nil
         result(["sessionId": id, "ready": true])
       case "accept":

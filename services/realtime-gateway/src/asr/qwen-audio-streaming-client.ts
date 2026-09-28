@@ -11,6 +11,7 @@ import {abortable} from '../providers/abortable.js';
 import {cleanRealtimeText} from '../protocol/realtime-text.js';
 import {realtimeLogger} from '../metrics/realtime-metrics.js';
 import {logPublicAsrLanguage} from '../metrics/public-asr-boundary-trace.js';
+import {tracePublicAsrFinal} from '../metrics/public-audio-evidence-trace.js';
 import {streamingAsrFailureDiagnostic,streamingAsrProviderContext,streamingAsrCloseContext,streamingAsrTransportContext,
   streamingAsrCancellationContext,type StreamingAsrFailureContext} from './streaming-asr-diagnostics.js';
 import {decodeQwenAudioEvent,qwenAudioFinishTask,qwenAudioRunTask,QwenAudioCumulativeUsage,type QwenAudioSentence} from './qwen-audio-streaming-protocol.js';
@@ -145,6 +146,7 @@ export class QwenAudioStreamingClient {
         segmentId:id,revision:0,text,language:this.options.language});return;
     }
     this.lastFinal=sentence.sentenceId;this.lastFinalText=sentence.text;
+    tracePublicAsrFinal(this.options.sessionId,id,sentence.text,sentence.startMs,sentence.endMs!,sentence.tokenTimings);
     if(this.languagePending>=32||this.completed.length+this.notices.length>=256)throw Error();
     this.languagePending++;
     // Start LID immediately, independently of PCM ingestion; preserve final order

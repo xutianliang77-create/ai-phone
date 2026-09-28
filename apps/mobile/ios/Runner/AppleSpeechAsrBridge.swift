@@ -49,6 +49,9 @@ final class AppleSpeechAsrBridge: NSObject, FlutterStreamHandler {
       let current = try AppleOnlineEndpointSession(id: id, sampleRate: rate, configuration: AppleSpeechConfiguration(arguments: args)); onlineEndpointSession = current
       do { try await current.prepare() } catch { if onlineEndpointSession === current { onlineEndpointSession = nil }; current.invalidate(); throw error }
       guard onlineEndpointSession === current else { throw AppleSpeechFailure.cancelled }
+      if args["diagnosticCaptureEnabled"] as? Bool == true, let sessionId = args["diagnosticSessionId"] as? String {
+        current.startDiagnostics(sessionId: sessionId)
+      }
       result(["requestId": id, "ready": true, "provider": "fluidaudio_silero"])
     case "endpoint.process":
       guard let current = onlineEndpointSession as? AppleOnlineEndpointSession, current.id == id,
