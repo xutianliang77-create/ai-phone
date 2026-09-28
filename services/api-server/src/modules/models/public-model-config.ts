@@ -1,5 +1,6 @@
 import {publicProtocolCapability,publicProtocolSampleRateSupported,publicAsrServerVadCapability,resolvePublicAsrServerVad,type PublicAsrServerVad,type PublicModelProtocolCapability} from "@translation/contracts";
 import {validTranslationTermRepositories,type TranslationTermRepositories} from "@translation/contracts";
+import {resolvePublicAsrStreamingSettings,type PublicAsrStreamingSettings} from '@translation/contracts';
 export const modelComponents=["asr","translation","tts"] as const;
 export type ModelComponent=typeof modelComponents[number];
 export type Vendor="qwen"|"tencent"|"openai"|"google";
@@ -7,6 +8,7 @@ export type AuthKind="api_key"|"tencent_secret"|"google_service_account"|"google
 export interface PublicModelProfile {
   termRepositories?:TranslationTermRepositories;
   serverVad?:PublicAsrServerVad;
+  streaming?:PublicAsrStreamingSettings;
   languageLocales?:Record<string,string>;
   enabled:boolean;vendor:Vendor;protocol:string;endpoint:string;modelId:string;authKind:AuthKind;
   region:string;appId:string;projectId:string;location:string;recognizer:string;voice:string;volume:number;
@@ -25,6 +27,7 @@ export const publicModelCatalog={
   vendors:[{id:"qwen",label:"Qwen / 阿里云百炼"},{id:"tencent",label:"腾讯云 / 混元"},{id:"openai",label:"OpenAI"},{id:"google",label:"Google"}],
   protocols:[
     p("qwen_asr_realtime","Qwen ASR · Realtime WebSocket","qwen","asr","wss:",["api_key"]),
+    p('qwen_audio_streaming','Qwen Audio ASR · 任务式 Streaming（iOS文本语种）','qwen','asr','wss:',['api_key']),
     p("qwen_asr_compatible","Qwen ASR · 兼容接口（非实时）","qwen","asr","https:",["api_key"]),
     p("qwen_chat","Qwen · Chat Completions","qwen","translation","https:",["api_key"]),
     p("qwen_tts_realtime","Qwen TTS · Realtime WebSocket","qwen","tts","wss:",["api_key"],true,["voice"]),
@@ -54,10 +57,13 @@ export function emptyConfiguration(deploymentId:string):PublicModelConfiguration
 const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","volume","timeoutMs","maxTokens","sampleRate"];
 function object(v:unknown):v is Record<string,unknown>{return !!v&&typeof v==="object"&&!Array.isArray(v);}
 export function validateProfile(component:ModelComponent,value:unknown):PublicModelProfile{
-  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&!["languageLocales","serverVad","termRepositories"].includes(k))||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
+  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&!["languageLocales","serverVad","termRepositories","streaming"].includes(k))||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
   const v={...value,volume:value.volume??0} as unknown as PublicModelProfile;
   const protocol=publicModelCatalog.protocols.find(p=>p.id===v.protocol&&p.vendor===v.vendor&&p.component===component);
   if(!protocol||!protocol.auth.includes(v.authKind)||typeof v.enabled!=="boolean")throw new PublicConfigError(`${component}:invalid_protocol_or_auth`);
+  if(v.protocol==='qwen_audio_streaming'||Object.hasOwn(value,'streaming')){
+    try{v.streaming=resolvePublicAsrStreamingSettings(v.protocol,value.streaming);}catch{throw new PublicConfigError(`${component}:invalid_streaming_settings`);}
+  }
   if(v.termRepositories!==undefined&&(component!=="translation"||v.protocol!=="tencent_tmt"||!validTranslationTermRepositories(v.termRepositories)))
     throw new PublicConfigError(`${component}:invalid_term_repositories`);
   if(Object.hasOwn(value,"serverVad")){
@@ -70,7 +76,8 @@ export function validateProfile(component:ModelComponent,value:unknown):PublicMo
     if(typeof v[key]!=="string"||v[key].length>(key==="endpoint"?2048:240)||v[key].trim()!==v[key]||/[\u0000-\u001f\u007f]/u.test(v[key]))throw new PublicConfigError(`${component}:invalid_${key}`);
   }
   if(v.endpoint){let url:URL;try{url=new URL(v.endpoint);}catch{throw new PublicConfigError(`${component}:invalid_endpoint`);}
-    if(url.protocol!==protocol.scheme||url.username||url.password||url.search||url.hash)throw new PublicConfigError(`${component}:endpoint_requires_${protocol.scheme.replace(":","")}_without_credentials_or_query`);}
+    if(url.protocol!==protocol.scheme||url.username||url.password||url.search||url.hash)throw new PublicConfigError(`${component}:endpoint_requires_${protocol.scheme.replace(":","")}_without_credentials_or_query`);
+    if(v.protocol==='qwen_audio_streaming'&&url.pathname!=='/api-ws/v1/inference')throw new PublicConfigError('asr:streaming_endpoint_requires_inference');}
   if(!Number.isSafeInteger(v.timeoutMs)||v.timeoutMs<250||v.timeoutMs>120000||!Number.isSafeInteger(v.maxTokens)||v.maxTokens<1||v.maxTokens>16384||![16000,24000].includes(v.sampleRate))throw new PublicConfigError(`${component}:invalid_limits`);
   if(!Number.isFinite(v.volume)||v.volume < -10||v.volume > 10)throw new PublicConfigError(`${component}:invalid_volume`);
   if(component==="tts"&&v.enabled&&!protocol.providerVolume&&v.volume!==0)throw new PublicConfigError("tts:unsupported_provider_volume");

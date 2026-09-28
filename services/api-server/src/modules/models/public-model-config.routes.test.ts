@@ -18,6 +18,7 @@ function payload(protocol=publicModelCatalog.protocols[0],revision=0){
   Object.assign(config.components[c],{enabled:true,vendor:protocol.vendor,protocol:protocol.id,authKind:protocol.auth[0],endpoint:`${protocol.scheme}//synthetic-provider.test/base`,modelId:"manual-model-id",region:"ap-guangzhou",appId:"100001",projectId:"synthetic-project",location:"global",recognizer:"_",voice:"manual-voice"});
   config.components[c].sampleRate=(protocol.capability.sampleRates[0]??16000) as 16000|24000;
   if(protocol.id==="google_speech_v2")config.components[c].languageLocales={zh:"cmn-Hans-CN",en:"en-US"};
+  if(protocol.id==='qwen_audio_streaming')config.components[c].endpoint='wss://synthetic-provider.test/api-ws/v1/inference';
   return {expectedRevision:revision,components:config.components,credentials:{[c]:Object.fromEntries(publicModelCatalog.credentialFields[protocol.auth[0]].map(k=>[k,secrets[k as keyof typeof secrets]]))}};
 }
 const save=(body:unknown)=>app.inject({method:"PUT",url:uri,headers:auth,payload:body as object});

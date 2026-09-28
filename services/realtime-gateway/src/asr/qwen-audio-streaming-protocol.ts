@@ -9,8 +9,8 @@ const taskKey=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-
 const languages=new Set('zh en ja ko vi th id ms tl hi ar fr de es pt ru it nl sv da fi no el pl cs hu ro bg hr sk'.split(' '));
 const fail=(code:string):never=>{throw new Error(code);};
 
-/** New wire contract only. It is NOT registered as an automatic-language
- * public adapter until the missing per-sentence language decision is wired. */
+/** Task wire contract. Automatic routing requires the separately bound device
+ * text-language broker; this parser never invents a provider language field. */
 export function qwenAudioRunTask(input:{taskId:string;model:string;sampleRate:16000|24000;
   semanticPunctuation:boolean;heartbeat:boolean;languageHints?:readonly string[];
   vocabulary?:Readonly<Record<string,number>>}) {

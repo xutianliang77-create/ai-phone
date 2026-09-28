@@ -34,6 +34,7 @@ const protocols:Record<string,PublicModelProtocolCapability>={
   // Qwen's documented realtime/VAD audio duration is unlimited. Manual/file
   // constraints must not be applied to this persistent server-VAD attempt.
   qwen_asr_realtime:asr("qwen","websocket",[16000],"服务端VAD连续音频，无累计时长上限；支持已接入语种自动识别；自动来源范围与输出语言对分离，须逐配置资格化",false,true,null),
+  qwen_audio_streaming:asr('qwen','websocket',[16000,24000],'任务式连续PCM；自动语言依赖iOS文本语种回传（非声学LID），需新客户端及独立实测资格；语义断句与词表随快照封存',false,true,null),
   qwen_asr_compatible:asr("qwen","https",[16000,24000],"明确源语言；已实现21种产品语言交集；非Filetrans异步接口",true),
   qwen_chat:mt("qwen"),
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),
@@ -97,11 +98,14 @@ export function publicAsrModelAutomaticLanguageSupported(protocol:string,modelId
 
 export const QWEN_ASR_PRODUCT_LANGUAGES:readonly TranslationLanguageCode[]=Object.freeze(
   ["zh","yue","en","ja","de","ko","ru","fr","pt","ar","it","es","hi","id","th","tr","uk","vi","cs","ms","pl"]);
+export const QWEN_AUDIO_PRODUCT_LANGUAGES:readonly TranslationLanguageCode[]=Object.freeze(
+  ['zh','en','ja','ko','vi','th','id','ms','tl','hi','ar','fr','de','es','pt','ru','it','nl','pl','cs']);
 /** Actual adapter support, not a grant. OpenAI's inherited text-language
  * inference remains zh/en; a multilingual model is not proof of a wired LID. */
 export function publicAsrAutomaticSourceLanguages(protocol:string,modelId:string):readonly TranslationLanguageCode[]{
   if(!publicAsrModelAutomaticLanguageSupported(protocol,modelId))return [];
-  return protocol==='qwen_asr_realtime'?QWEN_ASR_PRODUCT_LANGUAGES:['zh','en'];
+  return protocol==='qwen_asr_realtime'?QWEN_ASR_PRODUCT_LANGUAGES:
+    protocol==='qwen_audio_streaming'?QWEN_AUDIO_PRODUCT_LANGUAGES:['zh','en'];
 }
 export function publicProtocolAutomaticLanguagePairSupported(
   protocol:string,

@@ -35,6 +35,7 @@ import {SyntheticQwenSpeechSocket} from "../../../../realtime-gateway/src/tts/qw
 import {SyntheticTencentSpeechSocket} from "../../../../realtime-gateway/src/tts/tencent-speech.test-support.js";
 import {pcm16Wav} from "../../../../realtime-gateway/src/speaker/recent-pcm-audio-buffer.js";
 import {SyntheticQwenAsrSocket} from "../../../../realtime-gateway/src/asr/qwen-streaming-asr.test-support.js";
+import {SyntheticQwenAudioSocket} from '../../../../realtime-gateway/src/asr/qwen-audio-streaming.test-support.js';
 import {SyntheticTencentAsrSocket} from "../../../../realtime-gateway/src/asr/tencent-streaming-asr.test-support.js";
 import {SyntheticGoogleAsrStream} from "../../../../realtime-gateway/src/asr/google-streaming-asr.test-support.js";
 import type {GoogleAsrStreamFactory} from "../../../../realtime-gateway/src/asr/google-streaming-asr.js";
@@ -169,6 +170,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
       type:"service_account",project_id:"synthetic-project",client_email:"synthetic@invalid.test",private_key:"-----BEGIN PRIVATE KEY-----SYNTHETIC_ONLY"})};
     const credentials=Object.fromEntries(publicModelCatalog.credentialFields[p.auth[0]].map(key=>[key,values[key as keyof typeof values]]));
     if(p.id==="google_speech_v2")update.components[component].languageLocales={zh:"cmn-Hans-CN",en:"en-US"};
+    if(p.id==='qwen_audio_streaming')Object.assign(update.components[component],{endpoint:'wss://configured.invalid/api-ws/v1/inference',streaming:{semanticPunctuation:true,heartbeat:true}});
     await savePublicModelConfiguration({...update,credentials:{[component]:credentials}});
     const s=capturePublicModelRuntimeConfiguration(true);
     expect(s.components[component]).toEqual(p.modelRequired?update.components[component]:{...update.components[component],modelId:`service:${p.id}`});
@@ -237,16 +239,17 @@ describe("manual configuration binding on the original session aggregate",()=>{
     expect(current().publicModelAttempts!.map(a=>a.event.component)).toEqual(["asr","translation"]);expect(mtFetch).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(current().publicModelAttempts)).not.toContain("你好");expect(JSON.stringify(current().publicModelAttempts)).not.toContain(secret);
   });
-  it.each(["openai","qwen","tencent"])("extends one %s streaming intent into original MT",async vendor=>{
+  it.each(["openai","qwen","tencent","qwen_audio"])("extends one %s streaming intent into original MT",async vendor=>{
     const sampleRate=vendor!=="openai"?16000:24000,step=sampleRate/10;
     const update=body(1);Object.assign(update.components.asr,{vendor,protocol:vendor==="tencent"?"tencent_asr_ws":vendor==="qwen"?"qwen_asr_realtime":"openai_realtime_asr",endpoint:"wss://synthetic.invalid/v1/realtime",sampleRate});
+    if(vendor==='qwen_audio')Object.assign(update.components.asr,{vendor:'qwen',protocol:'qwen_audio_streaming',endpoint:'wss://synthetic.invalid/api-ws/v1/inference'});
     if(vendor==="tencent"){Object.assign(update.components.asr,{endpoint:"wss://asr.cloud.tencent.com/asr/v2/10001",appId:"10001",modelId:"16k_zh",authKind:"tencent_secret"});Object.assign(update.credentials.asr,{secretId:"SYNTHETIC_ID",secretKey:secret});delete (update.credentials.asr as any).apiKey;}
     await savePublicModelConfiguration(update);session();const snapshot=await bind(2);
     for(const e of evidence())await recordPublicInferenceEvidence(current().id,"owner",e,now);
     await writePublicInferenceAdmission(current().id,"owner",{consentReceiptId:"consent",budgetReservationId:"budget",qualificationReceiptIds:{asr:"asr",translation:"translation"}},now);
     const lease=await issuePublicRuntimeLease(current().id,"owner",now),runtime={leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,phase:"active",finalRevision:0};
     let tick=now;await observePublicRuntime(current().id,{...runtime,sequence:1,lastAcceptedSample:0},tick);
-    const router=new ProviderRouter();let peer:SyntheticAsrSocket|SyntheticQwenAsrSocket|SyntheticTencentAsrSocket;
+    const router=new ProviderRouter();let peer:SyntheticAsrSocket|SyntheticQwenAsrSocket|SyntheticTencentAsrSocket|SyntheticQwenAudioSocket;
     const mtFetch=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"Hello, today we test streaming recognition."}}]})));
     const providerSession={sessionId:current().id,userId:"owner",sourceLanguage:"zh" as const,targetLanguage:"en" as const,voiceOutput:false};
     const provider=router.createConfiguredPublicSessionProvider({snapshot,authorization:current().processingAuthorization!,session:providerSession,
@@ -255,8 +258,8 @@ describe("manual configuration binding on the original session aggregate",()=>{
       authorizeConnection:async()=>{verifiedPublicAdmission(current(),"owner",tick);},
       resolveAsrCredentials:createPublicModelCredentialResolver(snapshot,"asr"),resolveTranslationCredentials:createPublicModelCredentialResolver(snapshot,"translation"),
       recordAttempt:async e=>{await recordPublicModelAttempt(current().id,e,tick);},fetchFn:mtFetch,
-      socketFactory:url=>{peer=vendor==="tencent"?new SyntheticTencentAsrSocket(new URL(url).searchParams.get("voice_id")!):vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();
-        if(peer instanceof SyntheticQwenAsrSocket)peer.autoComplete=false;peer.transcript="你好，今天测试流式识别。";return peer.asWebSocket();}});
+      socketFactory:url=>{peer=vendor==='qwen_audio'?new SyntheticQwenAudioSocket():vendor==="tencent"?new SyntheticTencentAsrSocket(new URL(url).searchParams.get("voice_id")!):vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();
+        if(peer instanceof SyntheticQwenAsrSocket)peer.autoComplete=false;if(!(peer instanceof SyntheticQwenAudioSocket))peer.transcript="你好，今天测试流式识别。";return peer.asWebSocket();}});
     expect(provider).toBeInstanceOf(LmStudioRealtimeProvider);
     await provider.createSession(providerSession);
     for(let n=1;n<=2;n++){
@@ -269,18 +272,19 @@ describe("manual configuration binding on the original session aggregate",()=>{
     await expect(recordPublicModelAttempt(current().id,{...intent,audioStartSample:1},tick)).rejects.toThrow("conflict");
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("audio_unconfirmed");
     if(peer! instanceof SyntheticQwenAsrSocket)peer.complete();
-    const output=[];for await(const event of provider.flushSession(current().id,vendor==="qwen"?{finishSession:true}:undefined))output.push(event);
+    if(peer! instanceof SyntheticQwenAudioSocket)peer.sentence(1,'你好，今天测试流式识别。');
+    const output=[];for await(const event of provider.flushSession(current().id,['qwen','qwen_audio'].includes(vendor)?{finishSession:true}:undefined))output.push(event);
     expect(output.some(e=>e.type==="transcript.final")).toBe(true);expect(mtFetch).toHaveBeenCalledTimes(1);
     expect(current().publicModelAttempts!.map(a=>[a.event.component,a.event.state])).toEqual([["asr","confirmed"],["translation","confirmed"]]);
     tick=new Date(now.getTime()+300);await observePublicRuntime(current().id,{...runtime,sequence:4,lastAcceptedSample:step*3},tick);
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("conflict");
-    if(vendor==="qwen"){
+    if(vendor==="qwen"||vendor==='qwen_audio'){
       const start=step*3,end=start+3601*sampleRate;tick=new Date(now.getTime()+400);
       await observePublicRuntime(current().id,{...runtime,sequence:5,lastAcceptedSample:end},tick);
       const long={...intent,attemptId:"qwen-long-attempt",segmentId:"qwen-long-segment",state:"dispatching" as const,metadata:undefined,
         audioStartSample:start,audioEndSample:end};
       await expect(recordPublicModelAttempt(current().id,long,tick)).resolves.toMatchObject({event:{audioEndSample:end}});
-      await expect(recordPublicModelAttempt(current().id,{...long,state:"confirmed",metadata:{}},tick)).resolves.toMatchObject({event:{state:"confirmed"}});
+      await expect(recordPublicModelAttempt(current().id,{...long,state:"confirmed",metadata:vendor==='qwen_audio'?{usage:{audioSeconds:3601,promptTokens:100,completionTokens:10,totalTokens:110}}:{}},tick)).resolves.toMatchObject({event:{state:"confirmed"}});
     }
     await provider.closeSession(current().id);expect(peer!.readyState).toBe(3);
   });

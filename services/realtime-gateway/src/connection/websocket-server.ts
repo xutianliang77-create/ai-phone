@@ -1,5 +1,5 @@
 import { setupRealtimeConnection } from "./realtime-connection-setup.js";
-import { handleDeviceSpeakerEvidence, rejectRealtimeControlBackpressure,handlePublicSpeechStart,preparePublicStop } from "./realtime-connection-input-helpers.js";
+import { handleDeviceTextLanguageEvidence,handleDeviceSpeakerEvidence, rejectRealtimeControlBackpressure,handlePublicSpeechStart,preparePublicStop } from "./realtime-connection-input-helpers.js";
 import type { PublicGatewayRuntimeOptions } from "./configured-public-connection.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
@@ -203,7 +203,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         return;
       }
       if(sessionEventSink.requiresConfirmation&&getSession(session.id)?.connectionGeneration!==generation)return;
-
+      if(handleDeviceTextLanguageEvidence(event,'textLanguage' in configured?configured.textLanguage:undefined))return;
       if (handleDeviceSpeakerEvidence(event, session, sessionEventSink, provider, deviceSpeakerTimeline)) return;
       if(configured.publicRecoveryConnection){
         const bridge=configured.recoveryBridge;

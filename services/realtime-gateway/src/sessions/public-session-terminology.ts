@@ -19,7 +19,7 @@ export function verifyPublicTerminology(value:unknown,claims:RealtimeTokenClaims
     throw Error("public_terminology_binding_mismatch");
   return structuredClone(value);
 }
-export function publicTerminologySessionFields(value:PublicSessionTerminology|undefined,_asrProtocol:string,
+export function publicTerminologySessionFields(value:PublicSessionTerminology|undefined,asrProtocol:string,
     policy:NonNullable<RealtimeTokenClaims["processing"]>["languagePolicy"]):Pick<RealtimeProviderSession,"terminology"|"asrHotwords"> {
   if(!value)return {};
   const seen=new Set<string>();
@@ -33,7 +33,8 @@ export function publicTerminologySessionFields(value:PublicSessionTerminology|un
   // Selected MT terms are not evidence that the ASR model accepts hotwords.
   // Qwen3-ASR-Realtime's documented session.update has language, not corpus;
   // its model capability table explicitly marks accuracy enhancement unsupported.
-  // None of the current public ASR adapters has verified inline-term delivery.
-  // Preserve authorized MT terms without inventing an ASR request field.
-  return {terminology};
+  // Only the new, separately selected task protocol has verified vocabulary
+  // delivery. Preserve every other adapter's existing no-inline-hints behavior.
+  const words=[...new Set(terminology.map(t=>t.sourceText))].filter(t=>t.trim()===t&&t.length>0&&t.length<=120&&!/[\u0000-\u001f\u007f]/u.test(t)).slice(0,120);
+  return {terminology,...(asrProtocol==='qwen_audio_streaming'&&words.length?{asrHotwords:words}:{})};
 }

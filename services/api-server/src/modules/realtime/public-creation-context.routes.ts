@@ -4,7 +4,7 @@ import {capturePublicModelRuntimeConfiguration} from "../models/public-model-run
 import {publicDeploymentId} from "../sessions/session-result-sync.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {publicProtocolCapability} from "@translation/contracts";
-import {publicAsrAutomaticSourceLanguages} from '@translation/contracts';
+import {publicAsrAutomaticSourceLanguages,DEVICE_TEXT_LANGUAGE_METHOD} from '@translation/contracts';
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 import { publicDeviceSpeakerCapability, publicDeviceSpeakerEnabled } from "./public-device-speaker-policy.js";
 
@@ -28,8 +28,9 @@ export function registerPublicCreationContextRoute(app:FastifyInstance,available
         modelPolicyRevision:configuration.modelPolicyRevision,executionPlan:configuration.executionPlan,captureSampleRate:configuration.components.asr!.sampleRate,
         endpoint:endpoint.toString(),voiceOutput,...(voiceOutput?{voicePresetId:configuration.components.tts!.voice}:{}),
         onDeviceSpeaker: publicDeviceSpeakerCapability(),
+        ...(configuration.components.asr!.protocol==='qwen_audio_streaming'?{requiredTextLanguageMethod:DEVICE_TEXT_LANGUAGE_METHOD}:{}),
         terminology:{enabledByDefault:true,personalTermsAccountScoped:true,
-          asr:configuration.components.asr!.protocol==="qwen_asr_realtime"?"context_bias":"no_inline_hints",
+          asr:configuration.components.asr!.protocol==='qwen_audio_streaming'?'inline_vocabulary':'no_inline_hints',
           translation:configuration.components.translation!.protocol==="tencent_tmt"?"directional_repository":"inline_glossary",
           repositoryDirections:Object.keys(configuration.components.translation!.termRepositories??{})},
         automaticSourceLanguages:publicAsrAutomaticSourceLanguages(configuration.components.asr!.protocol,configuration.components.asr!.modelId),

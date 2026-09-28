@@ -8,7 +8,15 @@ import type { DeviceSpeakerTimeline } from "../speaker/device-speaker-timeline.j
 import type {AudioFrameBatcher} from "./audio-frame-batcher.js";
 import type {RealtimeTtsOutputQueue} from "../tts/realtime-tts-output.js";
 import {freezeSessionBilling} from "../sessions/session-manager.js";
+import type {DeviceTextLanguageBroker} from './device-text-language.js';
 export {handlePublicSpeechStart} from "./public-speech-start.js";
+
+/** Must run after socket-generation validation and outside the control queue:
+ * a response can release that same queue's pending final ASR flush. */
+export function handleDeviceTextLanguageEvidence(event:ClientRealtimeEvent,broker?:DeviceTextLanguageBroker){
+  if(event.type!=='text.language.result')return false;
+  broker?.accept(event);return true;
+}
 
 /** Physical stop and metering freeze must not wait behind a slow control. */
 export function preparePublicStop(event:ClientRealtimeEvent,session:RealtimeSession,sink:SessionEventSink,

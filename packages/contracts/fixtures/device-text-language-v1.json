@@ -1,0 +1,4 @@
+{
+  "request": {"type":"text.language.request","method":"apple_nl_text_v1","sessionId":"session","requestId":"language-request","segmentId":"sentence-1","revision":1,"text":"Bonjour tout le monde.","textSha256":"cceb3fae56581685b554ebe7b0ac3dba26a4e40ed8a2922bd0850805cb0deffc"},
+  "response": {"type":"text.language.result","method":"apple_nl_text_v1","sessionId":"session","requestId":"language-request","segmentId":"sentence-1","revision":1,"textSha256":"cceb3fae56581685b554ebe7b0ac3dba26a4e40ed8a2922bd0850805cb0deffc","evidence":"text_only_not_acoustic","dominant":"fr","hypotheses":{"fr":0.98,"en":0.01}}
+}

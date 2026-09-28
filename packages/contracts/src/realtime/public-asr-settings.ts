@@ -1,6 +1,17 @@
 /** Optional provider settings belong to the signed configuration snapshot.
  * Omitted legacy settings keep their original identity and effective defaults. */
 export interface PublicAsrServerVad { threshold:number; silenceDurationMs:number; }
+export interface PublicAsrStreamingSettings {semanticPunctuation:boolean;heartbeat:boolean;}
+export function resolvePublicAsrStreamingSettings(protocol:string,value?:unknown):PublicAsrStreamingSettings|undefined {
+  if(protocol!=='qwen_audio_streaming'){
+    if(value!==undefined)throw Error('unsupported_streaming_settings');return;
+  }
+  if(value===undefined)return {semanticPunctuation:true,heartbeat:true};
+  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('invalid_streaming_settings');
+  const v=value as Record<string,unknown>;
+  if(Object.keys(v).length!==2||typeof v.semanticPunctuation!=='boolean'||typeof v.heartbeat!=='boolean')throw Error('invalid_streaming_settings');
+  return {semanticPunctuation:v.semanticPunctuation,heartbeat:v.heartbeat};
+}
 export function publicAsrServerVadCapability(protocol:string) {
   return protocol === "qwen_asr_realtime" ? {
     type:"server_vad" as const,

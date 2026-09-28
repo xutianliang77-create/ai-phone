@@ -27,6 +27,8 @@ export interface ConfiguredPublicSessionOptions {
   recordAttempt: (event: PublicModelAttemptEvent) => Promise<void>;
   socketFactory?: ConfiguredStreamingAsrOptions["socketFactory"];
   googleStreamFactory?:ConfiguredStreamingAsrOptions["googleStreamFactory"];
+  textLanguage?:ConfiguredStreamingAsrOptions['textLanguage'];
+  preview?:ConfiguredStreamingAsrOptions['preview'];
   fetchFn?: typeof fetch;
   listeningMaxContinuationBufferMs?: number;
   output?: {resolveCredentials:ConfiguredPublicTtsOptions["resolveCredentials"];fetchFn?:typeof fetch;socketFactory?:ConfiguredPublicTtsOptions["socketFactory"];
@@ -109,7 +111,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
       (language.autoReverse&&(!automaticLanguage||!automaticPair))) {
     fail("public_session_language_not_supported");
   }
-  if (session.asrCorrections?.length || session.asrHotwords?.length) fail("public_session_asr_hints_not_implemented");
+  if (session.asrCorrections?.length || session.asrHotwords?.length&&snapshot.components.asr?.protocol!=='qwen_audio_streaming') fail("public_session_asr_hints_not_implemented");
   const deviceSpeaker = options.deviceSpeakerEnabled === true && isDeviceSpeakerSelection(session.speakerAttribution);
   if (session.speakerAttribution && session.speakerAttribution.mode !== "off" && !deviceSpeaker) fail("public_session_speaker_not_implemented");
   if (session.speakerAttribution?.allowVoiceIdentity) fail("public_session_speaker_not_implemented");
@@ -144,6 +146,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     resolveCredentials: options.resolveTranslationCredentials, fetchFn: options.fetchFn,
     attemptRecorder: {sessionId: binding.sessionId, leaseId: binding.leaseId, providerId: mt!.vendor, record}});
   const baseAsr = configuredStreamingAsr({snapshot, authorization, deploymentId: binding.deploymentId,
+    textLanguage:options.textLanguage,preview:options.preview,
     sessionId: binding.sessionId, leaseId: binding.leaseId, record,
     authorizeConnection: options.authorizeConnection, resolveCredentials: options.resolveAsrCredentials, socketFactory: options.socketFactory,googleStreamFactory:options.googleStreamFactory});
   const phoneSpeaker = deviceSpeaker ? new DeviceSpeakerAttributionProvider(binding.sessionId, binding.sampleRate) : undefined;

@@ -3,6 +3,7 @@ import '../../../../platform/audio/device_speaker_diarizer.dart';
 import 'public_creation_request_store.dart';
 import 'realtime_session.dart';
 import 'public_automatic_language_scope.dart';
+import '../../../../platform/asr/device_text_language.dart';
 
 const publicCreationScopeNotice =
     '公有在线会在开始前按当前服务端资格核对语种、自动识别/反向与朗读声音；公共术语默认启用，个人词库按账号隔离。说话人须本机资源就绪，个人声音暂不支持。丢失连接时安全结束并保留已确认记录，不自动重连或重放音频。';
@@ -67,6 +68,10 @@ String? publicCreationCapabilityBlocker(Map<String, Object?> offer,
     required String target,
     required bool autoReverse,
     required (String, String)? automaticLanguagePair}) {
+  if (source == 'auto' && offer['requiredTextLanguageMethod'] != null &&
+      (offer['requiredTextLanguageMethod'] != deviceTextLanguageMethod || !supportsDeviceTextLanguage)) {
+    return '当前在线ASR的自动语种需要新版iOS文本识别能力；本设备尚未接入，请使用固定源语言';
+  }
   final raw = offer['capability'];
   // Older private/test servers do not project public capability. The public
   // deployment always supplies it; this fallback preserves old protocol tests.

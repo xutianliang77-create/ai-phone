@@ -8,10 +8,12 @@ import {OpenAiStreamingAsrClient,type StreamingAsrOptions} from "./openai-stream
 import {qwenAsrLanguage} from "./qwen-streaming-asr-protocol.js";
 import {validateTencentAsr} from "./tencent-streaming-asr.js";
 import {googleAsrConfiguration} from "./google-streaming-asr.js";
+import {resolvePublicAsrStreamingSettings,type PublicAsrStreamingSettings} from '@translation/contracts';
+import {QwenAudioStreamingClient,type QwenAudioStreamingOptions} from './qwen-audio-streaming-client.js';
 export interface ConfiguredPublicAsrOptions {
   deploymentId:string;authorization:RealtimeProcessingAuthorization;
   snapshot:{deploymentId:string;configurationRevision:number;modelPolicyRevision:string;executionPlan:RealtimeExecutionPlan;components:{asr?:{
-    enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;timeoutMs:number;sampleRate:16000|24000;serverVad?:PublicAsrServerVad;appId?:string;projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>}}};
+    enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;timeoutMs:number;sampleRate:16000|24000;serverVad?:PublicAsrServerVad;streaming?:PublicAsrStreamingSettings;appId?:string;projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>}}};
   sessionId:string;leaseId:string;resolveCredentials:StreamingAsrOptions["resolveCredentials"];record:CompletedAsrOptions["record"];fetchFn?:typeof fetch;
 }
 /** Explicit finalized-turn API, NOT a replacement for streaming AsrProvider.transcribe(frame). */
@@ -33,7 +35,7 @@ function validateConfiguredAsr(options:ConfiguredPublicAsrOptions,protocol:strin
     languagePolicy:authorization.languagePolicy,executionPlan:authorization.executionPlan,syncRequested:false});
   if(parsed.status!=="valid"||authorization.processingMode!=="online"||snapshot.deploymentId!==options.deploymentId||!Number.isSafeInteger(snapshot.configurationRevision)||snapshot.configurationRevision<1||
     snapshot.modelPolicyRevision!==authorization.modelPolicyRevision||!isDeepStrictEqual(snapshot.executionPlan,authorization.executionPlan)||!profile?.enabled||
-    profile.vendor!==(protocol==="qwen_asr_realtime"||protocol==="qwen_asr_compatible"?"qwen":protocol==="tencent_asr_ws"?"tencent":protocol==="google_speech_v2"?"google":"openai")||profile.protocol!==protocol||
+    profile.vendor!==(["qwen_asr_realtime","qwen_asr_compatible","qwen_audio_streaming"].includes(protocol)?"qwen":protocol==="tencent_asr_ws"?"tencent":protocol==="google_speech_v2"?"google":"openai")||profile.protocol!==protocol||
     (protocol==="google_speech_v2"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(protocol==="tencent_asr_ws"?"tencent_secret":"api_key"))||typeof options.record!=="function"||typeof options.resolveCredentials!=="function")throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");
   const automatic=authorization.languagePolicy.source==="auto";
   if((automatic||authorization.languagePolicy.autoReverse)&&
@@ -42,11 +44,14 @@ function validateConfiguredAsr(options:ConfiguredPublicAsrOptions,protocol:strin
   }
   return {snapshot,authorization,profile};
 }
-export type ConfiguredStreamingAsrOptions=ConfiguredPublicAsrOptions&Pick<StreamingAsrOptions,"authorizeConnection"|"socketFactory"|"googleStreamFactory">;
+export type ConfiguredStreamingAsrOptions=ConfiguredPublicAsrOptions&Pick<StreamingAsrOptions,"authorizeConnection"|"socketFactory"|"googleStreamFactory">&Pick<QwenAudioStreamingOptions,'textLanguage'|'preview'>;
 export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
   const configured=options.snapshot.components.asr?.protocol;
-  const protocol=configured==="google_speech_v2"?"google_speech_v2":configured==="qwen_asr_realtime"?"qwen_asr_realtime":configured==="tencent_asr_ws"?"tencent_asr_ws":"openai_realtime_asr";
+  const protocol=configured==='qwen_audio_streaming'?'qwen_audio_streaming':configured==="google_speech_v2"?"google_speech_v2":configured==="qwen_asr_realtime"?"qwen_asr_realtime":configured==="tencent_asr_ws"?"tencent_asr_ws":"openai_realtime_asr";
   const {profile,authorization}=validateConfiguredAsr(options,protocol),qwen=protocol==="qwen_asr_realtime",tencent=protocol==="tencent_asr_ws",google=protocol==="google_speech_v2";
+  const streaming=resolvePublicAsrStreamingSettings(protocol,profile.streaming);
+  if(protocol==='qwen_audio_streaming'&&(new URL(profile.endpoint).pathname!=='/api-ws/v1/inference'||
+    authorization.languagePolicy.source==='auto'&&!options.textLanguage))throw new PublicAsrError('public_asr_device_text_language_required','not_sent');
   try{resolvePublicAsrServerVad(protocol,profile.serverVad);}catch{throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");}
   if(qwen&&authorization.languagePolicy.source!=="auto")qwenAsrLanguage(authorization.languagePolicy.source);
   if(tencent)validateTencentAsr({endpoint:profile.endpoint,model:profile.modelId,appId:profile.appId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"]});
@@ -60,7 +65,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     ? (authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair)!.find(language=>language!==authorization.languagePolicy.target)??authorization.languagePolicy.target
     : authorization.languagePolicy.source;
   const clientOptions:StreamingAsrOptions={sessionId:options.sessionId,leaseId:options.leaseId,
-    endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol,appId:profile.appId,
+    endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol==='qwen_audio_streaming'?undefined:protocol,appId:profile.appId,
     authorizeConnection:options.authorizeConnection,resolveCredentials:options.resolveCredentials,record:options.record,socketFactory:options.socketFactory,
     projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,
     ...(profile.serverVad?{serverVad:structuredClone(profile.serverVad)}:{}),
@@ -69,5 +74,6 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     ...(authorization.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...authorization.languagePolicy.sourceLanguages]}:{}),
     googleStreamFactory:options.googleStreamFactory};
   if(google)googleAsrConfiguration(clientOptions);
-  return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:new OpenAiStreamingAsrClient(clientOptions)});
+  return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:protocol==='qwen_audio_streaming'?
+    new QwenAudioStreamingClient({...clientOptions,streaming:streaming!,textLanguage:options.textLanguage,preview:options.preview}):new OpenAiStreamingAsrClient(clientOptions)});
 }

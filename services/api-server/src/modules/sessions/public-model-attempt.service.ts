@@ -23,7 +23,7 @@ function parse(value:unknown,sessionId:string):PublicModelAttemptEvent{
   if(m!==undefined&&(!m||typeof m!=="object"||Array.isArray(m)||Object.keys(m).some(k=>!["requestId","reportedModel","usage"].includes(k))||
     [m.requestId,m.reportedModel].some(v=>v!==undefined&&!syncKey(v))))throw new ResultSyncError("invalid_model_attempt",400);
   if(u!==undefined&&(!u||typeof u!=="object"||Array.isArray(u)||Object.keys(u).some(k=>!["promptTokens","completionTokens","totalTokens","thoughtTokens","cachedPromptTokens","audioInputTokens","textInputTokens","audioSeconds","billedCharacters","audioOutputTokens"].includes(k))||
-    Object.entries(u).some(([k,v])=>k==="audioSeconds"?!Number.isFinite(v)||Number(v)<0||Number(v)>3600:!Number.isSafeInteger(v)||Number(v)<0)))throw new ResultSyncError("invalid_model_attempt",400);
+    Object.entries(u).some(([k,v])=>k==="audioSeconds"?!Number.isFinite(v)||Number(v)<0||Number(v)>Number.MAX_SAFE_INTEGER:!Number.isSafeInteger(v)||Number(v)<0)))throw new ResultSyncError("invalid_model_attempt",400);
   if(e.state==="dispatching"&&(e.metadata!==undefined||e.failureCode!==undefined))throw new ResultSyncError("invalid_model_attempt",400);
   return structuredClone(e);
 }
@@ -66,7 +66,7 @@ export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new 
       // Streaming ASR reserves each growing audio prefix before uploading it.
       // Identity/start/rate stay sealed; completed-file attempts cannot use this.
       if(e.component==="asr"&&e.state==="dispatching"&&old.event.state==="dispatching"&&
-        ["openai_realtime_asr","qwen_asr_realtime","tencent_asr_ws","google_speech_v2"].includes(current.publicModelConfiguration?.components.asr?.protocol??"")&&e.audioEndSample!>old.event.audioEndSample!&&
+        ["openai_realtime_asr","qwen_asr_realtime","qwen_audio_streaming","tencent_asr_ws","google_speech_v2"].includes(current.publicModelConfiguration?.components.asr?.protocol??"")&&e.audioEndSample!>old.event.audioEndSample!&&
         ["sessionId","leaseId","attemptId","segmentId","revision","component","providerId","modelId","audioStartSample","audioSampleRate"].every(k=>old.event[k as keyof PublicModelAttemptEvent]===e[k as keyof PublicModelAttemptEvent])){
         const next=structuredClone(current),r=next.publicModelAttempts!.find(r=>r.event.attemptId===e.attemptId)!;
         r.event=e;r.updatedAt=now.toISOString();return {next,result:ack(r)};

@@ -7,6 +7,10 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
     late final GatewayRealtimeEvent event;
     try {
       final json = jsonDecode(message) as Map<String, Object?>;
+      if (json['type'] == 'text.language.request') {
+        unawaited(_answerTextLanguage(generation, json));
+        return;
+      }
       event = GatewayRealtimeEvent.fromJson(json);
     } catch (_) {
       if (_session?.syncBinding != null) {
@@ -52,6 +56,7 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
       }
     }
     if (event.type == 'session.ended') {
+      _textLanguageClosed = true;
       unawaited(_cancelDeviceSpeaker());
       _manualClose = true;
       _reconnectTimer?.cancel();
@@ -63,6 +68,7 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
 
   void _handleDisconnect(int generation, [Object? error]) {
     if (generation != _connectionGeneration) return;
+    _textLanguageClosed = true;
     unawaited(_cancelDeviceSpeaker());
     final subscription = _subscription;
     final channel = _channel;

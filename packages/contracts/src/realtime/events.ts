@@ -1,5 +1,6 @@
 import type { AudioFrame, AudioOutput } from "./audio.js";
 import type { DeviceSpeakerEvidenceEvent } from "./device-speaker.js";
+import type {DeviceTextLanguageRequest,DeviceTextLanguageResult} from './device-text-language.js';
 import type {
   RealtimeSessionDiagnosticsDto,
   SegmentVadContextDto,
@@ -28,7 +29,8 @@ export interface TranscriptEvent {
   text: string;
   rawText?: string;
   optimizedText?: string;
-  language: TranslationLanguageCode;
+  /** auto only for unconfirmed text evidence; never a detected source. */
+  language: TranslationLanguageCode | 'auto';
   dominantLanguage?: TranslationLanguageCode;
   detectedLanguages?: TranslationLanguageCode[];
   mixedLanguage?: boolean;
@@ -178,6 +180,7 @@ export interface SessionVoiceOutputUpdatedEvent {
 
 export type ClientRealtimeEvent =
   | AudioFrame
+  | DeviceTextLanguageResult
   | DeviceSpeakerEvidenceEvent
   | ClientTextSegmentEvent
   | { type: "audio.boundary"; sessionId: string; sequence: number }
@@ -188,6 +191,7 @@ export type ClientRealtimeEvent =
   | { type: "session.end"; sessionId: string };
 
 export type ServerRealtimeEvent =
+  | DeviceTextLanguageRequest
   | {type:"audio.speech_started.confirmed"|"audio.speech_started.rejected";sessionId:string;sequence:number}
   | {type:"audio.boundary.committed"|"audio.boundary.rejected";sessionId:string;sequence:number;code?:string}
   | SessionStartedEvent

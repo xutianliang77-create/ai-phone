@@ -18,6 +18,7 @@ import UIKit
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
   private let deviceSpeakerBridge = DeviceSpeakerBridge()
+  private let deviceTextLanguageBridge = DeviceTextLanguageBridge()
 
   override func application(
     _ application: UIApplication,
@@ -28,6 +29,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceTextLanguageBridge") {
+      deviceTextLanguageBridge.register(messenger: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceSpeakerBridge") {
       deviceSpeakerBridge.register(messenger: registrar.messenger())
     }

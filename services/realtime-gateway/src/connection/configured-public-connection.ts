@@ -3,7 +3,8 @@ import type WebSocket from "ws";
 import type {RealtimeEnv} from "../config/env.js";
 import {extractRealtimeConnectionToken} from "../auth/realtime-connection-token.js";
 import {verifyRealtimeToken} from "../auth/realtime-token-verifier.js";
-import {publicRuntimeTokenBinding,type TranslationLanguageCode} from "@translation/contracts";
+import {publicRuntimeTokenBinding,DEVICE_TEXT_LANGUAGE_PROTOCOL,type TranslationLanguageCode} from "@translation/contracts";
+import {DeviceTextLanguageBroker} from './device-text-language.js';
 import {createSessionEventSink,bindPublicSessionEventSink} from "../sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../sessions/public-admission-client.js";
 import {createPublicRuntimeMaterialClient} from "../sessions/public-runtime-material-client.js";
@@ -56,6 +57,7 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
   pending.add(claims.sessionId);
   const stop=new AbortController(),cancel=()=>stop.abort(),timer=setTimeout(cancel,30000);ws.once("close",cancel);ws.once("error",cancel);
   let built:ReturnType<ProviderRouter["createConfiguredPublicSessionFromVerifiedClaims"]>|undefined;
+  let textLanguage:DeviceTextLanguageBroker|undefined;
   try{
     if(!options.credentialAccessSecret||options.credentialAccessSecret.length<32||options.credentialAccessSecret===env.internalApiSecret||options.credentialAccessSecret===env.realtimeTokenSecret)throw Error("public_credential_access_required");
     const sink=createSessionEventSink(env,options.apiFetchFn),admission=createPublicAdmissionClient(sink,claims,env.publicDeploymentId!);
@@ -67,6 +69,15 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     await abortable(admission.authorize("connect"),stop.signal);
     const material=createPublicRuntimeMaterialClient(sink,claims,env.publicDeploymentId!,options.credentialAccessSecret);
     const {snapshot,authorization,terminology}=await material.configuration(stop.signal);
+    if(snapshot.components.asr?.protocol==='qwen_audio_streaming'&&claims.sourceLanguage==='auto'){
+      const protocols=request.headers['sec-websocket-protocol'];
+      if(!(Array.isArray(protocols)?protocols.join(','):protocols??'').split(',').map(x=>x.trim()).includes(DEVICE_TEXT_LANGUAGE_PROTOCOL))
+        throw Error('public_device_text_language_required');
+      if(options.recoverySocketAssembly)throw Error('public_text_language_recovery_not_supported');
+      textLanguage=new DeviceTextLanguageBroker(claims.sessionId,authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair??[],
+        event=>{if(ws.readyState!==1)return false;sendRealtimeEvent(ws,event);return true;});
+      ws.once('close',()=>textLanguage?.close());ws.once('error',()=>textLanguage?.close());
+    }
     let started=false;const purpose=()=>started?"dispatch" as const:"connect" as const;
     const scoped={sessionId:claims.sessionId,ownerId:claims.userId,deploymentId:binding.deploymentId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
       leaseId:binding.leaseId,captureId:binding.captureId,languagePolicyKey:binding.languagePolicyKey,sampleRate:binding.sampleRate};
@@ -78,6 +89,7 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
       ...(claims.processing!.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...claims.processing!.languagePolicy.sourceLanguages]}:{})};
     if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000)throw Error("public_qa_deadline_elapsed");
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,terminology,binding:scoped,session:sessionInput,
+      textLanguage,preview:event=>{if(ws.readyState===1&&getSession(claims.sessionId)?.status==='active')sendRealtimeEvent(ws,event);},
       deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
       resolveTranslationCredentials:signal=>material.credentials("translation","dispatch",signal),recordAttempt:event=>sink.modelAttempt!(event),
@@ -99,11 +111,12 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
         release:()=>{output.close();void built!.provider.closeSession(claims.sessionId).catch(()=>{});}}),
       release:()=>releasePublicRecoveryRuntime(claims.sessionId,attachment.generation),
     }:undefined;
-    return {...attachment,provider:built.provider,ttsOutputQueue:output,sessionEventSink,
+    return {...attachment,provider:built.provider,ttsOutputQueue:output,sessionEventSink,textLanguage,
       checkpointDisconnect:async()=>{await sessionEventSink.disconnect();await sessionEventSink.drain();return admission.inspectRecovery();},
       retainPublicRecovery:recovery?.retain,releaseRetainedRecovery:recovery?.release,
       markStarted:()=>{started=true;},publicConnection:true,publicRecoveryConnection:false,recoveryBridge:undefined};
   }catch{
+    textLanguage?.close();
     built?.ttsOutput?.close();if(built)await built.provider.closeSession(claims.sessionId).catch(()=>{});
     sendRealtimeEvent(ws,buildError("provider_unavailable","Public runtime could not be authorized or initialized",{sessionId:claims.sessionId,stage:"provider",retryable:false}));
     if(ws.readyState===1)ws.close(1008,"public_runtime_not_ready");return null;

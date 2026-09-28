@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../../platform/audio/audio_frame.dart';
 import '../../../../platform/audio/device_speaker_diarizer.dart';
 import '../../../../platform/asr/asr_text_segment.dart';
+import '../../../../platform/asr/device_text_language.dart';
 import '../api/realtime_session.dart';
 import 'gateway_realtime_event.dart';
 import 'realtime_reconnect_audio_buffer.dart';
@@ -20,6 +21,7 @@ part 'realtime_gateway_control.dart';
 part 'realtime_gateway_public_recovery.dart';
 part 'realtime_gateway_reconnect_audio.dart';
 part 'realtime_gateway_device_speaker.dart';
+part 'realtime_gateway_text_language.dart';
 
 class RealtimeGatewayClient {
   static const Duration _connectTimeout = Duration(seconds: 8);
@@ -65,6 +67,9 @@ class RealtimeGatewayClient {
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
   int _lastAudioSequence = -1;
+  bool _textLanguageClosed = false;
+  final _textLanguagePending = <String>{};
+  final _textLanguageSeen = <String>{};
   RealtimeReconnectAudioDrain _lastReconnectAudioDrain =
       RealtimeReconnectAudioDrain.empty;
 
@@ -87,6 +92,9 @@ class RealtimeGatewayClient {
     _transportReady = false;
     _lastAudioSequence = -1;
     final generation = ++_connectionGeneration;
+    _textLanguageClosed = false;
+    _textLanguagePending.clear();
+    _textLanguageSeen.clear();
     if (session.syncBinding != null) {
       _publicStarted = Completer<void>();
       unawaited(_publicStarted!.future.catchError((Object _) {}));

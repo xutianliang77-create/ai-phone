@@ -11,6 +11,7 @@
 		D52100010000000000000005 /* DeviceSpeakerStreamingRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000005; };
 		D52100010000000000000004 /* DeviceSpeakerFileProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000004; };
 		D52100010000000000000001 /* DeviceSpeakerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000001; };
+		D52800010000000000000001 /* DeviceTextLanguageBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52800020000000000000001; };
 		D52100010000000000000002 /* DeviceSpeakerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000002; };
 		D52100010000000000000003 /* DeviceSpeakerModelResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000003; };
 		F11000010000000000000006 /* AppleSpeechPrerecordedInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11000020000000000000006; };
@@ -84,6 +85,7 @@
 		D52100020000000000000005 /* DeviceSpeakerStreamingRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerStreamingRuntime.swift; sourceTree = "<group>"; };
 		D52100020000000000000004 /* DeviceSpeakerFileProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerFileProbe.swift; sourceTree = "<group>"; };
 		D52100020000000000000001 /* DeviceSpeakerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerBridge.swift; sourceTree = "<group>"; };
+		D52800020000000000000001 /* DeviceTextLanguageBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTextLanguageBridge.swift; sourceTree = "<group>"; };
 		D52100020000000000000002 /* DeviceSpeakerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerEngine.swift; sourceTree = "<group>"; };
 		D52100020000000000000003 /* DeviceSpeakerModelResources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerModelResources.swift; sourceTree = "<group>"; };
 		F11000020000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechPrerecordedInput.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				D52100020000000000000001 /* DeviceSpeakerBridge.swift */,
+				D52800020000000000000001 /* DeviceTextLanguageBridge.swift */,
 				D52100020000000000000002 /* DeviceSpeakerEngine.swift */,
 				D52100020000000000000003 /* DeviceSpeakerModelResources.swift */,
 				D52100020000000000000004 /* DeviceSpeakerFileProbe.swift */,
@@ -505,6 +508,7 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				D52100010000000000000001 /* DeviceSpeakerBridge.swift in Sources */,
+				D52800010000000000000001 /* DeviceTextLanguageBridge.swift in Sources */,
 				D52100010000000000000002 /* DeviceSpeakerEngine.swift in Sources */,
 				D52100010000000000000003 /* DeviceSpeakerModelResources.swift in Sources */,
 				D52100010000000000000004 /* DeviceSpeakerFileProbe.swift in Sources */,

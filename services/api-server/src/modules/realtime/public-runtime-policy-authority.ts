@@ -1,7 +1,7 @@
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
-import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported,publicTranslationDirectionImplemented,publicTtsTargetImplemented} from "@translation/contracts";
+import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported,publicTranslationDirectionImplemented,publicTtsTargetImplemented,QWEN_AUDIO_PRODUCT_LANGUAGES} from "@translation/contracts";
 import {automaticTranslationTarget,validAutomaticSources,type TranslationLanguageCode} from '@translation/contracts';
 import { inspectPublicRuntimeLiveQualification } from "@translation/platform-security";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
@@ -108,6 +108,7 @@ function qualifiedPairs(policy:Policy,configuration:PublicModelRuntimeSnapshot,l
   const speech=configuration.executionPlan.tts.execution==="public"?configuration.components.tts?.protocol:undefined;
   const pairs=policy.qualifiedLanguagePairs.filter(pair=>!live||live.qualifiedLanguagePairs.some(candidate=>
     candidate.source===pair.source&&candidate.target===pair.target)).filter(pair=>
+      (configuration.components.asr?.protocol!=='qwen_audio_streaming'||QWEN_AUDIO_PRODUCT_LANGUAGES.includes(pair.source as TranslationLanguageCode))&&
       publicTranslationDirectionImplemented(translation,pair.source,pair.target)&&
       (!speech||publicTtsTargetImplemented(speech,pair.target)));
   return pairs.map(pair=>({...pair}));

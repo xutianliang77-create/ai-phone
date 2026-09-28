@@ -31,6 +31,7 @@ export * from "./communication/agents.js";
 export * from "./communication/ingress.js";
 export * from "./realtime/audio.js";
 export * from "./realtime/device-speaker.js";
+export * from "./realtime/device-text-language.js";
 export * from "./realtime/diagnostics.js";
 export * from "./realtime/errors.js";
 export * from "./realtime/events.js";

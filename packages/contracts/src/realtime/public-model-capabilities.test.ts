@@ -2,7 +2,7 @@ import {describe,it,expect} from "vitest";
 import {publicAsrModelAutomaticLanguagePairSupported,publicAsrModelAutomaticLanguageSupported,publicModelProtocolCapabilities,publicProtocolCapability,publicProtocolSampleRateSupported,publicTranslationDirectionImplemented,publicTtsTargetImplemented} from "./public-model-capabilities.js";
 describe("implemented public wire capabilities",()=>{
   it("covers four vendors and three components without granting readiness",()=>{
-    const values=Object.values(publicModelProtocolCapabilities);expect(values).toHaveLength(16);
+    const values=Object.values(publicModelProtocolCapabilities);expect(values).toHaveLength(17);
     for(const component of ["asr","translation","tts"])expect(new Set(values.filter(c=>c.component===component).map(c=>c.vendor))).toEqual(new Set(["qwen","tencent","openai","google"]));
     for(const c of values){expect(c).not.toHaveProperty("ready");expect(c).not.toHaveProperty("qualified");expect(Object.isFrozen(c)).toBe(true);expect(Object.isFrozen(c.sampleRates)).toBe(true);}
   });

@@ -27,6 +27,14 @@ function liveQualification(patch:any={}){const value:any={schemaVersion:1,eviden
   qualifiedLanguagePairs:[{source:"zh",target:"en"}],observedAt:new Date(now.getTime()-1000).toISOString(),expiresAt,sessionHash:"c".repeat(64),attemptHash:"d".repeat(64),finalizationHash:"e".repeat(64),...patch};return {...value,signature:signPublicRuntimeLiveQualification(value,key)};}
 afterEach(()=>{if(dir)rmSync(dir,{recursive:true,force:true});dir="";});
 describe("signed public runtime admission policy",()=>{
+  it('does not offer a new ASR fixed language merely because the MT supports it',()=>{
+    dir=mkdtempSync(join(tmpdir(),'wujie-public-policy-'));const file=join(dir,'policy.json');
+    const config:PublicModelRuntimeSnapshot={...configuration,components:{...configuration.components,
+      asr:{...configuration.components.asr,vendor:'qwen',protocol:'qwen_audio_streaming'}}};
+    writeFileSync(file,JSON.stringify(policy({qualifiedLanguagePairs:[{source:'tr',target:'zh'},{source:'fr',target:'zh'}],
+      providerAvailability:[{providerId:'qwen',state:'available'},{providerId:'tencent',state:'available'}]})),{mode:0o600});
+    expect(publicRealtimeAuthorityFromEnvironment(environment(file))!.configurationCapability!(config).qualifiedLanguagePairs).toEqual([{source:'fr',target:'zh'}]);
+  });
   it('admits third-language return routes only when the complete source scope has real signed coverage',async()=>{
     dir=mkdtempSync(join(tmpdir(),'wujie-public-policy-'));const file=join(dir,'policy.json'),live=join(dir,'live.json');
     const pairs=[{source:'zh',target:'en'},{source:'en',target:'zh'},{source:'ja',target:'zh'},{source:'fr',target:'zh'}];

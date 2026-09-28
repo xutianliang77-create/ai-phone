@@ -116,6 +116,7 @@ export function planHighContextTokenSplits(
 
   for (const segment of orderedSegments(segments)) {
     const transcript = transcriptResult(segment);
+    if (!transcript) continue; // Unconfirmed text language is not an MT source.
     const crossed = boundaries.filter((boundary) =>
       crossesBoundary(transcript, boundary.boundaryMs)
     );
@@ -234,7 +235,8 @@ function boundariesFor(runs: SpeakerRun[]): ConfirmedSpeakerBoundary[] {
   return boundaries;
 }
 
-function transcriptResult(segment: StoredTranscriptFinal): TranscriptResult {
+function transcriptResult(segment: StoredTranscriptFinal): TranscriptResult | undefined {
+  if (segment.language === 'auto') return;
   return {
     segmentId: segment.segmentId,
     turnId: segment.turnId,
