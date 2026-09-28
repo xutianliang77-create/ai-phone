@@ -33,22 +33,11 @@ export function qwenDraftTranscriptLanguage(language:unknown,source:string,pair?
     throw error;
   }
 }
-/** Official DashScope TranscriptionParams.corpus_text serializes here. These
- * are soft vocabulary hints, never transcript replacements or language hints. */
-export function qwenAsrCorpus(hotwords:readonly string[]=[]):string|undefined {
-  const words:string[]=[];let bytes=0;
-  for(const word of [...new Set(hotwords)]) {
-    if(typeof word!=="string"||!word.trim()||word!==word.trim()||word.length>120||/[\u0000-\u001f\u007f]/u.test(word))
-      throw new PublicAsrError("qwen_asr_corpus_invalid","not_sent");
-    const size=Buffer.byteLength(word)+1;
-    if(words.length>=120||bytes+size>6000)break;
-    words.push(word);bytes+=size;
-  }
-  return words.length?words.join("\n"):undefined;
-}
-export function qwenAsrSessionConfiguration(language:string,serverVad?:PublicAsrServerVad,corpus?:string){
+/** Use this model's documented wire contract, not similarly named options in
+ * a shared SDK or LiveTranslate. No verified corpus/hotword field exists here. */
+export function qwenAsrSessionConfiguration(language:string,serverVad?:PublicAsrServerVad){
   const vad=resolvePublicAsrServerVad("qwen_asr_realtime",serverVad)!;
-  const inputAudioTranscription={...(language==="auto"?{}:{language:qwenAsrLanguage(language)}),...(corpus?{corpus:{text:corpus}}:{})};
+  const inputAudioTranscription=language==="auto"?{}:{language:qwenAsrLanguage(language)};
   return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,
     // Qwen documents Manual mode for short, explicitly submitted voice
     // messages and recommends no more than 60 seconds of cumulative audio.
@@ -57,12 +46,12 @@ export function qwenAsrSessionConfiguration(language:string,serverVad?:PublicAsr
     // to own local barge-in/playback/UI behavior.
     turn_detection:{type:"server_vad",threshold:vad.threshold,silence_duration_ms:vad.silenceDurationMs}};
 }
-export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string,serverVad?:PublicAsrServerVad,corpus?:string){
+export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string,serverVad?:PublicAsrServerVad){
   const vad=resolvePublicAsrServerVad("qwen_asr_realtime",serverVad)!;
   const transcription=session?.input_audio_transcription;
   const transcriptionOk=language==="auto"
-    ? transcription===undefined||autoTranscription(transcription,model,corpus)
-    : fixedTranscription(transcription,model,qwenAsrLanguage(language),corpus);
+    ? transcription===undefined||autoTranscription(transcription,model)
+    : fixedTranscription(transcription,model,qwenAsrLanguage(language));
   if(!session||typeof session.id!=="string"||!session.id||session.id.length>240||session.model!==model||
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
     !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==vad.threshold||
@@ -72,17 +61,13 @@ export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,
 }
 /** Qwen omits optional fields in a source=auto acknowledgement, but it must
  * never echo a fixed language or a different transcription model. */
-function corpusEcho(value:Record<string,unknown>,corpus?:string) {
-  // Omission is not proof of supplier use; a present echo must be exact.
-  return value.corpus===undefined||!!corpus&&JSON.stringify(value.corpus)===JSON.stringify({text:corpus});
-}
-function autoTranscription(value:unknown,model:string,corpus?:string){
-  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language","corpus"].includes(key)))return false;
+function autoTranscription(value:unknown,model:string){
+  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language"].includes(key)))return false;
   const item=value as Record<string,unknown>;
-  return (item.model===undefined||item.model===model)&&item.language===undefined&&corpusEcho(item,corpus);
+  return (item.model===undefined||item.model===model)&&item.language===undefined;
 }
-function fixedTranscription(value:unknown,model:string,language:string,corpus?:string){
-  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language","corpus"].includes(key)))return false;
+function fixedTranscription(value:unknown,model:string,language:string){
+  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language"].includes(key)))return false;
   const item=value as Record<string,unknown>;
-  return item.language===language&&(item.model===undefined||item.model===model)&&corpusEcho(item,corpus);
+  return item.language===language&&(item.model===undefined||item.model===model);
 }

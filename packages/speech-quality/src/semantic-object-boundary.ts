@@ -47,6 +47,12 @@ function isEnglishNominal(value:string) {
 const chineseNounPhrase=/^(?:(?:在线|离线|本地|云端|端侧|公共|私有|实时|历史|系统|用户|音频|视频|语音|模型|翻译|会议|人工)){0,2}(?:日志|缓存|数据库|状态|配置|参数|文件|目录|记录|数据|模型|链路|模块|接口|结果|方案|设备|识别|录入|格式|编号|名称|版本|纪要)$/u;
 const englishNounPhrase=/^(?:(?:online|offline|local|cloud|public|private|realtime|historical|system|user|audio|video|speech|model|translation|meeting)\s+){0,2}(?:logs?|cache|database|state|configuration|parameters?|files?|records?|data|models?|pipeline|modules?|interface|results?|devices?|format|version|minutes)$/iu;
 function technicalLabel(value:string) {
+  // Classify only the existing acronym vocabulary when ASR spells its letters.
+  // Keep the original transcript unchanged; never fill a missing name/version.
+  value=value.replace(/\b(?:[A-Z][ \t]+){1,3}[A-Z]\b/gu,word=>{
+    const compact=word.replace(/[ \t]+/gu,"");
+    return /^(?:ASR|TTS|MT|LLM|OCR|VAD|API|GPU|CPU)$/u.test(compact)?compact:word;
+  });
   // Require an acronym or a versioned identifier, not arbitrary Title Case
   // followed by ASR/TTS (which can also be a command such as Reboot ASR).
   if(/^(?:ASR|TTS|MT|LLM|OCR|VAD|API|GPU|CPU)$/u.test(value))return true;

@@ -16,6 +16,8 @@ const second=()=>part("second","Hy-MT2 和 VoxCPM2 的在线模型链路。");
 describe("object and enumeration continuation through the existing revision path",()=>{
   it.each([
     ["我们要测试 Qwen Three ASR。","Hy-MT2 和 VoxCPM2 的在线模型链路。","zh","我们要测试 Qwen Three ASR、Hy-MT2 和 VoxCPM2 的在线模型链路。"],
+    ["我们要测试 Nova3 A S R。","Orion2 M T 和 Lumen2 T T S 的在线模型链路。","zh","我们要测试 Nova3 A S R、Orion2 M T 和 Lumen2 T T S 的在线模型链路。"],
+    ["We will test Nova Three A S R.","Orion2 M T and Lumen2 T T S.","en","We will test Nova Three A S R, Orion2 M T and Lumen2 T T S."],
     ["我们准备检查日志。","缓存和数据库。","zh","我们准备检查日志、缓存和数据库。"],
     ["需要检查日志。","缓存与数据库的状态。","zh","需要检查日志、缓存与数据库的状态。"],
     ["备选方案包括本地识别。","云端识别以及人工录入。","zh","备选方案包括本地识别、云端识别以及人工录入。"],
@@ -32,6 +34,9 @@ describe("object and enumeration continuation through the existing revision path
 
   it.each([
     ["我们准备采购苹果。","香蕉和梨已经卖完了。","zh"],
+    ["我们要测试跟 Q A S R。","Hy-MT2 和 VoxCPM2 的在线模型链路。","zh"],
+    ["我们要测试 Nova A S R。","Orion2 M T 和 Lumen2 T T S。","zh"],
+    ["We need logs.","Cache A P I and Reboot A S R.","en"],
     ["我们准备采购苹果。","香蕉和梨很新鲜。","zh"],
     ["我们准备采购苹果。","香蕉和梨变便宜了。","zh"],
     ["我们准备采购苹果。","我和他明天出发。","zh"],

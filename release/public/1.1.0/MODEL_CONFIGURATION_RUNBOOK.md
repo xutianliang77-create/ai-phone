@@ -1,5 +1,15 @@
 # 公有／私有模型配置页交付与操作说明
 
+## 2026-09-28 术语能力纠偏（当前源码，未部署）
+
+百炼[模型能力表](https://help.aliyun.com/zh/model-studio/asr-model)明确将`qwen3-asr-flash-realtime`及其快照的精度增强列为不支持；其[客户端事件参数](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-client-events)仅列`input_audio_transcription.language`，没有`corpus`。共享SDK能序列化字段、模拟服务回显字段或真实会话未报错，都不能据此声称该模型使用了热词。此前“Public ASR terminology prepared”只记录准备字节，不是效果证据。
+
+本次源码去除该未经证实的请求字段，公有ASR直接注入非空hotwords/corrections仍在联网前拒绝；正常产品词包不因此阻断在线模式，仍按签名snapshot/账号和实际语向交给MT。当前公开ASR适配器尚未实现经验证的术语增强，不借别的Qwen模型/协议能力冒充支持；不会自动切换模型。腾讯MT词库及其他已实现MT协议的术语能力保留。
+
+已选择的版本化技术标识可按完整同字符、不同空格的拼写匹配MT词项，例如`Nova3 A S R`匹配`Nova3 ASR`；不改原文、不补缺失字母/版本、不跨句或换行匹配，不使用其他账号/语向的词库。安全续接同样只识别既有缩写的等价拼写，保留5秒/3段/180字及speaker/turn/language/overlap条件。真实错识别“跟 Q A S R”不能凭预期答案恢复为某个模型名，必须保留为质量未通过，不能靠放宽合并规则掩盖。
+
+此轮仅源码/离线回归；现役be1a205/2803、模型参数和供应商配置不由该文档更新。准确度与新源实际供应商行为仍须后续同源资格/设备证据；未取得前不写成修复完成或发布通过。
+
 ## 现行操作入口（2026-09-26，优先于下方历史批次）
 
 当前部署参考源码为`e951519`，后续收口修复尚未部署。交付定位仍是隔离LAN QA，不是正式RC；最新指令要求先完成非测试工作，再集中验证，未更改线上配置或开关。当前候选/资格/未完成项见 [交付说明](CLOSEOUT_HANDOFF.md) 与 [现场清单](closeout-snapshot.json)。

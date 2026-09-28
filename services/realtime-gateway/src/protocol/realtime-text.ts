@@ -22,7 +22,9 @@ export function cleanRealtimeText(text: string | undefined | null) {
   const compact = collapsed
     .toLowerCase()
     .replace(/[\s,，.。!！?？;；:：、\-_\/|]+/g, "");
-  return ignorableText.has(compact) ? null : collapsed;
+  // Keep the original mobile cleaner's empty-after-punctuation semantics.
+  // A supplier final still travels as an empty revision/tombstone downstream.
+  return !compact || ignorableText.has(compact) ? null : collapsed;
 }
 
 function stripPromptLeak(text: string | undefined | null) {

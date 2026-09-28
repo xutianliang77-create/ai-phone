@@ -1,5 +1,20 @@
 {
   "schemaVersion": 1,
+  "latestContentTermsRepair20260928": {
+    "status": "source_host_wire_pass_asr_acoustic_quality_open",
+    "sourceBaseCommit": "be1a205126d1a308f3244e0311455d57bb3aa713",
+    "punctuation": "original Gateway cleaner now rejects empty-after-punctuation like original mobile; final retirement and failure terminals retained",
+    "asrTerminology": "qwen3-asr-flash-realtime documented unsupported; unverified corpus removed; authorized MT terms retained",
+    "safeContinuation": "same-character technical acronym spacing only; no missing name/version restoration; original speaker/language/window guards unchanged",
+    "backend": {"passed": 3396, "skipped": 8, "sourceOnly": true},
+    "flutter": {"passed": 917},
+    "sharedWire": {"passed": 14, "inputSegments": 17, "storedAndMobileSegments": 15, "translationCalls": 15, "ledgerCount": 1, "realModelCalls": 0, "realDatabaseWrites": 0},
+    "deviceVerified": false,
+    "deployed": false,
+    "currentDeployedSource": "be1a205126d1a308f3244e0311455d57bb3aa713",
+    "currentIosBuild": "2026092803",
+    "evidence": "artifacts/closeout-regression/20260928-content-terms/RESULT.md"
+  },
   "latestReviewFix20260928": {
     "status": "source_host_relevant_postgres_pass_ios_deferred_by_user",
     "sourceBaseCommit": "dd0ffc166b3e5bd57631b696b842d235d7495f47",

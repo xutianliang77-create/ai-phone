@@ -59,7 +59,8 @@ describe("original public session preparation and issuance phases",()=>{
     expect(verifyPublicTerminology(snapshot,claims)).toEqual(snapshot);
     expect(()=>verifyPublicTerminology({...snapshot,terms:[]},claims)).toThrow("binding_mismatch");
     const qwen=publicTerminologySessionFields(snapshot,"qwen_asr_realtime",input.processing.languagePolicy);
-    expect(qwen.asrHotwords).toContain("产品甲");expect(qwen.asrHotwords).toContain("Product Alpha");
+    expect(qwen.asrHotwords).toBeUndefined();
+    expect(qwen.terminology).toContainEqual(expect.objectContaining({id:"mine",sourceText:"产品甲",translatedText:"Product Alpha"}));
     expect(publicTerminologySessionFields(snapshot,"google_speech_v2",input.processing.languagePolicy).asrHotwords).toBeUndefined();
     expect(publicTerminologySessionFields(snapshot,"google_speech_v2",input.processing.languagePolicy).terminology).toEqual(qwen.terminology);
   });

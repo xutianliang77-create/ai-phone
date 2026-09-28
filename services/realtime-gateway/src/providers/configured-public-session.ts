@@ -109,7 +109,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
       (language.autoReverse&&(!automaticLanguage||!automaticPair))) {
     fail("public_session_language_not_supported");
   }
-  if (session.asrCorrections?.length || session.asrHotwords?.length && snapshot.components.asr?.protocol!=="qwen_asr_realtime") fail("public_session_asr_hints_not_implemented");
+  if (session.asrCorrections?.length || session.asrHotwords?.length) fail("public_session_asr_hints_not_implemented");
   const deviceSpeaker = options.deviceSpeakerEnabled === true && isDeviceSpeakerSelection(session.speakerAttribution);
   if (session.speakerAttribution && session.speakerAttribution.mode !== "off" && !deviceSpeaker) fail("public_session_speaker_not_implemented");
   if (session.speakerAttribution?.allowVoiceIdentity) fail("public_session_speaker_not_implemented");

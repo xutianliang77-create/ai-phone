@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "cases": [
+    {"input":"。","expected":null},
+    {"input":" . 。 ! ？ ; ： 、 - _ / | ","expected":null},
+    {"input":"<sil> 。 [noise]","expected":null},
+    {"input":"<|nospeech|>","expected":null},
+    {"input":"noise","expected":null},
+    {"input":"Okay.","expected":"Okay."},
+    {"input":"好。","expected":"好。"},
+    {"input":"嗯。","expected":"嗯。"},
+    {"input":"。 你好 <sil> 世界。","expected":"。 你好 世界。"},
+    {"input":"A-120","expected":"A-120"},
+    {"input":"3.14","expected":"3.14"},
+    {"input":"日本語。","expected":"日本語。"},
+    {"input":"مرحبا!","expected":"مرحبا!"}
+  ]
+}

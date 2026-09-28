@@ -63,6 +63,13 @@ function sourceTermAppears(text:string,term:string) {
     if((!/[a-z0-9_]/.test(word[0])||!/[a-z0-9_]/.test(source[at-1]??""))&&
       (!/[a-z0-9_]/.test(word.at(-1)!)||!/[a-z0-9_]/.test(source[at+word.length]??"")))return true;
   }
+  // A selected versioned identifier may be spelled with separated letters.
+  // Match exactly the same characters, never fuzzy names, missing digits or
+  // across sentence/newline boundaries. This selects MT terms, not ASR text.
+  if(term.length<=120&&/^[A-Za-z][A-Za-z0-9._/-]*[0-9][A-Za-z0-9._/-]*(?: +(?:ASR|TTS|MT|LLM|OCR|VAD|API|GPU|CPU))?$/u.test(term)){
+    const pattern=[...term.replace(/ /g,"")].map(char=>char.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("[ \\t]{0,4}");
+    return new RegExp(`(?:^|[^a-z0-9_])${pattern}(?![a-z0-9_])`,"i").test(text);
+  }
   return false;
 }
 
