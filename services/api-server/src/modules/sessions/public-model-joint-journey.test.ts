@@ -136,7 +136,7 @@ describe("original configured public model joint journeys",()=>{
     const batcher=new AudioFrameBatcher({sessionId:id,provider,send:dispatcher.send,onError:e=>errors.push(e),acceptFrame:f=>sink.acceptAudio(f),beforeSend:confirm,batchDelayMs:10000});
     createSession({sessionId:id,userId:"guest-user",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:true,planCode:"free",maxDurationSeconds:60,issuedAt:0,expiresAt:9999999999});
     const finalizer=new RealtimeSessionFinalizer({sessionId:id,provider,audioBatcher:batcher,send:dispatcher.send,drainSessionSync:drain,
-      flushTracker:tracker,onError:(_s,e)=>errors.push(e),confirmed:{beforeFlush:confirm},ttsOutput});
+      flushTracker:tracker,onError:(_s,e)=>errors.push(e),confirmed:{beforeFlush:confirm,freezeMeter:()=>sink.freezeMeter()},ttsOutput});
     let audioSequence=0;
     const boundary=async(n:number)=>{
       if(googleAsr&&n===1){batcher.enqueue({type:"audio.frame",sessionId:id,sequence:++audioSequence,timestampMs:Date.now(),format:"pcm16",sampleRate:asrRate,data:Buffer.alloc(asrRate*0.2).toString("base64")});

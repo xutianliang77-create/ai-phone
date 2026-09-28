@@ -89,7 +89,7 @@ export interface SessionSegmentDto {
   vadContext?: SegmentVadContextDto;
 }
 
-export type SessionSegmentStage =
+export type SessionSegmentStage = "translation_skipped"
   | "connection"
   | "asr"
   | "translation"

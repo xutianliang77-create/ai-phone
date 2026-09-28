@@ -40,6 +40,7 @@ export class AudioFrameBatcher {
   private closed = false;
   private queueEpoch=0;
   private lastAcceptedSequence=-1;
+  private lastSpeechStartSequence=-1;
   private boundary?:{sequence:number;task:Promise<void>};
   private pendingBoundaries=0;
   private processingFailure?:Error;
@@ -112,6 +113,13 @@ export class AudioFrameBatcher {
       processedBatchCount: this.processedBatchCount,
       droppedFrameCount: this.droppedFrameCount,
     };
+  }
+
+  confirmSpeechStart(sequence:number):"new"|"duplicate"|"rejected" {
+    if(!this.options.acceptFrame||!this.accepting||this.closed||!Number.isSafeInteger(sequence)||sequence<0)return "rejected";
+    if(sequence===this.lastSpeechStartSequence)return "duplicate";
+    if(sequence!==this.lastAcceptedSequence||sequence<this.lastSpeechStartSequence)return "rejected";
+    this.lastSpeechStartSequence=sequence;return "new";
   }
 
   private canAppend(frame: AudioFrame) {

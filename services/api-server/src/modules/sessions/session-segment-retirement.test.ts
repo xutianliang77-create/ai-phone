@@ -6,6 +6,21 @@ import {segmentRetirementAck,sessionSegmentRevisionWatermarks} from "./session-s
 import {isValidSegmentPatch} from "../realtime/realtime-segment-validation.js";
 const record=()=>({id:"session",segments:[{id:"child",sourceText:"before",translatedText:"translated",revision:1}],processingAuthorization:{processingMode:"online"}} as SessionRecord);
 describe("durable public caption retirement",()=>{
+  it("accepts current MT and speaker metadata only after a newer source has restored the caption",()=>{
+    const s=record();applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:2,retired:true});
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:3,translatedText:"premature"});
+    expect(s.segments).toEqual([]);
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:3,sourceText:"restored"});
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:3,translatedText:"current",targetLanguage:"en"});
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:3,speakerRevision:1,
+      speaker:{speakerId:"device-speaker-2",role:"speaker",source:"diarization"},timing:{startMs:1000,endMs:2000,source:"estimated"}});
+    expect(s.segments[0]).toMatchObject({revision:3,sourceText:"restored",translatedText:"current",
+      speaker:{speakerId:"device-speaker-2"},timing:{startMs:1000,endMs:2000}});
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:2,translatedText:"stale"});
+    applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:2,retired:true});
+    expect(s.segments[0].translatedText).toBe("current");
+    expect(sessionSegmentRevisionWatermarks(s)).toEqual({child:3});
+  });
   it("is idempotent, rejects stale revival and permits a genuinely newer source revision",()=>{
     const s=record();applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:2,retired:true});
     applyStoredSessionSegmentPatch(s,{segmentId:"child",revision:2,retired:true});

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_session.dart';
 import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_gateway_client.dart';
+import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 class Wire {
@@ -37,6 +38,27 @@ class Wire {
 }
 const frame = AudioFrame(sequence: 1, timestampMs: 0, sampleRate: 16000, bytes: [0, 0]);
 void main() {
+  test('speech-start acknowledgements require the exact integer sequence', () {
+    for(final type in ['audio.speech_started.confirmed','audio.speech_started.rejected']) {
+      for(final sequence in [null,7.1,'7']) {
+        expect(()=>GatewayRealtimeEvent.fromJson({'type':type,'sessionId':'session','sequence':sequence}),throwsFormatException);
+      }
+      expect(GatewayRealtimeEvent.fromJson({'type':type,'sessionId':'session','sequence':7}).sequence,7);
+    }
+  });
+  test('same-socket speech start follows unchanged PCM and consumes its cancellation ACK', () async {
+    final h=Wire();await h.setup();addTearDown(h.close);
+    final connect=h.client.connect(h.session()),peer=await h.peer.future;
+    peer.add(jsonEncode({'type':'session.started','sessionId':'session'}));await connect;
+    expect(h.client.sendAudio('session',const AudioFrame(sequence:7,timestampMs:0,
+      sampleRate:16000,bytes:[1,0,2,0],startsSegment:true)),isTrue);
+    await _waitFor(()=>h.frames.any((f)=>f['type']=='audio.speech_started'));
+    final sent=h.frames.where((f)=>f['type']=='audio.frame'||f['type']=='audio.speech_started').toList();
+    expect(sent.map((f)=>f['type']),['audio.frame','audio.speech_started']);
+    expect(sent.first['data'],base64Encode([1,0,2,0]));expect(sent.last['sequence'],7);
+    peer.add(jsonEncode({'type':'audio.speech_started.confirmed','sessionId':'session','sequence':7}));
+    await Future<void>.delayed(const Duration(milliseconds:10));
+  });
   test('public transport handshake does not admit audio before matching session.started', () async {
     final h = Wire();await h.setup();addTearDown(h.close);bool ready = false;
     final connect = h.client.connect(h.session()).then((_) => ready = true), peer = await h.peer.future;

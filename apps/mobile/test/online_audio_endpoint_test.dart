@@ -24,6 +24,16 @@ class Detector implements AudioEndpointDetector {
   }
 }
 
+class StartDetector extends Detector implements SpeechStartEndpointDetector {
+  @override
+  bool speechStarted = false;
+  @override
+  Future<bool> accept(AudioFrame frame) async {
+    speechStarted = frame.sequence == 1;
+    return super.accept(frame);
+  }
+}
+
 AudioFrame frame(int n, {int samples = 960}) => AudioFrame(
     sequence: n,
     timestampMs: 1788883200000 + n,
@@ -31,6 +41,15 @@ AudioFrame frame(int n, {int samples = 960}) => AudioFrame(
     bytes: List<int>.filled(samples * 2, n));
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('confirmed speech start is forwarded independently of the later endpoint', () async {
+    final output=<AudioFrame>[], errors=<Object>[];
+    final p=OnlineAudioEndpointProcessor(StartDetector(),output.add,errors.add);
+    await p.start(24000);p.add(frame(1));p.add(frame(2));await p.stop();
+    expect(errors,isEmpty);
+    expect(output.map((f)=>f.startsSegment),[true,false]);
+    expect(output.map((f)=>f.endsSegment),[false,true]);
+    expect(output.first.bytes,frame(1).bytes);
+  });
   const channel = MethodChannel('translation_mobile/apple_speech_asr');
   const androidChannel = MethodChannel('translation_mobile/android_audio_endpoint');
   test('the ordinary capture factory selects the Android endpoint only on Android', () {

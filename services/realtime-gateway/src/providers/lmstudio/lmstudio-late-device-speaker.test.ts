@@ -44,6 +44,16 @@ function fixture(publicMode=true){
 }
 afterEach(()=>vi.useRealTimers());
 describe("late validated phone evidence and original public semantic assembly",()=>{
+  it("decides eligibility when evidence arrives, before later queued audio processing",async()=>{
+    vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
+    try{
+      await f.feed();vi.setSystemTime(14245);await f.feed();
+      vi.setSystemTime(14999);f.evidence([[0,0,2000]]);
+      expect(f.translate).toHaveBeenCalledTimes(2); // Receipt never dispatches MT.
+      vi.setSystemTime(15008);
+      expect((await f.feed()).filter(e=>e.type==="translation.final")).toMatchObject([{segmentId:"a",revision:2}]);
+    }finally{await f.provider.closeSession("late");}
+  });
   it.each(["before_second","after_second"])("retains bounded late-speaker repair across audio boundary %s",async boundary=>{
     vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
     const drain=()=>flushProviderSession(f.provider,"late",()=>{},{failOnError:true,reason:"audio_boundary"});
@@ -74,7 +84,7 @@ describe("late validated phone evidence and original public semantic assembly",(
     try{
       await f.feed();vi.setSystemTime(11000);await f.feed();
       vi.setSystemTime(14999);await flushProviderSession(f.provider,"late",()=>{},{reason:"audio_boundary"});
-      f.evidence([[0,0,2000]]);vi.setSystemTime(15001);
+      vi.setSystemTime(15001);f.evidence([[0,0,2000]]);
       expect((await f.feed()).filter(e=>e.type==="translation.final")).toEqual([]);expect(f.translate).toHaveBeenCalledTimes(2);
     }finally{await f.provider.closeSession("late");}
   });
@@ -116,6 +126,7 @@ describe("late validated phone evidence and original public semantic assembly",(
     vi.useFakeTimers();vi.setSystemTime(10000);const f=fixture();await f.provider.createSession(f.session);
     try{
       await f.feed();vi.setSystemTime(11000);await f.feed();
+      if(scenario==="expired")vi.setSystemTime(15001);
       if(scenario==="different_speakers")f.evidence([[0,0,1000],[1,1000,2000]]);
       else if(scenario==="short_rival")f.evidence([[1,0,135],[0,135,2000]]);
       else if(scenario==="incomplete_evidence")f.evidence([[0,0,1800]],1800);

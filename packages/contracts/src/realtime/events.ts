@@ -87,6 +87,17 @@ export interface TranslationFailedEvent {
   retryable?: boolean;
 }
 
+/** A terminal local routing decision, not an MT attempt or a translation. */
+export interface TranslationSkippedEvent {
+  type: "translation.skipped";
+  sessionId: string;
+  segmentId: string;
+  turnId?: string;
+  revision?: number;
+  language: TranslationLanguageCode;
+  reason: "same_language";
+}
+
 export interface UsageTickEvent {
   type: "usage.tick";
   sessionId: string;
@@ -170,18 +181,21 @@ export type ClientRealtimeEvent =
   | DeviceSpeakerEvidenceEvent
   | ClientTextSegmentEvent
   | { type: "audio.boundary"; sessionId: string; sequence: number }
+  | { type: "audio.speech_started"; sessionId: string; sequence: number }
   | { type: "session.pause"; sessionId: string }
   | { type: "session.resume"; sessionId: string; recovery?: {lastAcceptedSample:number;nextSequence:number} }
   | { type: "session.voice_output"; sessionId: string; enabled: boolean; presetId?: string }
   | { type: "session.end"; sessionId: string };
 
 export type ServerRealtimeEvent =
+  | {type:"audio.speech_started.confirmed"|"audio.speech_started.rejected";sessionId:string;sequence:number}
   | {type:"audio.boundary.committed"|"audio.boundary.rejected";sessionId:string;sequence:number;code?:string}
   | SessionStartedEvent
   | TranscriptEvent
   | TranslationEvent
   | SpeakerUpdatedEvent
   | TranslationFailedEvent
+  | TranslationSkippedEvent
   | AudioOutput
   | UsageTickEvent
   | SessionPausedEvent

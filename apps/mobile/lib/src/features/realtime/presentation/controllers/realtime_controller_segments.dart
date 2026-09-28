@@ -84,7 +84,7 @@ extension RealtimeControllerSegments on RealtimeController {
         (isNewerRecognitionRevision || current.speakerRevision == null ||
             speakerRevision != null && speakerRevision >= current.speakerRevision!);
     if (isNewerRecognitionRevision || isNewerEventRevision) {
-      _cancelPublicAudioForRevision(id, revision);
+      _cancelPublicAudioForRevision(id, revision, inclusive: false);
     }
     final nextRevision = revision == null
         ? current.revision

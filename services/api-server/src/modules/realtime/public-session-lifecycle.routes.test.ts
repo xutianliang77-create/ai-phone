@@ -33,6 +33,30 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await app.close();vi.useRealTimers();vi.unstubAllEnvs();vi.restoreAllMocks();});
 
+it.each([30,120])('freezes client metering before tail persistence with a %s second hold',async hold=>{
+  storage.getStoreSnapshot().usageHolds[0].seconds=hold;
+  await publish(1,'active');clock(30);
+  const frozen=await publish(2,'active',{meterStopped:true,lastAcceptedSample:480000});
+  expect(frozen.statusCode).toBe(200);
+  expect(frozen.json()).toMatchObject({meterStopped:true,meterStatus:'verified'});
+  expect(current().publicRuntime!.activeMs).toBe(30000);
+  expect((await publicRecoveryStatus('public-s','guest-user')).canResume).toBe(false);
+  clock(34);
+  // Tail writes may advance the caption revision, never audio or client time.
+  expect((await publish(3,'active',{meterStopped:true,lastAcceptedSample:480000,finalRevision:5})).statusCode).toBe(200);
+  expect((await publish(4,'stopped',{meterStopped:true,lastAcceptedSample:480000,finalRevision:5})).statusCode).toBe(200);
+  expect(current().consumedSeconds).toBe(30);
+  expect(storage.getStoreSnapshot().billingLedger.filter(l=>l.idempotencyKey==='settle:public-s')).toHaveLength(1);
+});
+it('does not permit a frozen meter to resume or accept new audio',async()=>{
+  await publish(1,'active');clock(10);
+  expect((await publish(2,'active',{meterStopped:true,lastAcceptedSample:160000})).statusCode).toBe(200);
+  const saved=state();clock(11);
+  expect((await publish(3,'active',{lastAcceptedSample:160000})).statusCode).toBe(409);
+  expect((await publish(3,'active',{meterStopped:true,lastAcceptedSample:176000})).statusCode).toBe(409);
+  expect(state()).toEqual(saved);
+});
+
 it('uses observed active time, excludes pause, freezes stop and settles exactly once',async()=>{
   expect((await publish(1,'active')).statusCode).toBe(200);
   clock(10);await publish(2,'paused');clock(70);await publish(3,'active');clock(75);

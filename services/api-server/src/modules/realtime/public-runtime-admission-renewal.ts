@@ -96,7 +96,7 @@ export function createPublicRuntimeAdmissionRenewer(authority:PublicRealtimeAuth
 function eligible(session:SessionRecord,event:PublicRuntimeObservation){
   const runtime=session.publicRuntime,policy=session.publicRuntimePolicy,issued=session.publicRealtimeIssuance;
   return event.phase==="active"&&session.status==="active"&&runtime?.phase==="active"&&!runtime.uncertain&&
-    !runtime.stoppedAt&&!session.accountDeletionRequestedAt&&!session.finalizedAt&&!session.publicFinalization&&
+    !runtime.stoppedAt&&!runtime.meterStoppedAt&&!event.meterStopped&&!session.accountDeletionRequestedAt&&!session.finalizedAt&&!session.publicFinalization&&
     !session.finalizationIdempotencyKey&&!!session.publicModelConfiguration&&!!policy&&!!issued&&
     !issued.claims.qaOneShot&&issued.claims.maxDurationSeconds===undefined&&policy.maxActiveSeconds===undefined&&
     event.leaseId===policy.leaseId&&event.captureId===policy.captureId&&event.languagePolicyKey===policy.languagePolicyKey&&

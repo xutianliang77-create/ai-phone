@@ -41,6 +41,7 @@ export class RealtimeTtsOutputQueue {
    * the inherited output queue, so a later correction cannot speak an older
    * translation while the session remains active. */
   private readonly revisionBySegment = new Map<string, number>();
+  private readonly sourceRevisionBySegment = new Map<string, number>();
   private readonly retiredSegments = new Set<string>();
   private readonly operations = new Set<Promise<void>>();
 
@@ -60,6 +61,14 @@ export class RealtimeTtsOutputQueue {
   }
 
   enqueue(event: ServerRealtimeEvent, send: (event: ServerRealtimeEvent) => void) {
+    if(this.options.retireSupersededSegments&&event.sessionId===this.options.sessionId&&!this.closed){
+      if(event.type==="transcript.final"&&event.text!==""&&Number.isSafeInteger(event.revision)&&event.revision!>=0){
+        this.advanceSource(event.segmentId,event.revision!);return;
+      }
+      if(event.type==="translation.failed"||event.type==="translation.skipped"){
+        this.retire(event.segmentId,event.revision);return;
+      }
+    }
     if(this.options.retireSupersededSegments&&event.type==="transcript.final"&&event.text===""&&
       event.sessionId===this.options.sessionId&&!this.closed){this.retire(event.segmentId,event.revision);return;}
     if (event.type !== "translation.final" || event.sessionId !== this.options.sessionId
@@ -69,6 +78,7 @@ export class RealtimeTtsOutputQueue {
     const revision = Number.isSafeInteger(event.revision) && event.revision! >= 0
       ? event.revision
       : undefined;
+    if((revision??-1)<(this.sourceRevisionBySegment.get(event.segmentId)??-1))return;
     const prior = revision === undefined
       ? undefined
       : this.revisionBySegment.get(event.segmentId);
@@ -100,6 +110,17 @@ export class RealtimeTtsOutputQueue {
       return;
     }
     this.schedule(event, send);
+  }
+
+  private advanceSource(segmentId:string,revision:number){
+    if(revision<=(this.sourceRevisionBySegment.get(segmentId)??-1))return;
+    this.sourceRevisionBySegment.set(segmentId,revision);
+    if(this.active?.event.segmentId===segmentId&&(this.active.event.revision??-1)<revision){
+      const retained=[...this.pending].filter(item=>!item.started&&this.isCurrentRevision(item.event));
+      this.cancelPending();for(const item of retained)this.schedule(item.event,item.send);
+    }else{
+      for(const item of this.pending)if(!this.isCurrentRevision(item.event))this.pending.delete(item);
+    }
   }
 
   private retire(segmentId:string,revision:number|undefined){
@@ -153,6 +174,7 @@ export class RealtimeTtsOutputQueue {
     this.resetGeneration();
     this.options.synthesizer.closeSession(this.options.sessionId);
     this.revisionBySegment.clear();
+    this.sourceRevisionBySegment.clear();
     this.retiredSegments.clear();
   }
 
@@ -160,6 +182,16 @@ export class RealtimeTtsOutputQueue {
     if (this.closed) return;
     this.resetGeneration();
     this.options.synthesizer.cancelSession(this.options.sessionId);
+  }
+
+  interrupt() {
+    if(this.closed)return;
+    this.cancelPending();
+    // Also invalidate known source revisions whose MT is still in flight.
+    for(const [id,revision] of this.sourceRevisionBySegment){
+      this.revisionBySegment.set(id,Math.max(revision,this.revisionBySegment.get(id)??-1));
+    }
+    for(const id of this.revisionBySegment.keys())this.retiredSegments.add(id);
   }
 
   /** Public control barrier: cancelled tail translations must not restart speech
@@ -187,7 +219,8 @@ export class RealtimeTtsOutputQueue {
   }
 
   private isCurrentRevision(event: TranslationEvent) {
-    return !this.retiredSegments.has(event.segmentId)&&(event.revision === undefined || this.revisionBySegment.get(event.segmentId) === event.revision);
+    return !this.retiredSegments.has(event.segmentId)&&(event.revision??-1)>=(this.sourceRevisionBySegment.get(event.segmentId)??-1)&&
+      (event.revision === undefined || this.revisionBySegment.get(event.segmentId) === event.revision);
   }
 
   private canEmit(generation: number) {

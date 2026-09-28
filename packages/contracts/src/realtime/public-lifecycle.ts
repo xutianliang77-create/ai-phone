@@ -5,6 +5,9 @@ export interface PublicRuntimeObservation extends RealtimeStopWatermark {
   leaseId: string;
   sequence: number;
   phase: "active" | "paused" | "disconnected" | "stopped";
+  /** Gateway-only irreversible stop of client metering/audio acceptance.
+   * Tail inference and caption persistence may finish before phase=stopped. */
+  meterStopped?: true;
   /**
    * Internal Gateway-only marker for a stopped stream whose supplier outcome
    * cannot be confirmed. It is never a mobile command and is invalid for an

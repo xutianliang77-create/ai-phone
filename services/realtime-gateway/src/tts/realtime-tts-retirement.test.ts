@@ -16,6 +16,16 @@ function fixture(retireSupersededSegments=true){
     cleanup:async()=>{release.resolve();queue.close();await queue.drainInFlight();}};
 }
 describe("public empty-final retirement preserves unrelated speech",()=>{
+  it.each([false,true])("invalidates obsolete synthesis as soon as source advances; MT fails=%s",async failed=>{
+    const f=fixture();try{
+      f.enqueue(event("a"));await f.entered.promise;f.enqueue(event("b"));f.enqueue(event("c"));
+      f.enqueue({...tombstone("b",2),text:"Updated source."});
+      if(failed)f.enqueue({type:"translation.failed",sessionId:"s",segmentId:"b",revision:2,language:"en",message:"failed"});
+      f.release.resolve();await f.queue.drain();
+      expect(f.calls).toEqual(["a:1","c:1"]);
+      if(!failed){f.enqueue(event("b",2));await f.queue.drain();expect(f.calls.at(-1)).toBe("b:2");}
+    }finally{await f.cleanup();}
+  });
   it.each(["active","queued"])("cancels an absorbed %s segment and retains unrelated pending output",async which=>{
     const f=fixture();try{
       f.enqueue(event("a"));await f.entered.promise;f.enqueue(event("b"));f.enqueue(event("c"));
@@ -32,11 +42,11 @@ describe("public empty-final retirement preserves unrelated speech",()=>{
       expect(f.calls).toEqual(["b:3"]);
     }finally{await f.cleanup();}
   });
-  it("does not accept another session, invalid revisions, or a nonempty transcript as retirement",async()=>{
+  it("rejects invalid retirement and accepts MT matching a nonempty current transcript",async()=>{
     const f=fixture();try{
       f.enqueue({...tombstone("b"),sessionId:"other"});f.enqueue({...tombstone("b"),revision:undefined});
       f.enqueue({...tombstone("b"),revision:-1});f.enqueue({...tombstone("b"),text:"Still valid."});
-      f.enqueue(event("b"));await f.queue.drain();expect(f.calls).toEqual(["b:1"]);
+      f.enqueue(event("b",2));await f.queue.drain();expect(f.calls).toEqual(["b:2"]);
     }finally{await f.cleanup();}
   });
   it("preserves the default private queue behavior",async()=>{

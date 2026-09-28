@@ -126,6 +126,8 @@ class RealtimeController extends ChangeNotifier {
   final Map<String, int> _cancelledPublicAudioRevisions = <String, int>{};
   String? _activePublicAudioSegmentId;
   int? _activePublicAudioRevision;
+  Completer<void>? _activePublicAudioCancellation;
+  Future<void>? _publicAudioStopBarrier;
   RealtimeStatus _status = RealtimeStatus.idle;
   final List<SubtitleSegment> _segments = <SubtitleSegment>[];
   final _asrDraftIds = <String>{};
@@ -162,6 +164,9 @@ class RealtimeController extends ChangeNotifier {
   final _localResources = _LocalResourceState();
 
   RealtimeStatus get status => _status;
+  /// The current signed session selection, never a stale process readiness flag.
+  bool? get publicSpeakerEnabled => _session?.syncBinding == null ? null :
+      _session!.deviceSpeakerProfile != null;
   List<SubtitleSegment> get segments => List.unmodifiable(_segments);
   String? get message => _message ?? _checkpointWarning;
   int? get remainingSeconds => _remainingSeconds;

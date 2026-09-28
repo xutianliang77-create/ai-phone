@@ -11,6 +11,7 @@ class PublicRepository extends FakeRealtimeRepository {
   final order = <String>[];
   bool public = true, boundaryAccepted = true;
   int captureSampleRate = 24000;
+  String? speakerProfile;
   Completer<bool>? boundary;
   @override
   Future<RealtimeSession> startSession() async {
@@ -21,6 +22,7 @@ class PublicRepository extends FakeRealtimeRepository {
         endpoint: original.endpoint,
         expiresAt: original.expiresAt,
         maxDurationSeconds: 60,
+        deviceSpeakerProfile: speakerProfile,
         syncBinding: public
             ? ResultSyncBinding(
                 deploymentId: 'public',
@@ -48,12 +50,12 @@ class Capture extends FakeAudioCapture {
   bool tail = false;
   @override
   Stream<AudioFrame> get frames => stream.stream;
-  void emit(int n, {bool endpoint = false}) => stream.add(AudioFrame(
+  void emit(int n, {bool endpoint = false, bool speechStart = false}) => stream.add(AudioFrame(
       sequence: n,
       timestampMs: 1788883200000,
       sampleRate: 24000,
       bytes: List<int>.filled(4800, 0),
-      endsSegment: endpoint));
+      endsSegment: endpoint, startsSegment: speechStart));
   @override
   Future<void> stop() async {
     await super.stop();
@@ -72,6 +74,26 @@ class Capture extends FakeAudioCapture {
 }
 
 void main() {
+  test('a tail boundary alone does not interrupt a newly playing response', () async {
+    final gate=SpeechCaptureGate(),capture=Capture();
+    final controller=realtimeControllerForTest(PublicRepository(),capture,speechCaptureGate:gate);
+    try {
+      await controller.start();gate.beginPlayback(text:'current response',language:'en');
+      capture.emit(1,endpoint:true);await pumpEventQueue();expect(gate.isPlaying,isTrue);
+      capture.emit(2,speechStart:true);await pumpEventQueue();expect(gate.isPlaying,isFalse);
+    } finally { await controller.disposeAsync(); }
+  });
+  test('speaker indicator follows this signed session, not readiness changed afterwards', () async {
+    final repo=PublicRepository(),controller=realtimeControllerForTest(repo,Capture());
+    try {
+      expect(controller.publicSpeakerEnabled,isNull);
+      await controller.start();expect(controller.publicSpeakerEnabled,isFalse);
+      repo.speakerProfile='sortformer_v2_1_fastest';
+      expect(controller.publicSpeakerEnabled,isFalse);
+      await controller.stop();await controller.start();
+      expect(controller.publicSpeakerEnabled,isTrue);
+    } finally { await controller.disposeAsync(); }
+  });
   test('public capture uses the declared 16k rate without changing the private default', () async {
     final repo = PublicRepository()..captureSampleRate = 16000, capture = Capture();
     final controller = realtimeControllerForTest(repo, capture);
@@ -162,15 +184,15 @@ void main() {
     addTearDown(controller.disposeAsync);
     await controller.start();
     speechGate.beginPlayback(text: 'voice', language: 'en');
-    capture.emit(1, endpoint: true);
+    capture.emit(1, speechStart: true);
     await pumpEventQueue();
-    expect(repo.order, ['frame:1', 'boundary']);
+    expect(repo.order, ['frame:1']);
     expect(speechGate.playbackActive, isFalse);
     speechGate.endPlayback();
     now = now.add(const Duration(seconds: 1));
-    capture.emit(2);
+    capture.emit(2, endpoint:true);
     await pumpEventQueue();
-    expect(repo.order, ['frame:1', 'boundary', 'frame:2']);
+    expect(repo.order, ['frame:1', 'frame:2', 'boundary']);
   });
   test('Bluetooth speech interrupts public playback without treating it as speaker echo',
       () async {
@@ -184,9 +206,9 @@ void main() {
     speechGate.beginPlayback(text: 'voice', language: 'en');
     expect(speechGate.playbackActive, isFalse);
     expect(speechGate.isPlaying, isTrue);
-    capture.emit(1, endpoint: true);
+    capture.emit(1, speechStart: true);
     await pumpEventQueue();
-    expect(repo.order, ['frame:1', 'boundary']);
+    expect(repo.order, ['frame:1']);
     expect(speechGate.isPlaying, isFalse);
   });
 }

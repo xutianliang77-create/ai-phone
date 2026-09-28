@@ -29,6 +29,14 @@ function inspect(value: unknown, scope: PublicRuntimeLiveQualificationExpectatio
 }
 afterEach(() => { if (directory) rmSync(directory, { recursive: true, force: true }); directory = ""; });
 describe("signed public runtime live qualification", () => {
+  it("accepts the Google models/ identifier shape already supported by configuration and Adapter",()=>{
+    const providers=[{component:"asr" as const,providerId:"tencent",modelId:"16k_en"},
+      {component:"translation" as const,providerId:"google",modelId:"models/gemini-test"}];
+    expect(inspect(evidence({providers}))).toMatchObject({status:"ready"});
+    for(const modelId of ["models/../secret","models/..","models/","models/a?key=b","models/a\n"]){
+      expect(inspect(evidence({providers:[providers[0],{...providers[1],modelId}]}))).toMatchObject({status:"not_ready"});
+    }
+  });
   it("accepts an exact, fresh provider observation", () => {
     expect(inspect(evidence())).toMatchObject({ status: "ready", evidence: { evidenceId: "live-test" } });
   });

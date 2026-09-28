@@ -5,6 +5,23 @@ import type { RealtimeSession } from "../sessions/realtime-session.js";
 import type { SessionEventSink } from "../sessions/session-event-sink.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
 import type { DeviceSpeakerTimeline } from "../speaker/device-speaker-timeline.js";
+import type {AudioFrameBatcher} from "./audio-frame-batcher.js";
+import type {RealtimeTtsOutputQueue} from "../tts/realtime-tts-output.js";
+import {freezeSessionBilling} from "../sessions/session-manager.js";
+export {handlePublicSpeechStart} from "./public-speech-start.js";
+
+/** Physical stop and metering freeze must not wait behind a slow control. */
+export function preparePublicStop(event:ClientRealtimeEvent,session:RealtimeSession,sink:SessionEventSink,
+  batcher:AudioFrameBatcher,tts:RealtimeTtsOutputQueue,onFailure:()=>void) {
+  if(!sink.requiresConfirmation||event.sessionId!==session.id||
+    (event.type!=="session.pause"&&event.type!=="session.end"))return false;
+  tts.suspend();batcher.pauseAccepting();
+  if(event.type==="session.end"){
+    freezeSessionBilling(session.id);
+    void (sink.freezeMeter?.()??Promise.reject(Error("public_meter_freeze_sink_required"))).catch(onFailure);
+  }
+  return true;
+}
 
 export function handleDeviceSpeakerEvidence(event: ClientRealtimeEvent, session: RealtimeSession,
     sink: SessionEventSink, provider: RealtimeProvider, timeline?: DeviceSpeakerTimeline) {

@@ -1,5 +1,41 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## 2026-09-28深审修复：源码/HOST/相关实库通过，新的同源候选与iOS按用户安排待局域网
+
+本节为最新开发检查点，以下dd0部署/2802设备记录保持历史归属。本轮R20260928-01至08在原路径修复，未推送、部署、安装、开麦或真实模型调用；不更换模型/VAD、不改价格/旧账、不恢复测试守卫。用户现处另一局域网并选择“先完成可独立交付部分”，App地址不变。
+
+核心变化：可信结束在接收控制时冻结Gateway/API计量，固定音频水位但允许尾句持久化；退休字幕高版本恢复后可以保存当前译文/元数据；字幕修订只取消本段PCM，保留其他段。Flush汇总按revision处理，源更新废止旧TTS；同语言增加无需翻译终态；Google模型资源名可按原Adapter规则资格化；手机复用原VAD起点信号，按原PCM序号取消旧播放/合成，不用句尾代替插话。
+
+说话人证据现在于通过校验时做合并判定，再由原串行队列投递，避免4999ms到达的数据在5008ms处理时误过期。5秒/3段/180字和unknown/overlap/rival保护保持。页面显示本次签发的分人状态，不用旧进程ready或后来ready冒充当前已启用。冷加载、1.5秒等待及真实分人准确率仍保留原边界。
+
+集中后端401文件2729通过、8专用项默认跳过；其中本次真实PG另1通过，余7未重跑。Flutter904通过，后续仅测试文件适配合法恢复场景，旧/新实库wire各3通过，产品Dart未改。Node build、Dart分析、双版本40/40、行数/diff、Swift VAD HOST/桥语法、Android原生编译/3例通过；不是iOS目标构建/DEVICE。
+
+原Provider→HTTP→隔离PG→关闭重启回读→原Flutter验证parent/child rev3、译文/说话人/时间轴一致，30秒结束+4秒尾句唯一扣30秒。3500个后端源/编译文件与本地一致的Beelink同机测试417ms通过，未放宽原90秒上限；Mac跨网超时、初次挂载缺依赖等失败均保留。主QA计数42/41/39/473前后不变，临时测试库已删除。
+
+运行时输入SHA：1b333917749cba2c28ad85ddbe190a86ad929810dccdc024dbace596ccd56ed2；完整结果在外层artifacts/closeout-regression/20260928-review-fix/RESULT.md、verification.json，保护提交/源码包见delivery.json。源码保护不等于发行。
+
+下一步：局域网恢复后再制作一份新同源App/API/Gateway和对应资格，继续iOS受影响验收；不重开已签收14笔测试遗留，不先做Android设备。回退需先排空会话并核实没有未封存frozen-meter状态，不能只回退单个组件、清掉字段或拿1.0库覆盖新数据。CO11-15/16/18仍未完成。
+
+## 2802已安装；本轮speaker未就绪选off，用户暂不重试（2026-09-28最新）
+
+用户继续后手机解锁，已只升级一次同Bundle2026092802并普通启动。原online/auto→auto_reverse/zh,en/voice off/product设置保留，服务端仍dd0/imagee610/env508f5ed、资格有效。初始启动PID31177有91871ms后ready，后续当前进程变为31341；旧ready不能证明新进程就绪，先前口径纠正。
+
+用户点开始后新进程于01:56:45重新loading，1501/1502ms等待均超时、01:56:47 local_not_ready，01:56:48以mode off创建，01:56:49模型3780ms后才ready。原1.5秒等待后匿名降级／会话body不变逻辑导致本次未启用speaker，并非服务器未提供能力或模型丢失。观察器因此没有播放固定音，只停止观察、不关入口/杀App。不能算合并/断句/朗读通过或失败。
+
+用户结束并明确暂不重试，已停止新会话／测试。public-1e4ce85a…4813e8正常ended，手机/服务器0段、pending0、ASR1 confirmed、MT/TTS0、唯一101秒，无runtime/provider/meter不确定，Gateway连接0。仅绑定同PID31341的新ready和本地测试前置核验，不修改产品1.5秒／模型／VAD／窗口；后续用户恢复时同包同进程准备通过后再采有效样本。CO11-15/16/18仍开，无业务代码/部署/push新增。
+
+证据外层20260928-persistence-dd0ffc1/passive-persistence-silent-1-assessment.json、verification-device-stage.json及追加RESULT；选中的本会话checkpoint保留，只删本轮全量临时副本398757字节，原手机/账务/回滚均保留。观察器和播放器均无活动，原QA入口开放，不声称后台重试。本段为文档交接，候选source仍dd0。
+
+## dd0ffc1同源候选已部署，手机升级待解锁（2026-09-28，当前检查点）
+
+用户确认进入同源受影响验证。本轮未改业务代码／VAD／模型／窗口，仅从dd0ffc166b3e5bd57631b696b842d235d7495f47/tree6c35ca1d5c99ceaf4890ab18f28422e448b8904b制作一次profile/full iOS2026092802及同源镜像e610f8796dfc0e3b3947a919791d418d7af7fa99ba7610cd856e37504832c8a9。实际7个local define与模型资源/签名/符号过，App SHA c922d166…5a440；42个服务端变化源码/编译文件与HOST一致。
+
+原隔离QA活动连接0时更新dd0，envSHA508f5ed14f2011e41e93535cd78fba1e6b36ff5e63173af5a53ad2d33b97c6fa。原r2 Qwen ASR+Tencent MT/可选TTS、Volume+4、术语及Fastest/cache31保持。新源码静音/朗读真实资格各8原译文/唯一29秒，朗读26块545600字节8完整段；签名后production双配置qualified、API/PG/HTTPS和Gateway ready。资格至北京时间9月29日03:20/03:22，非会话时长上限；入口开放、取消的守卫未恢复。旧1554容器app-pre-dd0ffc1/环境/资格与2801包保留。
+
+手机可配对读取但passcodeRequired=true，已询问用户解锁/就位尚无回复，实际仍2026092801。**未安装新包、未开麦/播放或进行真机验证**；不能将数字PCM资格当作断句/说话人/听音通过。下一步仅升级一次2802、核新进程speaker ready，再原70秒静音→逐字段历史/唯一结算及到达/expiry诊断→通过后受影响朗读短测；CO11-15/16/18仍开。观察器和播放器尚未启动。
+
+23个persistdd-*命令原生退出0，候选证据在外层artifacts/closeout-regression/20260928-persistence-dd0ffc1/RESULT.md和verification.json；包与符号在artifacts/releases/wujie-co11-qa-dd0ffc1-2026092802。仅清本轮可重建编译中间目录、两份临时Bearer，所有旧包/模型/数据/回滚保留，Mac约4.3GiB、Beelink/data约1014GiB可用。无push/合并/正式发布；本段文档更新不改变候选source dd0。
+
 ## 保存修复与贯通回归（2026-09-28，优先于下方诊断检查点）
 
 按用户要求先修两处已证实保存缺陷，再核查实时未合并条件，没有调VAD／模型／5秒策略或制作部署包。公共Sink将原版本化空文本撤回写入既有API；原事务保存retired revision并禁止旧原文／译文／metadata／快照复活。正文版本内比较speakerRevision，新正文的完整timing与speaker可更新，私有1.0默认行为保留。停止水位包含撤回版本，未确认保存不得假成功。

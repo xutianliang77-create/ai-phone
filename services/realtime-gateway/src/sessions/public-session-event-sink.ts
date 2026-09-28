@@ -21,6 +21,8 @@ export class PublicSessionEventSink implements SessionEventSink {
   private failure:Error|undefined;
   private sequence=0;
   private phase:PublicRuntimeObservation["phase"]|undefined;
+  private freezePromise?:Promise<void>;
+  private meterStopped=false;
   private samples=0;
   private frameSequence=-1;
   private revision=0;
@@ -40,7 +42,7 @@ export class PublicSessionEventSink implements SessionEventSink {
    * The watermark counts received samples, not model-consumed audio or client time. */
   acceptAudio(frame:AudioFrame) {
     this.assertOpen();this.assertSession(frame.sessionId);
-    if(this.phase!=="active")throw Error("public_runtime_not_active");
+    if(this.phase!=="active"||this.freezePromise)throw Error("public_runtime_not_active");
     if(frame.format!=="pcm16"||frame.sampleRate!==this.binding.sampleRate||
         !Number.isSafeInteger(frame.sequence)||frame.sequence<=this.frameSequence)throw Error("invalid_public_audio_frame");
     const pcm=Buffer.from(frame.data,"base64");
@@ -69,10 +71,11 @@ export class PublicSessionEventSink implements SessionEventSink {
     }
     const samples=this.samples;
     if(event.type==="session.paused"||event.type==="session.resumed"){
+      if(this.freezePromise)return Promise.reject(Error("public_meter_frozen"));
       const phase=event.type==="session.paused"?"paused":"active";
       return this.enqueue(()=>this.observe(phase,samples));
     }
-    if(!["transcript.final","translation.final","translation.failed","speaker.updated"].includes(event.type)) {
+    if(!["transcript.final","translation.final","translation.failed","translation.skipped","speaker.updated"].includes(event.type)) {
       return this.failure?Promise.reject(this.failure):Promise.resolve();
     }
     const snapshot=structuredClone(event);
@@ -110,6 +113,14 @@ export class PublicSessionEventSink implements SessionEventSink {
       await this.observe(this.phase,samples);
     });
   }
+  freezeMeter(){
+    const samples=this.samples;
+    this.freezePromise??=this.enqueue(async()=>{
+      if(!this.phase||this.phase==="stopped")throw Error("public_runtime_not_started");
+      await this.observe(this.phase,samples,false,false,true);
+    });
+    return this.freezePromise;
+  }
   acceptedSamples() { return this.samples; }
   /**
    * A Provider error during final flush is not a normal session end. The
@@ -133,7 +144,7 @@ export class PublicSessionEventSink implements SessionEventSink {
     return this.enqueue(async()=>{if(this.phase!=="disconnected")await this.observe("disconnected",samples);});
   }
   recoveryBridge() {
-    if(this.phase!=="disconnected"||this.failure||this.stopPromise||this.frameSequence<0)throw Error("public_recovery_bridge_not_ready");
+    if(this.phase!=="disconnected"||this.failure||this.stopPromise||this.freezePromise||this.frameSequence<0)throw Error("public_recovery_bridge_not_ready");
     return {lastAcceptedSample:this.samples,nextSequence:this.frameSequence+1};
   }
   drain(){return this.queue.then(()=>{if(this.failure)throw this.failure;});}
@@ -148,13 +159,14 @@ export class PublicSessionEventSink implements SessionEventSink {
     this.queue=task.catch(()=>{this.failure??=Error("public_runtime_unconfirmed");}).finally(()=>{this.pending--;});
     return task;
   }
-  private async observe(phase:PublicRuntimeObservation["phase"],samples:number,starting=false,uncertain=false) {
+  private async observe(phase:PublicRuntimeObservation["phase"],samples:number,starting=false,uncertain=false,freeze=false) {
     if(starting?this.phase!==undefined:!this.phase||this.phase==="stopped")throw Error("public_runtime_phase_conflict");
     if(uncertain&&phase!=="stopped")throw Error("public_runtime_uncertain_phase");
     if(phase==="paused"&&this.phase!=="active"&&this.phase!=="paused")throw Error("public_runtime_phase_conflict");
     const event:PublicRuntimeObservation={leaseId:this.binding.leaseId,captureId:this.binding.captureId,
       languagePolicyKey:this.binding.languagePolicyKey,sequence:this.sequence+1,phase,
-      finalRevision:this.revision,lastAcceptedSample:samples,...(uncertain?{uncertain:true as const}:{})};
+      finalRevision:this.revision,lastAcceptedSample:samples,...(uncertain?{uncertain:true as const}:{}),
+      ...(freeze||this.meterStopped?{meterStopped:true as const}:{})};
     const ack=await this.sink.runtime!(this.binding.sessionId,event);
     if(ack.sessionId!==this.binding.sessionId||ack.deploymentId!==this.binding.deploymentId||
       ack.ownerId!==this.binding.ownerId||ack.modelPolicyRevision!==this.binding.modelPolicyRevision||
@@ -162,6 +174,6 @@ export class PublicSessionEventSink implements SessionEventSink {
       ack.meterStatus!==(uncertain?"uncertain":"verified")) {
       throw Error("public_runtime_unconfirmed");
     }
-    this.sequence=event.sequence;this.phase=phase;
+    this.sequence=event.sequence;this.phase=phase;this.meterStopped=event.meterStopped===true;
   }
 }

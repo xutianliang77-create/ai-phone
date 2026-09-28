@@ -24,6 +24,8 @@ internal class SileroEndpointSegmenter(
     private var candidateSpeechBlocks = 0
     private var quietBlocks = 0
     private var activeSpeech = false
+    var speechStarted = false
+        private set
 
     init {
         require(sampleRate == 16000 || sampleRate == 24000)
@@ -33,6 +35,7 @@ internal class SileroEndpointSegmenter(
     }
 
     fun acceptPcm16(pcm: ByteArray): Boolean {
+        speechStarted = false
         require(pcm.isNotEmpty() && pcm.size % 2 == 0)
         var boundary = false
         for (offset in pcm.indices step 2) {
@@ -58,6 +61,7 @@ internal class SileroEndpointSegmenter(
             candidateSpeechBlocks = if (probability >= threshold) candidateSpeechBlocks + 1 else 0
             if (candidateSpeechBlocks >= speechBlocksRequired) {
                 activeSpeech = true
+                speechStarted = true
                 quietBlocks = 0
             }
             return false

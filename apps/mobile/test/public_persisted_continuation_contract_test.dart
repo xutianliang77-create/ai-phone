@@ -75,6 +75,9 @@ void main() {
     final events = (fixture['events'] as List)
         .map((e) => Map<String, Object?>.from(e as Map))
         .toList();
+    final restorationCase = events.any((e) => e['type'] == 'transcript.final' &&
+        e['segmentId'] == 'child' && (e['revision'] as num? ?? 0) > 2 &&
+        (e['text'] as String? ?? '').isNotEmpty);
     final ready = Completer<RealtimeSession>()
       ..complete(RealtimeSession(
         sessionId: history.sessionId,
@@ -94,6 +97,8 @@ void main() {
     addTearDown(controller.dispose);
     await controller.start();
     var retired = false;
+    var retirementRevision = 0;
+    var restored = false;
     var sawTwo = false;
     for (final event in events) {
       repository.emit(GatewayRealtimeEvent.fromJson(event));
@@ -101,6 +106,13 @@ void main() {
       sawTwo |= controller.segments.length == 2;
       if (event['type'] == 'transcript.final' && event['text'] == '') {
         retired = true;
+        retirementRevision = event['revision'] as int? ?? 0;
+      }
+      if (retired && event['type'] == 'transcript.final' &&
+          event['segmentId'] == 'child' && (event['text'] as String? ?? '').isNotEmpty &&
+          (event['revision'] as num? ?? 0) > retirementRevision) {
+        retired = false;
+        restored = true;
       }
       if (retired) {
         expect(controller.segments.any((s) => s.id == 'child'), isFalse,
@@ -109,22 +121,31 @@ void main() {
       }
     }
     expect(sawTwo, isTrue);
-    expect(retired, isTrue);
+    expect(retirementRevision, greaterThan(0));
+    expect(restored, restorationCase);
     expect(history.status, 'ended');
-    expect(history.consumedSeconds, 4);
-    expect(history.segmentCount, 1);
-    expect(controller.segments, hasLength(1));
-    final live = controller.segments.single;
-    final stored = history.segments.single;
-    expect(live.id, stored.id);
-    expect(live.revision, stored.revision);
-    expect(live.sourceText, stored.sourceText);
-    expect(live.translatedText, stored.translatedText);
-    expect(live.speaker?.speakerId, stored.speaker?.speakerId);
-    expect(live.timing?.startMs, stored.timing?.startMs);
-    expect(live.timing?.endMs, stored.timing?.endMs);
-    expect(stored.timing?.endMs, 2000);
-    expect(stored.sourceText, '会议结束以后，我会整理会议纪要，并在下班前发给大家确认。');
-    expect(stored.translatedText, isNotEmpty);
+    expect(history.consumedSeconds, restorationCase ? 30 : 4);
+    expect(history.segmentCount, restorationCase ? 2 : 1);
+    expect(controller.segments, hasLength(restorationCase ? 2 : 1));
+    for (final live in controller.segments) {
+      final stored = history.segments.singleWhere((s) => s.id == live.id);
+      expect(live.revision, stored.revision);
+      expect(live.sourceText, stored.sourceText);
+      expect(live.translatedText, stored.translatedText);
+      expect(live.speaker?.speakerId, stored.speaker?.speakerId);
+      expect(live.timing?.startMs, stored.timing?.startMs);
+      expect(live.timing?.endMs, stored.timing?.endMs);
+      expect(stored.translatedText, isNotEmpty);
+    }
+    if (restorationCase) {
+      final child = history.segments.singleWhere((s) => s.id == 'child');
+      expect(child.revision, 3);
+      expect(child.sourceText, '这是另外一个独立的陈述。');
+      expect(child.speaker?.speakerId, 'device-speaker-2');
+      expect(child.timing?.endMs, 2100);
+    } else {
+      expect(history.segments.single.timing?.endMs, 2000);
+      expect(history.segments.single.sourceText, '会议结束以后，我会整理会议纪要，并在下班前发给大家确认。');
+    }
   });
 }

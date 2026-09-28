@@ -13,12 +13,13 @@ import {sessionSegmentRevisionWatermarks} from "./session-segment-retirement.js"
 export function parsePublicRuntimeObservation(value:unknown):PublicRuntimeObservation {
   const b=value as Record<string,unknown>|null;
   if(!b || Array.isArray(b) || Object.keys(b).some(k=>!["leaseId","captureId","languagePolicyKey",
-    "sequence","phase","finalRevision","lastAcceptedSample","uncertain"].includes(k)) ||
+    "sequence","phase","finalRevision","lastAcceptedSample","uncertain","meterStopped"].includes(k)) ||
     !["active","paused","disconnected","stopped"].includes(String(b.phase)) ||
     !Number.isSafeInteger(b.sequence)||Number(b.sequence)<1 ||
     !Number.isSafeInteger(b.finalRevision)||Number(b.finalRevision)<0 ||
     !Number.isSafeInteger(b.lastAcceptedSample)||Number(b.lastAcceptedSample)<0 ||
-    (b.uncertain!==undefined&&(b.uncertain!==true||b.phase!=="stopped"))) {
+    (b.uncertain!==undefined&&(b.uncertain!==true||b.phase!=="stopped")) ||
+    (b.meterStopped!==undefined&&b.meterStopped!==true)) {
     throw new ResultSyncError("invalid_public_runtime_event",400);
   }
   return structuredClone(b) as unknown as PublicRuntimeObservation;
@@ -37,6 +38,10 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     const hash=resultSyncHash(b);
     if(old && old.sequence===b.sequence && old.eventHash===hash) return {next:null,result:old};
     if(current.status==="ended"||current.status==="failed"||old?.stoppedAt) throw new ResultSyncError("public_runtime_terminal");
+    if(b.meterStopped&&!old)throw new ResultSyncError("public_runtime_not_started");
+    if(old?.meterStoppedAt&&(b.meterStopped!==true||b.lastAcceptedSample!==old.lastAcceptedSample)) {
+      throw new ResultSyncError("public_meter_frozen");
+    }
     if(Number(b.sequence)!==(old?.sequence??0)+1 || (!old&&(b.phase!=="active"||b.finalRevision!==0||b.lastAcceptedSample!==0)) ||
         Number(b.finalRevision)<(old?.finalRevision??0) || Number(b.lastAcceptedSample)<(old?.lastAcceptedSample??0)) {
       throw new ResultSyncError("public_runtime_sequence_conflict");
@@ -48,17 +53,19 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
       throw new ResultSyncError("public_recovery_window_expired");
     }
     const gap=timestamp-last;
-    const activeMs=(old?.activeMs??0)+(old?.phase==="active"&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
-    const meterUncertain=!admissionValid || !!old?.meterUncertain ||
+    const metering=old?.phase==="active"&&!old.meterStoppedAt;
+    const activeMs=(old?.activeMs??0)+(metering&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
+    const meterUncertain=!old?.meterStoppedAt&&!admissionValid || !!old?.meterUncertain ||
       !!old?.uncertain&&old.meterUncertain===undefined ||
-      old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
-      p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || old?.phase==="active"&&timestamp>Date.parse(p.expiresAt);
+      metering&&gap>PUBLIC_EVIDENCE_GAP_MS ||
+      p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || metering&&timestamp>Date.parse(p.expiresAt);
     const providerUncertain=b.uncertain===true || !!old?.providerUncertain;
     const evidence:PublicRuntimeEvidence={sequence:Number(b.sequence),eventHash:hash,
       phase:b.phase as PublicRuntimeEvidence['phase'],observedAt:now.toISOString(),activeMs,
       uncertain:!!(meterUncertain||providerUncertain),meterUncertain:!!meterUncertain,
       providerUncertain:!!providerUncertain,
       finalRevision:Number(b.finalRevision),lastAcceptedSample:Number(b.lastAcceptedSample)};
+    if(b.meterStopped)evidence.meterStoppedAt=old?.meterStoppedAt??now.toISOString();
     if(b.phase==="paused"&&old?.recoveryUntil)evidence.recoveryUntil=old.recoveryUntil;
     if(b.phase==="disconnected") evidence.recoveryUntil=old?.recoveryUntil??
       new Date(timestamp+PUBLIC_RECOVERY_MS).toISOString();
@@ -84,7 +91,7 @@ export async function publicRecoveryStatus(sessionId:string,ownerId:string,now=n
   const within=!!r&&publicRuntimeAdmissionValid(session,now)&&now.getTime()<=Date.parse(recoveryUntil!)&&now.getTime()<=Date.parse(p.expiresAt);
   return {contractVersion:1,sessionId,deploymentId,ownerId,
     modelPolicyRevision:session.processingAuthorization!.modelPolicyRevision,
-    canResume:within&&!r?.uncertain&&!r?.stoppedAt&&["active","paused"].includes(session.status),
+    canResume:within&&!r?.uncertain&&!r?.stoppedAt&&!r?.meterStoppedAt&&["active","paused"].includes(session.status),
     canFinalize:!!session.publicFinalization || !!r?.stoppedAt&&(!r.uncertain||hasPublicProviderReconciliation(session))&&now.getTime()<=Date.parse(r.recoveryUntil!),
     recoveryUntil,meterStatus:!r?"missing":r.uncertain?"uncertain":"verified",
     ...(r?.stoppedAt?{stopWatermark:stopWatermark(session)}:{}),

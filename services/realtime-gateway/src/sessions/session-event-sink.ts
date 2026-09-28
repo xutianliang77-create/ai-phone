@@ -23,6 +23,7 @@ export interface SessionEventSink {
   acceptAudio?(frame:AudioFrame):void;
   acceptedSamples?(): number;
   confirmAudio?():Promise<void>;
+  freezeMeter?():Promise<void>;
   drain?():Promise<void>;
   record(event: ServerRealtimeEvent): Promise<void>;
   touch(sessionId: string, status: "active" | "paused"): Promise<void>;
@@ -145,6 +146,11 @@ class ApiSessionEventSink implements SessionEventSink {
         tokenTimings: event.tokenTimings,
         vadContext: event.vadContext,
       });
+      return;
+    }
+    if (event.type === "translation.skipped") {
+      await this.upsertSegment({sessionId:event.sessionId,segmentId:event.segmentId,
+        turnId:event.turnId,revision:event.revision,targetLanguage:event.language,stage:"translation_skipped"});
       return;
     }
     if (event.type === "translation.failed") {

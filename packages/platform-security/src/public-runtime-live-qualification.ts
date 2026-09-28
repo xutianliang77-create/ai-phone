@@ -184,7 +184,9 @@ function validate(evidence: PublicRuntimeLiveQualification, now: Date, requireCu
       evidence.providers.some((provider) => !provider || typeof provider !== "object" || Array.isArray(provider) ||
         Object.keys(provider).some((field) => !["component", "providerId", "modelId"].includes(field)) ||
         !components.has(provider.component) || !evidence.components.includes(provider.component) ||
-        !safeKey(provider.providerId) || !safeKey(provider.modelId)) ||
+        !safeKey(provider.providerId) || !(safeKey(provider.modelId)||
+          provider.providerId==="google"&&typeof provider.modelId==="string"&&provider.modelId===provider.modelId.trim()&&
+          /^models\/(?!\.{1,2}$)[A-Za-z0-9._-]{1,233}$/.test(provider.modelId))) ||
       new Set(evidence.qualifiedLanguagePairs.map((pair) => pair && `${pair.source}\u0000${pair.target}`)).size !== evidence.qualifiedLanguagePairs.length ||
       evidence.qualifiedLanguagePairs.some((pair) => !pair || typeof pair !== "object" || Array.isArray(pair) ||
         Object.keys(pair).some((field) => !["source", "target"].includes(field)) || !language(pair.source) ||

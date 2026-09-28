@@ -55,8 +55,8 @@ export function mergeSessionSegments(
   const merged = [...existingSegments];
   const indexById = new Map(merged.map((segment, index) => [segment.id, index]));
   for (const incoming of incomingSegments) {
-    if(blockedBySegmentRetirement(options.retiredSegmentRevisions,incoming.id,incoming.revision,incoming.sourceText))continue;
     const index = indexById.get(incoming.id);
+    if(blockedBySegmentRetirement(options.retiredSegmentRevisions,incoming.id,incoming.revision,incoming.sourceText,index===undefined?undefined:merged[index]))continue;
     if (index === undefined) {
       indexById.set(incoming.id, merged.length);
       merged.push(incoming);

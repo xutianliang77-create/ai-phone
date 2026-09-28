@@ -8,21 +8,18 @@ import { asrResults, type AsrProvider, type TranscriptResult } from "../../asr/a
 import { cleanRealtimeText } from "../../protocol/realtime-text.js";
 import type { RealtimeProvider, RealtimeProviderSession, TextSegmentInput } from "../realtime-provider.js";
 import { LmStudioClient } from "./lmstudio-client.js";
-import {abortable} from "./lmstudio-public-protocol.js";
-import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 import { routeAsrTranscript } from "./lmstudio-asr-transcript-routing.js";
 import { RealtimeTranscriptRefiner } from "./lmstudio-asr-refinement.js";
 import { SegmentAssembler, type SegmentPushResult } from "../../segments/segment-assembler.js";
 import { errorMessage, providerError, realtimeLogTranslationFailure, targetLanguageForTranscript, terminologyFor, transcriptFinalEvent, translationFailed } from "./lmstudio-realtime-helpers.js";
-import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
 import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
 import { orderedTurnTranscripts } from "../../asr/transcript-turn-order.js";
 import {
   analyzeTurnLanguage,
   turnLanguageEventFields,
 } from "../../segments/turn-language-profile.js";
-import { continuationTombstones } from "./lmstudio-continuation-events.js";
+import { continuationTombstones,PendingSpeakerAssemblies } from "./lmstudio-continuation-events.js";
 import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
 import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-speaker-repair.js";
 import {logPublicAsrAssembly,logPublicLateSpeakerExpiry} from "../../metrics/public-asr-boundary-trace.js";
@@ -45,6 +42,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly deviceSpeakerReceiver?: LmStudioRealtimeProviderOptions["deviceSpeakerReceiver"];
   private readonly deviceSpeakerRefresh?:LmStudioRealtimeProviderOptions["deviceSpeakerRefresh"];
   private speakerEvidenceClock?:{sequence:number;receivedAtMs:number;throughMs:number};
+  private readonly speakerAssemblies=new PendingSpeakerAssemblies();
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
@@ -107,8 +105,11 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   }
   acceptDeviceSpeakerEvidence(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) {
     const session = this.sessions.get(event.sessionId);
-    const accepted=!!session && this.isCurrent(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
-    if(accepted)this.speakerEvidenceClock={sequence:event.sequence,receivedAtMs:Date.now(),throughMs:event.throughSample/(event.sampleRate/1000)};
+    const accepted=!!session && this.isCurrent(session) && this.speakerAssemblies.canAccept(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
+    if(accepted){
+      this.speakerEvidenceClock={sequence:event.sequence,receivedAtMs:Date.now(),throughMs:event.throughSample/(event.sampleRate/1000)};
+      this.speakerAssemblies.capture(session!,this.semanticSegmentsFor(session!),this.deviceSpeakerRefresh,this.speakerEvidenceClock.receivedAtMs);
+    }
     return accepted;
   }
   deviceSpeakerBoundaryGuards(sessionId:string){
@@ -313,9 +314,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
   private async *refreshSpeakerSegments(session:RealtimeProviderSession):AsyncGenerator<ServerRealtimeEvent> {
     if(!this.deviceSpeakerRefresh||!this.isCurrent(session))return;
-    const assembled=this.semanticSegmentsFor(session).refreshSpeakers(session.sessionId,this.deviceSpeakerRefresh);
-    logPublicAsrAssembly(session.sessionId,"speaker",assembled);
-    yield* this.deliverAssembly(session,assembled);
+    for(const assembled of this.speakerAssemblies.drain(session,this.semanticSegmentsFor(session),this.deviceSpeakerRefresh)){
+      logPublicAsrAssembly(session.sessionId,"speaker",assembled);yield* this.deliverAssembly(session,assembled);
+    }
   }
 
   private async *deliverAssembly(session:RealtimeProviderSession,assembled:SegmentPushResult,emitTranscript=true,fallback?:TranscriptResult):AsyncGenerator<ServerRealtimeEvent> {

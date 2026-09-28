@@ -4,10 +4,14 @@ import type {
   TranscriptEvent,
   TranslationEvent,
   TranslationFailedEvent,
+  TranslationSkippedEvent,
 } from "@translation/contracts";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 interface SegmentOutcome {
+  revision: number;
+  retired?: boolean;
+  translationSkipped?: boolean;
   transcriptFinal: boolean;
   translationFinal: boolean;
   translationFailed: boolean;
@@ -16,7 +20,8 @@ interface SegmentOutcome {
 type SegmentOutcomeEvent =
   | TranscriptEvent
   | TranslationEvent
-  | TranslationFailedEvent;
+  | TranslationFailedEvent
+  | TranslationSkippedEvent;
 
 export class RealtimeFlushTracker {
   private readonly segments = new Map<string, SegmentOutcome>();
@@ -30,13 +35,24 @@ export class RealtimeFlushTracker {
       return;
     }
     if (!isSegmentOutcomeEvent(event)) return;
+    const revision=event.revision??0,prior=this.segments.get(event.segmentId);
+    // Unsupported-language notices retire their empty caption, then report a
+    // same-revision terminal failure. Count the diagnostic without reviving text.
+    if(prior?.retired&&revision===prior.revision&&event.type==="translation.failed"){
+      prior.translationFailed=true;
+      if(this.finalizing)this.flushSegmentIds.add(event.segmentId);
+      return;
+    }
+    if(prior&&(revision<prior.revision||prior.retired&&
+      (event.type!=="transcript.final"||!cleanRealtimeText(event.text)||revision<=prior.revision)))return;
     if (event.type === "transcript.final" && !cleanRealtimeText(event.text)) {
-      this.segments.delete(event.segmentId);
+      if(event.revision!==undefined)this.segments.set(event.segmentId,{...emptyOutcome(revision),retired:true});
+      else this.segments.delete(event.segmentId);
       this.flushSegmentIds.delete(event.segmentId);
       return;
     }
 
-    const outcome = this.segments.get(event.segmentId) ?? emptyOutcome();
+    const outcome = prior&&revision===prior.revision ? prior : emptyOutcome(revision);
     if (event.type === "transcript.final") outcome.transcriptFinal = true;
     if (event.type === "translation.final") {
       outcome.translationFinal = true;
@@ -45,6 +61,7 @@ export class RealtimeFlushTracker {
     if (event.type === "translation.failed" && !outcome.translationFinal) {
       outcome.translationFailed = true;
     }
+    if(event.type==="translation.skipped")outcome.translationSkipped=true;
     this.segments.set(event.segmentId, outcome);
     if (this.finalizing) this.flushSegmentIds.add(event.segmentId);
   }
@@ -92,8 +109,9 @@ export class RealtimeFlushTracker {
   }
 }
 
-function emptyOutcome(): SegmentOutcome {
+function emptyOutcome(revision=0): SegmentOutcome {
   return {
+    revision,
     transcriptFinal: false,
     translationFinal: false,
     translationFailed: false,
@@ -102,6 +120,7 @@ function emptyOutcome(): SegmentOutcome {
 
 function isUnresolved(outcome: SegmentOutcome) {
   return outcome.transcriptFinal &&
+    !outcome.translationSkipped &&
     !outcome.translationFinal &&
     !outcome.translationFailed;
 }
@@ -111,5 +130,5 @@ function isSegmentOutcomeEvent(
 ): event is SegmentOutcomeEvent {
   return event.type === "transcript.final" ||
     event.type === "translation.final" ||
-    event.type === "translation.failed";
+    event.type === "translation.failed" || event.type === "translation.skipped";
 }

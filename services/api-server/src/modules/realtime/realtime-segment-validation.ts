@@ -155,6 +155,7 @@ function isStringArray(value: unknown) {
 }
 
 const segmentStages = new Set<SessionSegmentStage>([
+  "translation_skipped",
   "connection",
   "asr",
   "translation",

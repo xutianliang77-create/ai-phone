@@ -135,7 +135,9 @@ class GatewayRealtimeEvent {
       throw const FormatException('Invalid public recovery bridge');
     }
     if ((json['type'] == 'audio.boundary.committed' ||
-            json['type'] == 'audio.boundary.rejected') &&
+            json['type'] == 'audio.boundary.rejected' ||
+            json['type'] == 'audio.speech_started.confirmed' ||
+            json['type'] == 'audio.speech_started.rejected') &&
         json['sequence'] is! int) {
       throw const FormatException('Invalid audio boundary sequence');
     }

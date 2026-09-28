@@ -57,7 +57,11 @@ export async function* translateSingleTranscript(
       // In automatic-source/fixed-target mode the recognized turn can already
       // be in the selected target language. Preserve its transcript without
       // fabricating a same-language translation or opening an MT request.
-      if (targetLanguage === transcript.language) return;
+      if (targetLanguage === transcript.language) {
+        yield {type:"translation.skipped",sessionId:session.sessionId,segmentId:transcript.segmentId,
+          turnId:transcript.turnId,revision:transcript.revision,language:targetLanguage,reason:"same_language"};
+        return;
+      }
       if (shouldPreserveSpelledIdentifier(text, transcript.language, targetLanguage)) {
         yield {
           type: "translation.final",

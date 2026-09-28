@@ -179,23 +179,6 @@ class RealtimeGatewayClient {
     return sent;
   }
 
-  bool _sendAudioFrame(String sessionId, AudioFrame frame) {
-    final sent = _send({
-      'type': 'audio.frame',
-      'sessionId': sessionId,
-      'sequence': frame.sequence,
-      'timestampMs': frame.timestampMs,
-      'format': 'pcm16',
-      'sampleRate': frame.sampleRate,
-      'data': base64Encode(frame.bytes),
-    });
-    if (sent && _session?.sessionId == sessionId) {
-      _lastAudioSequence = frame.sequence;
-      _acceptSpeakerAudio(sessionId, frame);
-    }
-    return sent;
-  }
-
   Future<bool> commitAudioBoundaryAndWait(String sessionId,
           {Duration timeout = _controlTimeout}) =>
       _commitAudioBoundary(sessionId, timeout);

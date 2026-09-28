@@ -9,8 +9,8 @@ export function applyStoredSessionSegmentPatch(session:SessionRecord,patch:Sessi
     if(session.processingAuthorization?.processingMode!=="online"||!Number.isSafeInteger(patch.revision)||(patch.revision??0)<1)throw Error("public_segment_retirement_required");
     retireSessionSegment(session,patch.segmentId,patch.revision!);return;
   }
-  if(blockedBySegmentRetirement(session.retiredSegmentRevisions,patch.segmentId,patch.revision,patch.sourceText))return;
   const existing=session.segments.find(s=>s.id===patch.segmentId);
+  if(blockedBySegmentRetirement(session.retiredSegmentRevisions,patch.segmentId,patch.revision,patch.sourceText,existing))return;
   if(existing)applySessionSegmentPatch(existing,patch,{versionedSpeakerMetadata:session.processingAuthorization?.processingMode==="online"});else session.segments.push(createSessionSegment(patch));
   session.segments=orderSessionSegmentsChronologically(session.segments);
 }

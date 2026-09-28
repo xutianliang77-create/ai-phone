@@ -156,6 +156,17 @@ class _RealtimePageState extends State<RealtimePage>
           builder: (context, _) {
             return Column(
               children: <Widget>[
+                if (controller.publicSpeakerEnabled != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Text(
+                      controller.publicSpeakerEnabled!
+                          ? (l10n.isChinese ? '本次会话：端侧匿名说话人已启用' : 'This session: anonymous on-device speakers enabled')
+                          : (l10n.isChinese ? '本次会话未启用说话人；未确认就绪时不猜测分人' : 'Speakers are off for this session; readiness was not confirmed'),
+                      key: const ValueKey('public-speaker-session-selection'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
                 RealtimeOnlineRecoveryActions(
                   visible:
                       _shouldShowOnlineRecovery && !_onlineRecoveryInFlight,

@@ -1,6 +1,38 @@
 part of 'realtime_gateway_client.dart';
 
 extension RealtimeGatewayControl on RealtimeGatewayClient {
+  bool _sendAudioFrame(String sessionId, AudioFrame frame) {
+    final sent = _send({
+      'type': 'audio.frame', 'sessionId': sessionId, 'sequence': frame.sequence,
+      'timestampMs': frame.timestampMs, 'format': 'pcm16',
+      'sampleRate': frame.sampleRate, 'data': base64Encode(frame.bytes),
+    });
+    if (sent && _session?.sessionId == sessionId) {
+      _lastAudioSequence = frame.sequence;
+      if (_session?.syncBinding != null && frame.startsSegment) unawaited(_interruptOutput(sessionId, frame.sequence));
+      _acceptSpeakerAudio(sessionId, frame);
+    }
+    return sent;
+  }
+  Future<void> _interruptOutput(String sessionId, int sequence) async {
+    final generation = _connectionGeneration;
+    final response = Completer<bool>();
+    final subscription = events.listen((event) {
+      if(event.sessionId == sessionId && event.sequence == sequence &&
+          ['audio.speech_started.confirmed','audio.speech_started.rejected'].contains(event.type) && !response.isCompleted) {
+        response.complete(event.type == 'audio.speech_started.confirmed');
+      }
+    });
+    try {
+      if (!_send({'type':'audio.speech_started','sessionId':sessionId,'sequence':sequence}) ||
+          !await response.future.timeout(RealtimeGatewayClient._controlTimeout)) throw StateError('插话取消未确认');
+    } catch (_) {
+      if (!_events.isClosed && generation == _connectionGeneration && !_manualClose) {
+        _events.add(GatewayRealtimeEvent(type:'error',sessionId:sessionId,stage:'tts',
+            code:'barge_in_unconfirmed',message:'插话取消未确认，字幕识别继续',retryable:false));
+      }
+    } finally { await subscription.cancel(); }
+  }
   bool _endSession(String sessionId) {
     _manualClose = true;
     _reconnectTimer?.cancel();

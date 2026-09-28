@@ -108,7 +108,9 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     await waitFor(()=>getSession(s.issued.sessionId)===null);expect(current().status).toBe("ended");expect(current().consumedSeconds).toBe(1);
     expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);expect(s.modelFetchFn).not.toHaveBeenCalled();
     const observations=s.calls.filter(c=>c.path.endsWith("/runtime"));
-    expect(observations.filter(c=>c.body.phase==="disconnected")).toHaveLength(1);
+    const disconnected=observations.filter(c=>c.body.phase==="disconnected");
+    expect(disconnected).toHaveLength(2);
+    expect(disconnected[1].body).toMatchObject({meterStopped:true,lastAcceptedSample:disconnected[0].body.lastAcceptedSample});
     expect(observations.at(-2)?.body.phase).toBe("disconnected");expect(observations.at(-1)?.body.phase).toBe("stopped");
   });
   it("saves the actual drained disconnect watermark before ending the same public session",async()=>{

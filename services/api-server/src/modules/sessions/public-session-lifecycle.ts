@@ -20,6 +20,8 @@ export interface PublicRuntimePolicy {
 export interface PublicRuntimeEvidence {
   sequence: number; eventHash: string; phase: "active" | "paused" | "disconnected" | "stopped";
   observedAt: string; activeMs: number; uncertain: boolean;
+  /** Server receipt time of the immutable accepted-audio stop boundary. */
+  meterStoppedAt?: string;
   /** An admission, timer, or watermark gap cannot be repaired by a supplier
    * usage receipt. Missing classification on an older record fails closed. */
   meterUncertain?: boolean;

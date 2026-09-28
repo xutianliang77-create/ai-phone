@@ -25,7 +25,7 @@ interface RealtimeSessionFinalizerOptions {
   drainSessionSync: () => Promise<void>;
   flushTracker: RealtimeFlushTracker;
   onError: (stage: "audio" | "provider", error: unknown) => void;
-  confirmed?:{beforeFlush:()=>Promise<void>;stopUncertain?:()=>Promise<void>};
+  confirmed?:{beforeFlush:()=>Promise<void>;freezeMeter?:()=>Promise<void>;stopUncertain?:()=>Promise<void>};
   ttsOutput?:Pick<RealtimeTtsOutputQueue,"suspend"|"close"|"drainInFlight">;
 }
 
@@ -62,6 +62,7 @@ export class RealtimeSessionFinalizer {
     if(this.options.confirmed)this.options.ttsOutput?.suspend();
     this.options.flushTracker.beginFinalization();
     this.options.audioBatcher.stopAccepting();
+    await this.options.confirmed?.freezeMeter?.();
     const audioFlushed = await this.runStep(
       "audio",
       () => this.options.audioBatcher.flush(),

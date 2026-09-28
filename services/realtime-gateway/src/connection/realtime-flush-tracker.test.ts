@@ -3,6 +3,23 @@ import type { ServerRealtimeEvent } from "@translation/contracts";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 
 describe("realtime flush tracker", () => {
+  it("counts the current failed revision instead of an older successful translation",()=>{
+    const t=new RealtimeFlushTracker();
+    t.record({...transcript("s"),revision:1} as ServerRealtimeEvent);
+    t.record({...translation("s"),revision:1} as ServerRealtimeEvent);
+    t.record({...transcript("s"),revision:2} as ServerRealtimeEvent);t.beginFinalization();
+    t.record({type:"translation.failed",sessionId:"sess_1",segmentId:"s",revision:2,message:"failed",language:"en"});
+    t.record({...translation("s"),revision:1} as ServerRealtimeEvent);
+    expect(t.summarize(successfulSteps())).toMatchObject({status:"degraded",translationFinalCount:0,translationFailedCount:1,unresolvedSegmentCount:0});
+  });
+  it("does not let stale retirement or MT erase/resurrect a current caption",()=>{
+    const t=new RealtimeFlushTracker();t.record({...transcript("s"),revision:3} as ServerRealtimeEvent);
+    t.record({...transcript("s"),revision:2,text:""} as ServerRealtimeEvent);t.beginFinalization();
+    expect(t.summarize(successfulSteps())).toMatchObject({unresolvedSegmentCount:1});
+    t.record({...transcript("s"),revision:4,text:""} as ServerRealtimeEvent);
+    t.record({...translation("s"),revision:3} as ServerRealtimeEvent);t.beginFinalization();
+    expect(t.summarize(successfulSteps()).status).toBe("empty");
+  });
   it("reports a translated tail as completed", () => {
     const tracker = new RealtimeFlushTracker();
     tracker.beginFinalization();

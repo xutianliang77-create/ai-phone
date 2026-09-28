@@ -9,7 +9,7 @@ export function claimPublicRecoveryOwnership(sessionId:string,value:unknown,now=
     assertPublicSession(current,current.userId,deployment);
     const policy=runtimePolicy(current),runtime=current.publicRuntime;
     const until=runtime?.recoveryUntil?Date.parse(runtime.recoveryUntil):Number.NaN;
-    if(!runtime||runtime.phase!=="disconnected"||runtime.uncertain||runtime.stoppedAt||
+    if(!runtime||runtime.phase!=="disconnected"||runtime.uncertain||runtime.stoppedAt||runtime.meterStoppedAt||
       !publicRuntimeAdmissionValid(current,now)||!Number.isFinite(until)||until<=now.getTime()||
       Date.parse(policy.expiresAt)<=now.getTime())throw new ResultSyncError("public_recovery_not_claimable",409);
     if(request.runtimeSequence!==runtime.sequence)throw new ResultSyncError("public_recovery_ownership_watermark_conflict",409);

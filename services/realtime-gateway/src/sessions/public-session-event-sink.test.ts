@@ -17,6 +17,19 @@ function fixture(){
   return {base,events,sink:bindPublicSessionEventSink(base,binding)};
 }
 describe("public branch of original session sink",()=>{
+  it("freezes received audio and client metering while allowing accepted tail captions",async()=>{
+    const {sink,base}=fixture();await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());
+    const first=sink.freezeMeter();expect(sink.freezeMeter()).toBe(first);
+    expect(()=>sink.acceptAudio(frame(1))).toThrow("not_active");await first;
+    await sink.confirmAudio();
+    await sink.record({type:"transcript.final",sessionId:"s",segmentId:"tail",revision:3,text:"tail",language:"en"});
+    await sink.record(end);
+    expect(base.runtime.mock.calls.slice(1).map(c=>c[1])).toEqual([
+      expect.objectContaining({phase:"active",meterStopped:true,lastAcceptedSample:160}),
+      expect.objectContaining({phase:"active",meterStopped:true,lastAcceptedSample:160}),
+      expect.objectContaining({phase:"stopped",meterStopped:true,lastAcceptedSample:160,finalRevision:3}),
+    ]);
+  });
   it("logs exact accepted sequence and sample range only under the one-shot QA gates",async()=>{
     const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),{sink}=fixture();
     await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());

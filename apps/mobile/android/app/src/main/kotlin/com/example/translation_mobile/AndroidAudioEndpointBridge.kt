@@ -112,11 +112,12 @@ internal class AndroidAudioEndpointBridge(private val activity: FlutterActivity)
             }
             try {
                 val boundary = checkNotNull(segmenter).acceptPcm16(pcm)
+                val speechStarted = checkNotNull(segmenter).speechStarted
                 lastSequence = sequence
                 main.post {
                     if (epoch == generation.get() && desiredRequestId == id) {
                         result.success(mapOf("requestId" to id, "sequence" to sequence,
-                            "boundary" to boundary))
+                            "boundary" to boundary, "speechStarted" to speechStarted))
                     } else result.error("android_vad_cancelled", "Endpoint frame was cancelled", null)
                 }
             } catch (_: Exception) { failClosed(epoch, result, "android_vad_inference_failed") }

@@ -8,6 +8,10 @@ abstract interface class AudioEndpointDetector {
   Future<void> stop();
 }
 
+abstract interface class SpeechStartEndpointDetector {
+  bool get speechStarted;
+}
+
 class IosAudioEndpointDetector extends MethodChannelAudioEndpointDetector {
   IosAudioEndpointDetector()
       : super(const MethodChannel('translation_mobile/apple_speech_asr'),
@@ -20,7 +24,7 @@ class AndroidAudioEndpointDetector extends MethodChannelAudioEndpointDetector {
             'silero_onnx');
 }
 
-class MethodChannelAudioEndpointDetector implements AudioEndpointDetector {
+class MethodChannelAudioEndpointDetector implements AudioEndpointDetector, SpeechStartEndpointDetector {
   MethodChannelAudioEndpointDetector(this._channel, this._expectedProvider);
 
   final MethodChannel _channel;
@@ -28,6 +32,8 @@ class MethodChannelAudioEndpointDetector implements AudioEndpointDetector {
   static int _counter = 0;
   String? _id;
   int _sampleRate = 0;
+  @override
+  bool speechStarted = false;
   @override
   Future<void> start(int sampleRate,
       {Map<String, Object?> options = const {}}) async {
@@ -59,6 +65,7 @@ class MethodChannelAudioEndpointDetector implements AudioEndpointDetector {
 
   @override
   Future<bool> accept(AudioFrame frame) async {
+    speechStarted = false;
     final id = _id;
     if (id == null ||
         frame.sampleRate != _sampleRate ||
@@ -78,10 +85,12 @@ class MethodChannelAudioEndpointDetector implements AudioEndpointDetector {
     if (_id != id ||
         value?['requestId'] != id ||
         value?['sequence'] != frame.sequence ||
-        value?['boundary'] is! bool) {
+        value?['boundary'] is! bool ||
+        value?['speechStarted'] != null && value?['speechStarted'] is! bool) {
       throw StateError('手机端点回执不匹配');
     }
-    return value!['boundary']! as bool;
+    speechStarted = value!['speechStarted'] == true;
+    return value['boundary']! as bool;
   }
 
   @override
@@ -147,7 +156,9 @@ class OnlineAudioEndpointProcessor {
           timestampMs: copy.timestampMs,
           sampleRate: copy.sampleRate,
           bytes: copy.bytes,
-          endsSegment: boundary));
+          endsSegment: boundary,
+          startsSegment: detector is SpeechStartEndpointDetector &&
+              (detector as SpeechStartEndpointDetector).speechStarted));
     }).catchError((Object error) {
       if (epoch == _epoch && _open) _fail(error);
     }).whenComplete(() {

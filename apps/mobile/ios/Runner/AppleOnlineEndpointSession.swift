@@ -53,7 +53,7 @@ final class AppleOnlineEndpointSession {
     #endif
   }
 
-  func accept(data: Data, sequence next: Int) async throws -> Bool {
+  func accept(data: Data, sequence next: Int) async throws -> (boundary: Bool, speechStarted: Bool) {
     guard active, !busy, next > sequence, !data.isEmpty, data.count % 2 == 0,
       data.count <= Int(inputFormat.sampleRate) * 2 else { throw AppleSpeechFailure.invalidConfiguration }
     busy = true; defer { busy = false }
@@ -68,6 +68,7 @@ final class AppleOnlineEndpointSession {
     guard converted.error == nil else { throw AppleSpeechFailure.invalidConfiguration }
     pending.append(contentsOf: CoreMlNemotronAudioInput.floatSamples(from: converted.buffer))
     var ended = false
+    var started = false
     while pending.count >= AppleSpeechConfiguration.vadFrameSamples {
       let frame = Array(pending.prefix(AppleSpeechConfiguration.vadFrameSamples))
       pending.removeFirst(AppleSpeechConfiguration.vadFrameSamples)
@@ -75,11 +76,13 @@ final class AppleOnlineEndpointSession {
       guard active else { throw AppleSpeechFailure.cancelled }
       state = result.state
       // Feed the WHOLE 256 ms VAD window, not just the latest 40 ms capture packet.
-      ended = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
-        provider: "fluidaudio_silero").shouldFinalize || ended
+      let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
+        provider: "fluidaudio_silero")
+      ended = decision.shouldFinalize || ended
+      started = decision.speechStarted || started
     }
     sequence = next
-    return ended && !endpoint.isSpeechOpen
+    return (ended && !endpoint.isSpeechOpen, started)
     #else
     throw AppleSpeechFailure.sileroMissing
     #endif

@@ -79,7 +79,8 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance,renewAdmission
         modelPolicyRevision:session.processingAuthorization!.modelPolicyRevision,
         leaseId:policy.leaseId,captureId:policy.captureId,languagePolicyKey:policy.languagePolicyKey,
         sequence:evidence.sequence,phase:evidence.phase,finalRevision:evidence.finalRevision,
-        lastAcceptedSample:evidence.lastAcceptedSample,...(evidence.uncertain?{uncertain:true as const}:{}),
+        lastAcceptedSample:evidence.lastAcceptedSample,...(evidence.meterStoppedAt?{meterStopped:true as const}:{}),
+        ...(evidence.uncertain?{uncertain:true as const}:{}),
         meterStatus:evidence.uncertain?"uncertain":"verified"};
     }));
   });

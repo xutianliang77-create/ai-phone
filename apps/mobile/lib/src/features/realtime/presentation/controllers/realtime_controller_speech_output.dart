@@ -134,6 +134,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
     }
   ) async {
     final generation = _speechGeneration;
+    await _publicAudioStopBarrier;
     await _recordDeviceAsrDiagnosticEvent(
       'tts.begin',
       payload: <String, Object?>{
@@ -151,6 +152,8 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
     }
     _activePublicAudioSegmentId = segmentId;
     _activePublicAudioRevision = revision;
+    final cancellation = Completer<void>();
+    _activePublicAudioCancellation = cancellation;
     _writeSpeechTiming(segmentId, <String, Object?>{
       'status': 'started',
       'provider': 'server_pcm_tts',
@@ -160,13 +163,15 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
     _speechCaptureGate.beginPlayback();
     _setSpeechOutputActive(true);
     try {
-      final result = await player
-          .play(
+      final result = await Future.any<PcmAudioOutputResult?>([
+        player.play(
             data: data,
             sampleRate: sampleRate,
-          )
-          .timeout(const Duration(seconds: 30));
-      if (isFinal && generation == _speechGeneration) {
+          ),
+        cancellation.future.then<PcmAudioOutputResult?>((_) => null),
+      ]).timeout(const Duration(seconds: 30));
+      if (result != null && isFinal && generation == _speechGeneration &&
+          _canPlayPublicAudioRevision(segmentId, revision)) {
         _writeSpeechTiming(segmentId, <String, Object?>{
           'status': 'finished',
           'provider': result.provider,
@@ -175,7 +180,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
         });
       }
     } on TimeoutException catch (error) {
-      if (generation == _speechGeneration) {
+      if (generation == _speechGeneration && _canPlayPublicAudioRevision(segmentId, revision)) {
         _cancelledPublicAudioRevisions[segmentId] = revision;
         _writeSpeechTiming(segmentId, <String, Object?>{
           'status': 'timed_out',
@@ -190,7 +195,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
         }
       }
     } on Object catch (error) {
-      if (generation == _speechGeneration) {
+      if (generation == _speechGeneration && _canPlayPublicAudioRevision(segmentId, revision)) {
         // Queued chunks of this utterance must not turn a partial playback
         // failure into a later "finished" receipt. A newer revision or a
         // different segment remains independently playable.
@@ -205,6 +210,9 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
             segmentId: segmentId, revision: revision);
       }
     } finally {
+      if (identical(_activePublicAudioCancellation, cancellation)) {
+        _activePublicAudioCancellation = null;
+      }
       if (_activePublicAudioSegmentId == segmentId &&
           _activePublicAudioRevision == revision) {
         _activePublicAudioSegmentId = null;
@@ -236,19 +244,30 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
         draft!.translatedText.trim().isNotEmpty;
   }
 
-  void _cancelPublicAudioForRevision(String segmentId, int revision) {
+  void _cancelPublicAudioForRevision(String segmentId, int revision,
+      {bool inclusive = true}) {
+    final cutoff = inclusive ? revision : revision - 1;
+    if (cutoff < 0) return;
+    if (cutoff > (_cancelledPublicAudioRevisions[segmentId] ?? -1)) {
+      _cancelledPublicAudioRevisions[segmentId] = cutoff;
+    }
     final activeSegment = _activePublicAudioSegmentId;
     final activeRevision = _activePublicAudioRevision;
-    final queuedRevision = _publicAudioRevisionBySegment[segmentId];
-    // `_speechChain` serializes PCM frames.  It can therefore contain an old
-    // frame which is not the active player invocation yet.  Treat that queued
-    // frame exactly like active audio: advance the generation so neither it
-    // nor the active frame can resume after a newer subtitle revision.
-    if ((activeSegment == segmentId &&
-            activeRevision != null &&
-            activeRevision <= revision) ||
-        (queuedRevision != null && queuedRevision <= revision)) {
-      unawaited(_stopSpeaking());
-    }
+    // Queued jobs recheck this segment watermark. Never cancel another
+    // caption or advance the whole session's playback generation here.
+    if (activeSegment != segmentId || activeRevision == null ||
+        activeRevision > cutoff || _pcmAudioOutputPlayer == null) return;
+    final cancellation = _activePublicAudioCancellation;
+    final stopping = _pcmAudioOutputPlayer.stop();
+    _publicAudioStopBarrier = stopping;
+    _writeSpeechTiming(segmentId, {'status':'superseded',
+      'provider':'server_pcm_tts','revision':activeRevision});
+    unawaited(stopping.then((_) {
+      if (identical(_publicAudioStopBarrier, stopping)) _publicAudioStopBarrier = null;
+      if (cancellation != null && !cancellation.isCompleted) cancellation.complete();
+    }).catchError((Object error) {
+      if (cancellation != null && !cancellation.isCompleted) cancellation.complete();
+      _reportSpeechFailure(error, '停止朗读未确认', segmentId:segmentId, revision:activeRevision);
+    }));
   }
 }

@@ -15,6 +15,16 @@ import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 describe("realtime session finalizer", () => {
   beforeEach(() => deleteSession("finalizer-test"));
 
+  it("freezes metering before draining accepted audio, not during recoverable drains",async()=>{
+    const session=createSession(claims()),order:string[]=[];
+    const finalizer=new RealtimeSessionFinalizer({sessionId:session.id,provider:providerWithoutTail(),
+      audioBatcher:{stopAccepting:()=>{order.push("stop_audio");},flush:async()=>{order.push("flush_audio");}},
+      send:()=>{},drainSessionSync:async()=>{},flushTracker:new RealtimeFlushTracker(),onError:vi.fn(),
+      confirmed:{beforeFlush:async()=>{},freezeMeter:async()=>{order.push("freeze_meter");}}});
+    await finalizer.finalize("client_request");
+    expect(order).toEqual(["stop_audio","freeze_meter","flush_audio"]);
+  });
+
   it("flushes and settles concurrent finalization only once", async () => {
     const session = createSession(claims());
     session.activeStartedAt = Date.now() - 8_000;

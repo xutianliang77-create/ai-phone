@@ -5,11 +5,12 @@ export function retiredSegmentRevision(revisions:Record<string,number>|undefined
   const value=revisions&&Object.hasOwn(revisions,id)?revisions[id]:undefined;
   return typeof value==="number"&&Number.isSafeInteger(value)&&value>0?value:0;
 }
-export function blockedBySegmentRetirement(revisions:Record<string,number>|undefined,id:string,revision:number|undefined,sourceText:string|undefined) {
+export function blockedBySegmentRetirement(revisions:Record<string,number>|undefined,id:string,revision:number|undefined,sourceText:string|undefined,active?:Pick<SessionSegmentDto,"revision"|"sourceText">) {
   const retired=retiredSegmentRevision(revisions,id);
   // Only a genuinely newer recognition can restore a retired caption. MT or
   // metadata alone cannot invent its source, even with a higher revision.
-  return retired>0&&((revision??0)<=retired||!sourceText?.trim());
+  const restored=!!active?.sourceText.trim()&&(active.revision??0)>retired&&(revision??0)<=(active.revision??0);
+  return retired>0&&((revision??0)<=retired||!sourceText?.trim()&&!restored);
 }
 export function retireSessionSegment(session:StoredSegments,id:string,revision:number):SessionSegmentRetirementAck {
   const active=session.segments.find(s=>s.id===id);

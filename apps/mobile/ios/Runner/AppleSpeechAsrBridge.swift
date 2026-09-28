@@ -53,9 +53,9 @@ final class AppleSpeechAsrBridge: NSObject, FlutterStreamHandler {
     case "endpoint.process":
       guard let current = onlineEndpointSession as? AppleOnlineEndpointSession, current.id == id,
         let sequence = args["sequence"] as? Int, let data = args["pcm"] as? FlutterStandardTypedData else { throw AppleSpeechFailure.invalidConfiguration }
-      let boundary = try await current.accept(data: data.data, sequence: sequence)
+      let decision = try await current.accept(data: data.data, sequence: sequence)
       guard onlineEndpointSession === current else { throw AppleSpeechFailure.cancelled }
-      result(["requestId": id, "sequence": sequence, "boundary": boundary])
+      result(["requestId": id, "sequence": sequence, "boundary": decision.boundary, "speechStarted": decision.speechStarted])
     case "endpoint.stop":
       if let current = onlineEndpointSession as? AppleOnlineEndpointSession, current.id == id { current.invalidate(); onlineEndpointSession = nil }
       result(nil)

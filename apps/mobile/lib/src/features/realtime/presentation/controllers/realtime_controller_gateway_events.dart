@@ -154,6 +154,13 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         );
       }
     }
+    if (event.type == 'translation.skipped' && event.segmentId != null &&
+        event.reason == 'same_language') {
+      _upsertSegment(event.segmentId!, revision:event.revision,
+          turnId:event.turnId, targetLanguage:event.language,
+          stage:'translation_skipped', clearTranslation:true);
+      if(event.revision != null) _cancelPublicAudioForRevision(event.segmentId!, event.revision!);
+    }
     if (event.type == 'translation.delta' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
       if (text != null) {

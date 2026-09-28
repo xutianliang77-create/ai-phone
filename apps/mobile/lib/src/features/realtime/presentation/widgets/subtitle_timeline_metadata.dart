@@ -165,6 +165,7 @@ class _TranslationPending extends StatelessWidget {
 }
 
 bool _isTranslationPending(SubtitleSegment segment) {
+  if (segment.stage == 'translation_skipped') return false;
   if (segment.sourceText.trim().isEmpty) return false;
   if (segment.translatedText.trim().isEmpty) return true;
   return segment.stage == 'asr';

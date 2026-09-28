@@ -79,7 +79,7 @@ void main() {
         repo.emit(chunk('A', 1, 1));
         await pumpEventQueue();
         expect(player.played.length, 1);
-        capture.emit(1, endpoint: true);
+        capture.emit(1, speechStart: true);
         await pumpEventQueue();
         expect(player.stopCount, greaterThan(0));
         if (scenario == 'cancelled-old') {

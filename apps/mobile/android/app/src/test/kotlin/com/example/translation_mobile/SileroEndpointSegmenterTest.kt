@@ -15,8 +15,14 @@ class SileroEndpointSegmenterTest {
             probabilities.getOrElse(reads++) { 0.1f }
         },
             16000, 0.6f, 0.35f, 96, 100)
-        val results = probabilities.map { detector.acceptPcm16(ByteArray(512 * 2)) }
+        val starts = mutableListOf<Boolean>()
+        val results = probabilities.map {
+            val boundary = detector.acceptPcm16(ByteArray(512 * 2))
+            starts.add(detector.speechStarted)
+            boundary
+        }
         assertEquals(listOf(false, false, false, false, false, false, false, true), results)
+        assertEquals(listOf(false, false, true, false, false, false, false, false), starts)
         assertEquals(8, reads)
         assertFalse(detector.acceptPcm16(ByteArray(512 * 2)))
     }

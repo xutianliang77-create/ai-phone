@@ -8,6 +8,13 @@ import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 import 'package:translation_mobile/src/shared/domain/turn_language_profile.dart';
 
 void main() {
+  testWidgets('same-language terminal does not display an endless translation spinner', (tester) async {
+    await tester.pumpWidget(const _TestApp(segments: [SubtitleSegment(
+      id:'same-language',sourceText:'Already English.',translatedText:'',stage:'translation_skipped') ]));
+    await tester.pump();
+    expect(find.text('Already English.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('subtitle-pending-same-language')), findsNothing);
+  });
   testWidgets('auto-scrolls to the latest subtitle segment', (tester) async {
     final segments = List<SubtitleSegment>.generate(12, (index) {
       return SubtitleSegment(

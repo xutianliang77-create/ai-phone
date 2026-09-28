@@ -1,5 +1,5 @@
 import { setupRealtimeConnection } from "./realtime-connection-setup.js";
-import { handleDeviceSpeakerEvidence, rejectRealtimeControlBackpressure } from "./realtime-connection-input-helpers.js";
+import { handleDeviceSpeakerEvidence, rejectRealtimeControlBackpressure,handlePublicSpeechStart,preparePublicStop } from "./realtime-connection-input-helpers.js";
 import type { PublicGatewayRuntimeOptions } from "./configured-public-connection.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
@@ -122,7 +122,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       audioBatcher,
       send: sendRealtime,
       drainSessionSync: () => eventDispatcher.drain(),
-      confirmed:sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio,
+      confirmed:sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio,freezeMeter:()=>sessionEventSink.freezeMeter?.()??Promise.reject(Error("public_meter_freeze_sink_required")),
         stopUncertain:()=>sessionEventSink.stopUncertain?.()??Promise.reject(Error("public_uncertain_stop_sink_required"))}:undefined,
       ttsOutput:sessionEventSink.requiresConfirmation?ttsOutputQueue:undefined,
       flushTracker,
@@ -263,15 +263,15 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         return;
       }
 
+      if(event.type==="audio.speech_started"){handlePublicSpeechStart(event,{sessionId:session.id,confirmed:!!sessionEventSink.requiresConfirmation,
+          batcher:audioBatcher,tts:ttsOutputQueue,send:sendRealtime});return;}
       if(event.type==="audio.boundary"){
         if(pendingControlEvents>=env.maxPendingControlEvents){closeForControlBackpressure();return;}
         const boundary=handleAudioBoundary(event,{sessionId:session.id,confirmed:!!sessionEventSink.requiresConfirmation,batcher:audioBatcher,provider,
           beforeFlush:confirmAudio,drain:()=>eventDispatcher.drain(),send:sendRealtime,onFailure:failPublicConnection});
         enqueueControl(()=>boundary,()=>{});return;
       }
-      if(sessionEventSink.requiresConfirmation&&event.sessionId===session.id&&(event.type==="session.pause"||event.type==="session.end")){
-        outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.pauseAccepting();
-      }
+      if(preparePublicStop(event,session,sessionEventSink,audioBatcher,ttsOutputQueue,failPublicConnection))outputSuppressed=true;
 
       if (!enqueueControl(
         () =>

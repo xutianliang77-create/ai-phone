@@ -7,9 +7,17 @@ import {
   deleteSession,
   sessionBillableSeconds,
   transitionStatus,
+  freezeSessionBilling,
 } from "./session-manager.js";
 
 describe("realtime gateway session manager", () => {
+  it("freezes public billing before delayed end control executes",()=>{
+    const session=createSession(claims());session.activeStartedAt=0;
+    freezeSessionBilling(session.id,()=>30000);freezeSessionBilling(session.id,()=>32000);
+    expect(sessionBillableSeconds(session,()=>34000)).toBe(30);
+    transitionStatus(session.id,"ending",()=>34000);
+    expect(sessionBillableSeconds(session,()=>40000)).toBe(30);
+  });
   beforeEach(() => {
     deleteSession("session-state-test");
   });

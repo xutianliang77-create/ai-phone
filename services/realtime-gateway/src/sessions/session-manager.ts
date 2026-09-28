@@ -131,6 +131,15 @@ export function activeSessionCount() {
   return sessions.size;
 }
 
+/** Freeze at receipt of a public end, before waiting for queued control work. */
+export function freezeSessionBilling(sessionId:string,nowMs:()=>number=Date.now) {
+  const session=getSession(sessionId);
+  if(session?.status==="active"&&session.activeStartedAt!==undefined){
+    session.accumulatedActiveMs+=Math.max(0,nowMs()-session.activeStartedAt);
+    session.activeStartedAt=undefined;
+  }
+}
+
 export function transitionStatus(
   sessionId: string,
   status: RealtimeSession["status"],

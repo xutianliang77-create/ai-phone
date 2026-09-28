@@ -5,6 +5,7 @@ class AudioFrame {
     required this.sampleRate,
     required this.bytes,
     this.endsSegment = false,
+    this.startsSegment = false,
   });
 
   final int sequence;
@@ -13,4 +14,5 @@ class AudioFrame {
   final List<int> bytes;
   // Local endpoint metadata. The original PCM payload remains unchanged.
   final bool endsSegment;
+  final bool startsSegment;
 }
