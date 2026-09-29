@@ -27,11 +27,16 @@ final class CoreMlNemotronAudioInput {
   private var lastChunkRms = 0.0
   private var lastConversionError: String?
   private var runtimeErrorEmitted = false
-  private let targetSampleRate = 16_000.0
+  private let targetSampleRate: Double
+  private let sharedPlaybackReference: Bool
+  private(set) var pcmPlayback: VoiceProcessingPcmPlayer?
 
-  init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr") {
+  init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr",
+       sampleRate: Double = 16_000, sharedPlaybackReference: Bool = false) {
     self.audioSessionCoordinator = audioSessionCoordinator
     self.audioSessionOwner = owner
+    self.targetSampleRate = sampleRate
+    self.sharedPlaybackReference = sharedPlaybackReference
   }
 
   func start(
@@ -43,6 +48,7 @@ final class CoreMlNemotronAudioInput {
     try configureAudioSession()
     do {
       try configureVoiceProcessing()
+      if sharedPlaybackReference { pcmPlayback = try VoiceProcessingPcmPlayer(engine: engine) }
     } catch {
       deactivateAudioSession()
       throw error
@@ -118,6 +124,8 @@ final class CoreMlNemotronAudioInput {
   }
 
   func stop(flushPending: Bool = false) -> [Float] {
+    pcmPlayback?.stop()
+    if sharedPlaybackReference { engine.stop() }
     deactivateVoiceProcessing()
     if tapInstalled {
       engine.inputNode.removeTap(onBus: 0)
@@ -141,6 +149,14 @@ final class CoreMlNemotronAudioInput {
     return tail
   }
 
+  func pause() { pcmPlayback?.stop(); engine.pause(); running = false }
+  func resume() throws { try engine.start(); running = true }
+  var canPlayPcm: Bool {
+    running && engine.isRunning && pcmPlayback != nil &&
+      engine.inputNode.isVoiceProcessingEnabled && engine.outputNode.isVoiceProcessingEnabled &&
+      !engine.inputNode.isVoiceProcessingBypassed
+  }
+
   func payload() -> [String: Any] {
     let stats = queue.sync {
       var stats: [String: Any] = [
@@ -162,6 +178,9 @@ final class CoreMlNemotronAudioInput {
     }
     var payload: [String: Any] = [
       "running": running,
+      "sharedPlaybackReference": sharedPlaybackReference && pcmPlayback != nil,
+      "inputVoiceProcessingEnabled": sharedPlaybackReference ? engine.inputNode.isVoiceProcessingEnabled : lastVoiceProcessingEnabled,
+      "outputVoiceProcessingEnabled": sharedPlaybackReference && engine.outputNode.isVoiceProcessingEnabled,
       "tapInstalled": tapInstalled,
       "sessionActive": audioSessionActive,
       "voiceProcessingPolicy": "apple_voice_processing_aec_ns",

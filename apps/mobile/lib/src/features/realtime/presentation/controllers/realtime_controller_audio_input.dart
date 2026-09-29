@@ -8,7 +8,14 @@ extension _RealtimeControllerAudioInput on RealtimeController {
     }
     await _audioCapture.requestPermission();
     await _audioSubscription?.cancel();
-    final voiceProcessing = _config.realtimeMode == 'conversation';
+    // Retain a spoken session's duplex graph across mute/route recovery. A new
+    // silent session resets this flag and keeps the previously accepted input.
+    if (_session?.syncBinding != null && _autoSpeakTranslation) {
+      _publicPlaybackReference = true;
+    }
+    final publicPlayback = _session?.syncBinding != null && _publicPlaybackReference;
+    final voiceProcessing = _config.realtimeMode == 'conversation' ||
+        (publicPlayback && defaultTargetPlatform == TargetPlatform.iOS);
     await _audioSessionCoordinator.beginCapture(
       voiceProcessing: voiceProcessing,
     );
@@ -27,6 +34,7 @@ extension _RealtimeControllerAudioInput on RealtimeController {
         managePlatformAudioSession:
             !_audioSessionCoordinator.managesPlatformAudioSession,
         publicEndpointing: _session?.syncBinding != null,
+        publicPlaybackReference: publicPlayback,
         endpointOptions: {
           'vadProvider': _config.deviceAsrVadProvider,
           'vadThreshold': _config.deviceAsrVadThreshold,

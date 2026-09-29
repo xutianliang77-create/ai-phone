@@ -39,6 +39,7 @@ extension RealtimeControllerStart on RealtimeController {
     _captureInvalidated = false;
     _activeTimeClock.reset();
     _session = null;
+    _publicPlaybackReference = false;
     _resultSyncView.epoch++;
     _resultSyncView.busy = false;
     _checkpointWarning = null;

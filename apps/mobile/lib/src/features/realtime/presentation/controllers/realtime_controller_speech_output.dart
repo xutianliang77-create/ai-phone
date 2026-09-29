@@ -160,7 +160,9 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
       'sampleRate': sampleRate,
       'revision': revision,
     });
-    _speechCaptureGate.beginPlayback();
+    final playback = _drafts[segmentId];
+    _speechCaptureGate.beginPlayback(text: playback?.translatedText,
+        language: playback?.targetLanguage);
     _setSpeechOutputActive(true);
     try {
       final result = await Future.any<PcmAudioOutputResult?>([
@@ -176,6 +178,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
           'status': 'finished',
           'provider': result.provider,
           'sampleRate': result.sampleRate,
+          if (result.sharedPlaybackReference) 'sharedPlaybackReference': true,
           'revision': revision,
         });
       }

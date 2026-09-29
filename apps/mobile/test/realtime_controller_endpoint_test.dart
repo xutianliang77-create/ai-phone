@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_session.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
@@ -6,6 +7,10 @@ import 'package:translation_mobile/src/features/realtime/presentation/controller
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
 import 'helpers/realtime_controller_test_helpers.dart';
+import 'helpers/fake_audio_session_coordinator.dart';
+import 'helpers/fake_pcm_audio_output_player.dart';
+import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
+import 'package:translation_mobile/src/platform/speech/pcm_audio_output_player.dart';
 
 class PublicRepository extends FakeRealtimeRepository {
   final order = <String>[];
@@ -73,7 +78,86 @@ class Capture extends FakeAudioCapture {
   }
 }
 
+class VoiceToggleRepository extends PublicRepository {
+  @override
+  Future<void> setVoiceOutput(String sessionId, bool enabled, {String? presetId}) async {}
+}
+
 void main() {
+  test('muting and route recovery preserve the same spoken reference; a new silent session does not inherit it', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final capture = Capture(), audio = FakeAudioSessionCoordinator();
+    final controller = realtimeControllerForTest(VoiceToggleRepository(), capture,
+      autoSpeakTranslation:true, audioSessionCoordinator:audio);
+    try {
+      await controller.start();
+      expect(capture.startedConfigs.last.publicPlaybackReference,isTrue);
+      expect(await controller.setAutoSpeakTranslation(false),isTrue);
+      audio.emit(const AudioSessionEvent(type:AudioSessionEventType.captureInvalidated));
+      await pumpEventQueue();
+      expect(capture.startedConfigs.length,2);
+      expect(capture.startedConfigs.last.publicPlaybackReference,isTrue);
+      expect(await controller.setAutoSpeakTranslation(true),isTrue);
+      await controller.setAutoSpeakTranslation(false);
+      await controller.stop(); await controller.start();
+      expect(capture.startedConfigs.last.publicPlaybackReference,isFalse);
+    } finally { await controller.disposeAsync(); debugDefaultTargetPlatformOverride = null; }
+  });
+  test('spoken iOS route rebuild retires playback without blocking capture or replaying the old chunk', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final repo = PublicRepository(), capture = Capture(), audio = FakeAudioSessionCoordinator();
+    final completion = Completer<PcmAudioOutputResult>();
+    final player = FakePcmAudioOutputPlayer(firstPlayCompleter: completion);
+    final controller = realtimeControllerForTest(repo, capture, autoSpeakTranslation:true,
+      audioSessionCoordinator:audio, pcmAudioOutputPlayer:player);
+    try {
+      await controller.start();
+      repo.emit(const GatewayRealtimeEvent(type:'translation.final',sessionId:'sess_1',segmentId:'voice',
+        revision:1,text:'Hello there',language:'en'));
+      repo.emit(const GatewayRealtimeEvent(type:'audio.output',sessionId:'sess_1',segmentId:'voice',
+        revision:1,sequence:1,format:'pcm16',sampleRate:16000,data:'AAA='));
+      await pumpEventQueue();
+      expect(player.played.length,1);
+      audio.emit(const AudioSessionEvent(type:AudioSessionEventType.captureInvalidated));
+      await pumpEventQueue();
+      expect(capture.startCalls,2);
+      expect(player.stopCount,greaterThan(0));
+      capture.emit(2); await pumpEventQueue();
+      expect(repo.order,contains('frame:2'));
+      completion.complete(const PcmAudioOutputResult(provider:'server_pcm_tts',sampleRate:16000));
+      repo.emit(const GatewayRealtimeEvent(type:'audio.output',sessionId:'sess_1',segmentId:'voice',
+        revision:1,sequence:2,format:'pcm16',sampleRate:16000,data:'AAA='));
+      await pumpEventQueue();
+      expect(player.played.length,1);
+      expect(controller.message,isNull);
+    } finally { await controller.disposeAsync(); debugDefaultTargetPlatformOverride = null; }
+  });
+  test('public spoken iOS meeting capture activates voice processing before native input starts', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      for (final spoken in [true, false]) {
+        final capture = Capture(), controller = realtimeControllerForTest(
+          PublicRepository(), capture, autoSpeakTranslation: spoken, realtimeMode: 'meeting');
+        try {
+          await controller.start();
+          expect(capture.startedConfigs.single.echoCancel, spoken);
+          expect(capture.startedConfigs.single.publicPlaybackReference, spoken);
+        } finally { await controller.disposeAsync(); }
+      }
+    } finally { debugDefaultTargetPlatformOverride = null; }
+  });
+  test('only a spoken public session requests native playback reference', () async {
+    for (final public in [true, false]) {
+      for (final spoken in [true, false]) {
+        final repo = PublicRepository()..public = public, capture = Capture();
+        final controller = realtimeControllerForTest(repo, capture, autoSpeakTranslation: spoken);
+        try {
+          await controller.start();
+          expect(capture.startedConfigs.single.publicPlaybackReference, public && spoken);
+        } finally { await controller.disposeAsync(); }
+      }
+    }
+  });
   test('a tail boundary alone does not interrupt a newly playing response', () async {
     final gate=SpeechCaptureGate(),capture=Capture();
     final controller=realtimeControllerForTest(PublicRepository(),capture,speechCaptureGate:gate);

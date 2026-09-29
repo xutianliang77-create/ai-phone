@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 import 'audio_capture.dart';
 import 'audio_frame.dart';
 import 'online_audio_endpoint.dart';
+import 'ios_public_pcm_capture.dart';
 
 class RecordAudioCapture implements AudioCapture {
   RecordAudioCapture({AudioEndpointDetector? endpointDetector})
@@ -19,6 +20,7 @@ class RecordAudioCapture implements AudioCapture {
   final StreamController<AudioFrame> _frames =
       StreamController<AudioFrame>.broadcast();
   AudioRecorder? _recorder;
+  IosPublicPcmCapture? _publicIosCapture;
   StreamSubscription<Uint8List>? _subscription;
   int _sequence = 1;
   AudioCaptureConfig _config = const AudioCaptureConfig();
@@ -48,6 +50,18 @@ class RecordAudioCapture implements AudioCapture {
         throw const AudioCaptureException('音频启动已取消');
       }
     }
+    if (usesIosPublicPlaybackCapture(config, defaultTargetPlatform)) {
+      final input = IosPublicPcmCapture();
+      _publicIosCapture = input;
+      await input.start(config, (bytes) {
+        if (generation == _generation) _emitFrame(bytes);
+      }, _frames.addError);
+      if (generation != _generation) {
+        await input.stop();
+        throw const AudioCaptureException('音频启动已取消');
+      }
+      return;
+    }
     final recorder = _activeRecorder;
     await recorder.ios?.manageAudioSession(config.managePlatformAudioSession);
     if (generation != _generation) throw const AudioCaptureException('音频启动已取消');
@@ -75,16 +89,28 @@ class RecordAudioCapture implements AudioCapture {
 
   @override
   Future<void> pause() async {
+    if (_publicIosCapture case final input?) { await input.pause(); return; }
     await _recorder?.pause();
   }
 
   @override
   Future<void> resume() async {
+    if (_publicIosCapture case final input?) { await input.resume(); return; }
     await _recorder?.resume();
   }
 
   @override
   Future<void> stop() async {
+    // Drain the native tail through the unchanged VAD/sequence pipeline before
+    // invalidating this capture generation. The native fence excludes late PCM.
+    final publicInput = _publicIosCapture;
+    Object? stopError;
+    StackTrace? stopStack;
+    if (publicInput != null) {
+      try { await publicInput.stop(); }
+      catch (error, stack) { stopError = error; stopStack = stack; }
+      finally { if (identical(_publicIosCapture, publicInput)) _publicIosCapture = null; }
+    }
     _generation++;
     final subscription = _subscription;
     _subscription = null;
@@ -102,6 +128,7 @@ class RecordAudioCapture implements AudioCapture {
         await Future<void>.delayed(Duration.zero);
       }
     }
+    if (stopError != null) Error.throwWithStackTrace(stopError, stopStack!);
   }
 
   @override

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
@@ -109,6 +110,7 @@ class RealtimeController extends ChangeNotifier {
   final PcmAudioOutputPlayer? _pcmAudioOutputPlayer;
   final AudioSessionCoordinator _audioSessionCoordinator;
   bool _autoSpeakTranslation;
+  bool _publicPlaybackReference = false;
   bool _voiceOutputUpdating = false;
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();

@@ -19,6 +19,7 @@ class AudioCaptureConfig {
     this.noiseSuppress = true,
     this.managePlatformAudioSession = true,
     this.publicEndpointing = false,
+    this.publicPlaybackReference = false,
     this.endpointOptions = const <String, Object?>{},
   });
 
@@ -28,5 +29,8 @@ class AudioCaptureConfig {
   final bool noiseSuppress;
   final bool managePlatformAudioSession;
   final bool publicEndpointing;
+  /// Spoken public iOS uses one native voice-processing graph for input/output.
+  /// Silent, local and private capture retain their existing paths.
+  final bool publicPlaybackReference;
   final Map<String, Object?> endpointOptions;
 }

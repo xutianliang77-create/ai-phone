@@ -49,6 +49,12 @@ extension RealtimeControllerAudioSession on RealtimeController {
           await _startMobileAsrProvider();
         }
       } else {
+        // A spoken public iOS route rebuild replaces the shared input/output
+        // graph. Retire its playback generation before native teardown.
+        if (defaultTargetPlatform == TargetPlatform.iOS &&
+            _session?.syncBinding != null && _autoSpeakTranslation) {
+          await _stopSpeaking();
+        }
         await _audioCapture.stop();
         if (!rebuildOnly) await _audioSessionCoordinator.endCapture();
         await _audioSubscription?.cancel();

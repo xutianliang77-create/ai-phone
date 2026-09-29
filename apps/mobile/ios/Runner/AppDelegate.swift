@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let audioSessionCoordinator = AudioSessionCoordinator()
+  private lazy var publicPcmCaptureBridge = PublicPcmCaptureBridge(coordinator: audioSessionCoordinator)
   private lazy var appleSpeechAsrBridge = AppleSpeechAsrBridge(coordinator: audioSessionCoordinator)
   private lazy var coreMlNemotronAsrBridge = CoreMlNemotronAsrBridge(
     audioSessionCoordinator: audioSessionCoordinator
@@ -13,7 +14,7 @@ import UIKit
     audioSessionCoordinator: audioSessionCoordinator
   )
   private lazy var pcmAudioOutputBridge = PcmAudioOutputBridge(
-    audioSessionCoordinator: audioSessionCoordinator
+    audioSessionCoordinator: audioSessionCoordinator, publicCapture: publicPcmCaptureBridge
   )
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
@@ -29,6 +30,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PublicPcmCaptureBridge") {
+      publicPcmCaptureBridge.register(messenger: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceTextLanguageBridge") {
       deviceTextLanguageBridge.register(messenger: registrar.messenger())
     }

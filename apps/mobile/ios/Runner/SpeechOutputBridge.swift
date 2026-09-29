@@ -176,15 +176,18 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
 
 final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     private let audioSessionCoordinator: AudioSessionCoordinator
+    private let publicCapture: PublicPcmCaptureBridge?
     private let audioSessionOwner = "server_pcm_tts"
     private let methodChannelName = "translation_mobile/audio_output"
     private var player: AVAudioPlayer?
     private var pendingResult: FlutterResult?
     private var pendingResponse: [String: Any]?
     private var watchdogTimer: Timer?
+    private var playbackId: UUID?
 
-    init(audioSessionCoordinator: AudioSessionCoordinator) {
+    init(audioSessionCoordinator: AudioSessionCoordinator, publicCapture: PublicPcmCaptureBridge? = nil) {
         self.audioSessionCoordinator = audioSessionCoordinator
+        self.publicCapture = publicCapture
         super.init()
     }
 
@@ -230,6 +233,20 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
         stop()
         do {
             try audioSessionCoordinator.beginPlayback(owner: audioSessionOwner)
+            if let publicCapture, publicCapture.hasCapture {
+                let id = UUID(); playbackId = id
+                pendingResult = result
+                pendingResponse = ["provider":"server_pcm_tts", "sampleRate":sampleRate,
+                    "sharedPlaybackReference":true]
+                try publicCapture.play(pcm, sampleRate:sampleRate) { [weak self] error in
+                    guard let self, self.playbackId == id else { return }
+                    self.finishPending(error:error.map { speechError(
+                        $0.localizedDescription == "pcm_audio_cancelled" ? "pcm_audio_cancelled" : "pcm_audio_playback_failed",
+                        $0.localizedDescription) })
+                }
+                scheduleWatchdog(duration:Double(pcm.count) / Double(sampleRate * 2))
+                return
+            }
             let player = try AVAudioPlayer(data: wavData(fromPcm16: pcm, sampleRate: sampleRate))
             player.delegate = self
             self.player = player
@@ -249,6 +266,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
             scheduleWatchdog(duration: player.duration)
         } catch {
             audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
+            playbackId = nil
             pendingResult = nil
             pendingResponse = nil
             result(FlutterError(
@@ -260,6 +278,8 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     }
 
     private func stop(error: FlutterError? = nil) {
+        playbackId = nil
+        publicCapture?.stopPlayback()
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         player?.stop()
@@ -291,6 +311,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     }
 
     private func finishPending(error: FlutterError? = nil) {
+        playbackId = nil
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         audioSessionCoordinator.endPlayback(owner: audioSessionOwner)

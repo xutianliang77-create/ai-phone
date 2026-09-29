@@ -4,10 +4,12 @@ class PcmAudioOutputResult {
   const PcmAudioOutputResult({
     required this.provider,
     required this.sampleRate,
+    this.sharedPlaybackReference = false,
   });
 
   final String provider;
   final int sampleRate;
+  final bool sharedPlaybackReference;
 }
 
 abstract class PcmAudioOutputPlayer {
@@ -43,6 +45,7 @@ class SystemPcmAudioOutputPlayer implements PcmAudioOutputPlayer {
     return PcmAudioOutputResult(
       provider: result?['provider'] as String? ?? 'server_pcm_tts',
       sampleRate: (result?['sampleRate'] as num?)?.toInt() ?? sampleRate,
+      sharedPlaybackReference: result?['sharedPlaybackReference'] == true,
     );
   }
 
