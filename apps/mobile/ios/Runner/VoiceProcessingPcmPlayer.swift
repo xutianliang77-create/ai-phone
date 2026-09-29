@@ -194,8 +194,9 @@ final class PcmRenderReference {
       let correlation = min(1,abs(product)/sqrt(referenceEnergy*energy))
       if correlation > best { best = correlation; lag = offset * 1000 / rate }
     }
-    // Deliberately conservative: >98% of the energy is linearly explained by
-    // the rendered waveform. Similar words or language alone never qualify.
-    return Match(matched:best >= 0.99,correlation:best,lagMs:lag)
+    // The same-phone false turn had 0.497 correlation after voice processing,
+    // while independent near speech in the bounded double-talk replay stayed
+    // below 0.46. This is direct waveform evidence, never text/locale matching.
+    return Match(matched:best >= 0.46,correlation:best,lagMs:lag)
   }
 }

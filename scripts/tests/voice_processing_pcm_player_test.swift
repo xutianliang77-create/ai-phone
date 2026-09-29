@@ -49,6 +49,16 @@ final class FakePcmNode: VoiceProcessingPcmNode {
     precondition(!reference.match(near,analysisStart:4096,sessionId:"s").matched)
     let doubleTalk = zip(echo,near).map(+)
     precondition(!reference.match(doubleTalk,analysisStart:4096,sessionId:"s").matched)
+    // AEC-distorted copy matching the 0.497 physical false turn must be
+    // suppressed; a comparably strong independent near voice must still pass.
+    var noiseSeed: UInt64 = 9981
+    let noise: [Float] = (0..<4096).map { _ in noiseSeed = noiseSeed &* 6364136223846793005 &+ 1
+      return Float(Int(noiseSeed >> 48)-32768) / 65536 }
+    let residual = zip(echo,noise).map { $0 + $1 * 0.52 }
+    let residualMatch = reference.match(residual,analysisStart:4096,sessionId:"s")
+    precondition(residualMatch.matched && residualMatch.correlation >= 0.46 && residualMatch.correlation < 0.6)
+    let independentNear = zip(residual,near).map { $0 + $1 * 1.5 }
+    precondition(!reference.match(independentNear,analysisStart:4096,sessionId:"s").matched)
     precondition(!reference.match(echo,analysisStart:4096,sessionId:"other").matched)
     precondition(!reference.match(echo,analysisStart:180000,sessionId:"s").matched)
     reference.reset(sessionId:"s",sampleRate:16000)

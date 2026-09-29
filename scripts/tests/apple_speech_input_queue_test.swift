@@ -69,6 +69,14 @@ struct AppleSpeechInputQueueTest {
     precondition(evidence(tail,4096)["decision"] as? String == "speech") // genuine short/near speech
     precondition(evidence(tail,4096,16000,true,0,[0..<2048,2048..<4096])["reason"] as? String == "render_echo")
     precondition(evidence(tail,4096,16000,true,0,[0..<2048,3072..<4096])["decision"] as? String == "speech") // missing echo support cannot delete double-talk
+    let echoDetector = CoreMlNemotronEndpointDetector(vadThreshold:0.6,vadNegativeThreshold:0.35,
+      minSpeechMs:96,endpointSilenceMs:640)
+    let capturedFrame = [Float](repeating:0.038,count:4096)
+    let blocked = echoDetector.acceptVadFrame(probability:0.673,samples:capturedFrame,
+      provider:"phone_replayed_false_turn",speechStartAllowed:false)
+    precondition(!blocked.hasSpeech && !blocked.speechStarted)
+    for p in [0.355,0.418] { precondition(!echoDetector.acceptVadFrame(probability:p,samples:capturedFrame,
+      provider:"phone_replayed_false_turn").speechStarted) }
     var bounded = speech;bounded.prune(before:10000)
     precondition(bounded.decision(start:7000,end:9000) == .reject)
 
