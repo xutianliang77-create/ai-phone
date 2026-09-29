@@ -27,7 +27,11 @@ it('binds same session, segment, revision, hash, nonce; duplicate replies cannot
   expect(broker.accept(response(request))).toBe(false);broker.close();
 });
 it.each([
-  ['Okay.','en',{en:0.99},'ambiguous'],['Hello everyone.','en',{en:0.51,fr:0.49},'ambiguous'],
+  ['Okay.','en',{en:0.99},'detected'],['Hello everyone.','en',{en:0.51,fr:0.49},'ambiguous'],
+  ['暂停。','zh-Hans',{'zh-Hans':0.9999983906745911,'zh-Hant':0.0000007201718972282833,ja:0.0000009116975547840411},'detected'],
+  ['Merci.','fr',{fr:0.99,en:0.005},'detected'],
+  ['暂停。','zh-Hans',{'zh-Hans':0.91,ja:0.09},'ambiguous'],
+  ['Si.','es',{es:0.6,it:0.4},'ambiguous'],
   ['这是中文测试。','zh-Hans',{'zh-Hans':0.99},'detected'],
   ['你叫什么名字？','zh-Hans',{'zh-Hans':0.7366148,'zh-Hant':0.2612020,ja:0.002183},'detected'],
   ['我叫天亮。','zh-Hant',{'zh-Hant':0.7371357,'zh-Hans':0.2599954,ja:0.0028689},'detected'],
@@ -40,6 +44,13 @@ it.each([
   let r!:DeviceTextLanguageRequest;const broker=new DeviceTextLanguageBroker('s',['zh','en','fr'],v=>{r=v;return true;});
   const p=broker.identify('seg',1,text);broker.accept(response(r,dominant,{...hypotheses}));
   const value=await p;expect(value.status==='detected'?'detected':value.reason).toBe(status);broker.close();
+});
+it('routes confident short third-language speech without borrowing the selected pair',async()=>{
+  let r!:DeviceTextLanguageRequest;const broker=new DeviceTextLanguageBroker('s',['zh','en','ja'],v=>{r=v;return true;});
+  const p=broker.identify('short-ja',1,'はい。');broker.accept(response(r,'ja',{ja:0.995,'zh-Hans':0.005}));
+  await expect(p).resolves.toEqual({status:'detected',language:'ja',confidence:0.995});
+  const unsupported=broker.identify('short-fr',1,'Merci.');broker.accept(response(r,'fr',{fr:0.99}));
+  await expect(unsupported).resolves.toEqual({status:'unknown',reason:'unsupported'});broker.close();
 });
 it('reuses v1 identifier masking only in the bound observation, without manufacturing a language',async()=>{
   const text='我们要测试 Qwen3 ASR、 HiMT2 和 VoxCPM2 的在线模型链路。';

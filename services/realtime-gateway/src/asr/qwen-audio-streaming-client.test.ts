@@ -47,7 +47,7 @@ it('continues PCM during phone LID and accepts the final reply during end withou
 });
 it('records cumulative usage once, ignores repeated final, and preserves unknown original without MT source',async()=>{
   const t=setup(true);try{await t.start();await t.client.transcribe(t.frame());t.socket.sentence(1,'Okay.');t.socket.sentence(1,'Okay.');
-    const {text,...r}=t.requests[0];t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:1}});
+    const {text,...r}=t.requests[0];t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.6,fr:0.4}});
     t.socket.autoFinish=false;const ending=t.client.flush({...t.flush,finishSession:true});await tick();
     t.socket.receive('task-finished',{usage:{input_tokens:10,output_tokens:2,total_tokens:12,duration:0.1}});
     expect(await ending).toEqual([]);expect(t.client.takeLanguageNotices('s')).toEqual([expect.objectContaining({language:'unknown',unconfirmedText:'Okay.'})]);

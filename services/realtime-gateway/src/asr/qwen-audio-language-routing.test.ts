@@ -55,7 +55,7 @@ it.each(['missing','crossing','overlap'])('does not invent alignment for mixed c
   }finally{t.broker.close();}
 });
 it('keeps a third language distinct and cannot borrow a neighbor language for a short ambiguous answer',async()=>{
-  const t=observer(text=>text.includes('こんにちは')?['ja',{ja:0.99}]:pair(text));
+  const t=observer(text=>text.includes('こんにちは')?['ja',{ja:0.99}]:['en',{en:0.6,fr:0.4}]);
   try{
     const result=await routeQwenAudioLanguage(sentence('こんにちは、お元気ですか？Okay.'),'task:1',t.broker);
     expect(result[0].decision).toMatchObject({language:'ja'});

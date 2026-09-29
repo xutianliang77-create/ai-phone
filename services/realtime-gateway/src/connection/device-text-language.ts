@@ -50,12 +50,18 @@ export class DeviceTextLanguageBroker {
     const language=top?.[0];
     const letters=r.text.match(/\p{L}/gu)??[];
     const latin=letters.filter(c=>/\p{Script=Latin}/u.test(c)).length;
-    const substantial=letters.length>=4&&(latin<letters.length/2||
-      letters.length>=8&&(r.text.match(/\p{Script=Latin}+/gu)?.length??0)>=2);
+    const substantial=letters.length>=2;
+    const shortObservation=letters.length<4||latin>=letters.length/2&&
+      (letters.length<8||(r.text.match(/\p{Script=Latin}+/gu)?.length??0)<2);
+    // A short utterance is not inherently an unknown language. Require stronger
+    // independent evidence for it instead of rejecting even a 99.9999% result.
+    // Keep ambiguous one-character/identifier-only replies unknown; never
+    // borrow a preceding sentence's language or renormalize to the output pair.
+    const minimumProbability=shortObservation?0.98:0.85,minimumMargin=shortObservation?0.8:0.2;
     logPublicAsrLanguage({sessionId:this.sessionId,segmentId:r.segmentId,revision:r.revision,stage:'language_observation',
       observationTextSha256:r.textSha256,dominant:value.dominant,hypotheses:value.hypotheses,
-      canonicalHypotheses:Object.fromEntries(entries),substantial});
-    if(!top||value.dominant!==raw[0]?.[0]||top[1]<0.85||top[1]-second<0.2||!substantial){
+      canonicalHypotheses:Object.fromEntries(entries),substantial,shortObservation});
+    if(!top||value.dominant!==raw[0]?.[0]||top[1]<minimumProbability||top[1]-second<minimumMargin||!substantial){
       entry.finish({status:'unknown',reason:'ambiguous'});return true;
     }
     if(!this.sources.includes(language as TranslationLanguageCode))entry.finish({status:'unknown',reason:'unsupported'});
