@@ -76,6 +76,8 @@ class IosPublicPcmCapture {
         'captureId': id,
         'sampleRate': config.sampleRate,
         'frameDurationMs': config.frameDurationMs,
+        if (config.endpointOptions['productSessionId'] is String)
+          'productSessionId': config.endpointOptions['productSessionId'],
         if (config.endpointOptions['diagnosticCaptureEnabled'] == true)
           'diagnosticSessionId': config.endpointOptions['diagnosticSessionId'],
       });

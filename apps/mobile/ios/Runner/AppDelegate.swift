@@ -5,7 +5,8 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let audioSessionCoordinator = AudioSessionCoordinator()
   private lazy var publicPcmCaptureBridge = PublicPcmCaptureBridge(coordinator: audioSessionCoordinator)
-  private lazy var appleSpeechAsrBridge = AppleSpeechAsrBridge(coordinator: audioSessionCoordinator)
+  private lazy var appleSpeechAsrBridge = AppleSpeechAsrBridge(coordinator: audioSessionCoordinator,
+    renderReference:publicPcmCaptureBridge.renderReference)
   private lazy var coreMlNemotronAsrBridge = CoreMlNemotronAsrBridge(
     audioSessionCoordinator: audioSessionCoordinator
   )
@@ -19,7 +20,9 @@ import UIKit
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
   private let deviceSpeakerBridge = DeviceSpeakerBridge()
-  private let deviceTextLanguageBridge = DeviceTextLanguageBridge()
+  private lazy var deviceTextLanguageBridge = DeviceTextLanguageBridge(speechEvidence: { [weak self] session,range in
+    self?.appleSpeechAsrBridge.audioEvidence(sessionId:session,range:range) ?? [:]
+  })
 
   override func application(
     _ application: UIApplication,

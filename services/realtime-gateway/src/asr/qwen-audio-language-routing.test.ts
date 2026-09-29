@@ -11,7 +11,7 @@ function sentence(text:string):QwenAudioSentence {
 function observer(choose:(text:string)=>[string,Record<string,number>]){
   const requests:DeviceTextLanguageRequest[]=[];
   const broker=new DeviceTextLanguageBroker('s',['zh','en','ja','fr'],r=>{
-    requests.push(r);const {text,...binding}=r,[dominant,hypotheses]=choose(text);
+    requests.push(r);const {text,audioRange,...binding}=r,[dominant,hypotheses]=choose(text);
     queueMicrotask(()=>broker.accept({...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant,hypotheses}));return true;
   });
   return {requests,broker};

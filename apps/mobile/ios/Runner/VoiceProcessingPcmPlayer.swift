@@ -64,7 +64,9 @@ final class VoiceProcessingPcmPlayer {
 
   func play(_ pcm: Data, sampleRate: Int, completion: @escaping (Error?) -> Void) throws {
     let buffer = try Self.buffer(pcm, sampleRate: sampleRate, output: format)
-    stop()
+    // A fully played preceding chunk has no pending completion. Do not stop
+    // and restart the reference node between normal streaming chunks.
+    if self.completion != nil { stop() }
     generation &+= 1
     let current = generation
     self.completion = completion
@@ -124,5 +126,76 @@ final class VoiceProcessingPcmPlayer {
 
   private static func failure(_ code: String) -> NSError {
     NSError(domain: "VoiceProcessingPcmPlayer", code: 1, userInfo: [NSLocalizedDescriptionKey: code])
+  }
+}
+
+/// A bounded, ephemeral reference of what THIS capture actually rendered.
+/// High waveform agreement is echo evidence, not text matching or a language
+/// decision. Independent double-talk is retained; unmatched/partial evidence
+/// is never enough to reject input. No PCM is persisted or sent to the server.
+final class PcmRenderReference {
+  struct Match { let matched: Bool, correlation: Double; let lagMs: Int }
+  private let lock = NSLock()
+  private let rate = 2000, capacity = 16000 // 8 seconds, 64 KB float reference
+  private var values = [Float](repeating: 0, count: 16000)
+  private var positions = [Int](repeating: -1, count: 16000)
+  private var owner: String?
+  private var captureRate = 16000
+
+  func reset(sessionId: String?, sampleRate: Int) {
+    lock.lock(); defer { lock.unlock() }
+    owner = sessionId; captureRate = sampleRate
+    values = [Float](repeating:0,count:capacity)
+    positions = [Int](repeating: -1, count: capacity)
+  }
+  func record(_ pcm: Data, sampleRate: Int, captureSample: Int, sessionId: String?, acousticRoute: Bool) {
+    guard acousticRoute, let sessionId, [16000,24000].contains(sampleRate), pcm.count.isMultiple(of:2), !pcm.isEmpty else { return }
+    lock.lock(); defer { lock.unlock() }
+    guard owner == sessionId, [16000,24000].contains(captureRate), captureSample >= 0 else { return }
+    let bytes = [UInt8](pcm), stride = sampleRate / rate, start = captureSample / (captureRate / rate)
+    let count = min(capacity, pcm.count / 2 / stride)
+    for i in 0..<count {
+      var sum: Float = 0
+      for j in 0..<stride {
+        let k = (i * stride + j) * 2
+        sum += Float(Int16(bitPattern:UInt16(bytes[k]) | UInt16(bytes[k+1]) << 8)) / 32768
+      }
+      let p = start + i, slot = p % capacity
+      values[slot] = sum / Float(stride); positions[slot] = p
+    }
+  }
+  func match(_ samples: [Float], analysisStart: Int, sessionId: String?) -> Match {
+    guard let sessionId, samples.count >= 1024, analysisStart >= 0 else { return Match(matched:false,correlation:0,lagMs:0) }
+    let stride = 8, count = samples.count / 8
+    var input = [Double](repeating:0,count:count)
+    for i in 0..<count { for j in 0..<stride { input[i] += Double(samples[i*stride+j]) / Double(stride) } }
+    let mean = input.reduce(0,+) / Double(count)
+    for i in 0..<count { input[i] -= mean }
+    let energy = input.reduce(0) { $0+$1*$1 }
+    guard energy > 1e-9 else { return Match(matched:false,correlation:0,lagMs:0) }
+    lock.lock(); defer { lock.unlock() }
+    guard owner == sessionId else { return Match(matched:false,correlation:0,lagMs:0) }
+    let base = analysisStart / stride
+    // Reuse the 1.0 echo-tail bound for uncertain hardware/render alignment.
+    let maxLag = 350 * rate / 1000 // the unchanged 1.0 350 ms echo-tail bound
+    var best = 0.0, lag = 0
+    for offset in -maxLag...maxLag {
+      let start = base + offset
+      if start < 0 { continue }
+      var sum = 0.0, squares = 0.0, product = 0.0, complete = true
+      for i in 0..<count {
+        let p = start + i, slot = p % capacity
+        if positions[slot] != p { complete = false; break }
+        let v = Double(values[slot]); sum += v; squares += v*v; product += v*input[i]
+      }
+      if !complete { continue }
+      let referenceEnergy = squares - sum*sum/Double(count)
+      if referenceEnergy <= 1e-9 { continue }
+      let correlation = min(1,abs(product)/sqrt(referenceEnergy*energy))
+      if correlation > best { best = correlation; lag = offset * 1000 / rate }
+    }
+    // Deliberately conservative: >98% of the energy is linearly explained by
+    // the rendered waveform. Similar words or language alone never qualify.
+    return Match(matched:best >= 0.99,correlation:best,lagMs:lag)
   }
 }

@@ -168,7 +168,7 @@ export class QwenAudioStreamingClient {
     // when delivering to the original assembler/MT path.
     const routed:Promise<RoutedAudioSentence[]>=!cleanRealtimeText(sentence.text)
       ? Promise.resolve([{id,sentence,decision:{status:'unknown',reason:'ambiguous'}}])
-      : this.options.language==='auto'?routeQwenAudioLanguage(sentence,id,this.options.textLanguage!):
+      : this.options.language==='auto'?routeQwenAudioLanguage(sentence,id,this.options.textLanguage!,this.rate):
         Promise.resolve([{id,sentence,decision:{status:'detected',language:this.options.language,confidence:1}}]);
     this.languageWork=this.languageWork.then(async()=>{
       const results=await routed;
@@ -179,6 +179,9 @@ export class QwenAudioStreamingClient {
         logPublicAsrLanguage({sessionId:this.options.sessionId,segmentId:childId,revision:1,stage:'language_routing',startMs:child.startMs,endMs:child.endMs,
           tokenTimingCount:child.tokenTimings?.length??0,childCount:results.length,...language});
         const text=cleanRealtimeText(child.text);
+        if(language.status==='non_speech'){
+          this.notices.push({segmentId:childId,revision:1,language:'unknown',unconfirmedText:'',discarded:true});continue;
+        }
         if(!text){this.notices.push({segmentId:childId,revision:1,language:'unknown',unconfirmedText:'',discarded:true});continue;}
         if(language.status!=='detected'){
           this.notices.push({segmentId:childId,revision:1,language:'unknown',unconfirmedText:child.text,

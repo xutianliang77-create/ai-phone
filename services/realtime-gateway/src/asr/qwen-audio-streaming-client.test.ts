@@ -40,14 +40,14 @@ it('continues PCM during phone LID and accepts the final reply during end withou
     await t.client.transcribe(t.frame());expect(t.socket.sent[0].payload.parameters).not.toHaveProperty('language_hints');
     t.socket.sentence(1,'Bonjour tout le monde.',false);t.socket.sentence(1,'Bonjour tout le monde.');
     await t.client.transcribe(t.frame(1));expect(t.socket.bytes).toBe(6400);expect(t.preview).toHaveBeenCalledWith(expect.objectContaining({language:'auto',revision:0}));
-    const ending=t.client.flush({...t.flush,finishSession:true});await tick();const {text,...r}=t.requests[0];
+    const ending=t.client.flush({...t.flush,finishSession:true});await tick();const {text,audioRange,...r}=t.requests[0];
     expect(t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'fr',hypotheses:{fr:0.99}})).toBe(true);
     const result=await ending;expect(result[0]).toMatchObject({language:'fr',automaticLanguageStatus:'detected'});expect(result[0]).not.toHaveProperty('confidence');
   }finally{await t.client.closeSession('s');}
 });
 it('records cumulative usage once, ignores repeated final, and preserves unknown original without MT source',async()=>{
   const t=setup(true);try{await t.start();await t.client.transcribe(t.frame());t.socket.sentence(1,'Okay.');t.socket.sentence(1,'Okay.');
-    const {text,...r}=t.requests[0];t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.6,fr:0.4}});
+    const {text,audioRange,...r}=t.requests[0];t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.6,fr:0.4}});
     t.socket.autoFinish=false;const ending=t.client.flush({...t.flush,finishSession:true});await tick();
     t.socket.receive('task-finished',{usage:{input_tokens:10,output_tokens:2,total_tokens:12,duration:0.1}});
     expect(await ending).toEqual([]);expect(t.client.takeLanguageNotices('s')).toEqual([expect.objectContaining({language:'unknown',unconfirmedText:'Okay.'})]);
@@ -77,6 +77,20 @@ it('punctuation-only final withdraws its draft without asking the phone to guess
   const t=setup(true);try{await t.start();await t.client.transcribe(t.frame());t.socket.sentence(1,'。');
     expect(await t.client.flush({...t.flush,finishSession:true})).toEqual([]);
     expect(t.requests).toEqual([]);expect(t.client.takeLanguageNotices('s')).toEqual([expect.objectContaining({unconfirmedText:'',discarded:true})]);
+  }finally{await t.client.closeSession('s');}
+});
+it('negative native speech evidence retires the draft before MT without an error or new ASR attempt',async()=>{
+  const t=setup(true);try{
+    await t.start();await t.client.transcribe(t.frame());
+    t.socket.sentence(1,'Can you book a room.',false);t.socket.sentence(1,'Can you book a room.');
+    const {text,audioRange,...r}=t.requests[0];
+    expect(audioRange).toEqual({startSample:0,endSample:1600,sampleRate:16000});
+    expect(t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
+      audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:'non_speech',coveredThroughSample:1600,reason:'render_echo'}})).toBe(true);
+    expect(await t.client.flush({...t.flush,finishSession:true})).toEqual([]);
+    expect(t.client.takeLanguageNotices('s')).toEqual([expect.objectContaining({unconfirmedText:'',discarded:true})]);
+    expect(t.records.filter(e=>e.state==='confirmed')).toHaveLength(1);
+    expect(t.factory).toHaveBeenCalledTimes(1);
   }finally{await t.client.closeSession('s');}
 });
 it('preserves an allowlisted provider cause without logging message, transcript or credentials',async()=>{

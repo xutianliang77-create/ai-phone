@@ -26,6 +26,33 @@ final class FakePcmNode: VoiceProcessingPcmNode {
     precondition(PcmCaptureReadiness(inputStarted:true,engineRunning:true,referenceBound:true,
       inputProcessing:true,outputProcessing:true,bypassed:true).reason == "voice_processing_bypassed")
     let output = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+    // Completed streaming chunks do not reset the reference node; explicit
+    // cancellation still does, and a stale completion cannot finish a new one.
+    let streamingNode = FakePcmNode(), streamingPlayer = VoiceProcessingPcmPlayer(node:streamingNode,format:output)
+    try streamingPlayer.play(Data(repeating:0,count:3200),sampleRate:16000) { _ in }
+    streamingNode.callbacks[0]()
+    try streamingPlayer.play(Data(repeating:0,count:3200),sampleRate:16000) { _ in }
+    precondition(streamingNode.stops == 0)
+    streamingPlayer.stop();precondition(streamingNode.stops == 1)
+    // Reference-only echo, independent speech, and mixed double-talk.
+    let reference = PcmRenderReference()
+    reference.reset(sessionId:"s",sampleRate:16000)
+    var seed: UInt64 = 1
+    let render: [Float] = (0..<16000).map { _ in seed = seed &* 6364136223846793005 &+ 1; return Float(Int(seed >> 48)-32768) / 65536 }
+    reference.record(VoiceProcessingPcmPlayer.encode(render),sampleRate:16000,captureSample:0,sessionId:"s",acousticRoute:true)
+    let echo = Array(render[4096..<8192]).map { $0 * 0.3 }
+    let matchStarted = ProcessInfo.processInfo.systemUptime
+    precondition(reference.match(echo,analysisStart:4096,sessionId:"s").matched)
+    let matchMs = (ProcessInfo.processInfo.systemUptime-matchStarted)*1000
+    print("HOST reference matching time for 256 ms input: \(matchMs) ms; not iPhone performance evidence")
+    let near = (0..<4096).map { Float(sin(Double($0)*0.081) * 0.2) }
+    precondition(!reference.match(near,analysisStart:4096,sessionId:"s").matched)
+    let doubleTalk = zip(echo,near).map(+)
+    precondition(!reference.match(doubleTalk,analysisStart:4096,sessionId:"s").matched)
+    precondition(!reference.match(echo,analysisStart:4096,sessionId:"other").matched)
+    precondition(!reference.match(echo,analysisStart:180000,sessionId:"s").matched)
+    reference.reset(sessionId:"s",sampleRate:16000)
+    precondition(!reference.match(echo,analysisStart:4096,sessionId:"s").matched)
     let encoded = VoiceProcessingPcmPlayer.encode([-2,-1,-0.5,0,0.5,1,2,.infinity,.nan,.greatestFiniteMagnitude])
     precondition([UInt8](encoded) == [0,128,0,128,0,192,0,0,0,64,255,127,255,127,0,0,0,0,255,127])
     for rate in [16000,24000] {

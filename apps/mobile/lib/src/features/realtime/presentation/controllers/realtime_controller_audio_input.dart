@@ -37,6 +37,7 @@ extension _RealtimeControllerAudioInput on RealtimeController {
         publicEndpointing: _session?.syncBinding != null,
         publicPlaybackReference: publicPlayback,
         endpointOptions: {
+          if (_session?.syncBinding != null) 'productSessionId': _session!.sessionId,
           'vadProvider': _config.deviceAsrVadProvider,
           'vadThreshold': _config.deviceAsrVadThreshold,
           'vadNegativeThreshold': _config.deviceAsrVadNegativeThreshold,

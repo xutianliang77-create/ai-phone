@@ -11,8 +11,20 @@ final class AppleSpeechAsrBridge: NSObject, FlutterStreamHandler {
   private var preparationID: String?
   private var preparationProgress: Progress?
   private var onlineEndpointSession: AnyObject?
+  private var lastOnlineEndpointSession: AnyObject?
+  private let renderReference: PcmRenderReference?
 
-  init(coordinator: AudioSessionCoordinator) { self.coordinator = coordinator }
+  init(coordinator: AudioSessionCoordinator, renderReference: PcmRenderReference? = nil) {
+    self.coordinator = coordinator; self.renderReference = renderReference
+  }
+  @MainActor
+  func audioEvidence(sessionId:String,range:[String:Any]) -> [String:Any] {
+    if #available(iOS 17.0, *), let current = (onlineEndpointSession ?? lastOnlineEndpointSession) as? AppleOnlineEndpointSession {
+      return current.audioEvidence(sessionId:sessionId,range:range)
+    }
+    return ["method":"ios_silero_render_v1","range":range,"decision":"unknown",
+      "coveredThroughSample":0,"reason":"unavailable"]
+  }
 
   func register(messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "translation_mobile/apple_speech_asr", binaryMessenger: messenger)
@@ -46,7 +58,9 @@ final class AppleSpeechAsrBridge: NSObject, FlutterStreamHandler {
     case "endpoint.start":
       guard session == nil, preparationTask == nil, onlineEndpointSession == nil,
         let rate = args["sampleRate"] as? Int else { throw AppleSpeechFailure.busy }
-      let current = try AppleOnlineEndpointSession(id: id, sampleRate: rate, configuration: AppleSpeechConfiguration(arguments: args)); onlineEndpointSession = current
+      lastOnlineEndpointSession = nil
+      let current = try AppleOnlineEndpointSession(id: id, sampleRate: rate, configuration: AppleSpeechConfiguration(arguments: args),
+        productSessionId:args["productSessionId"] as? String,renderReference:renderReference); onlineEndpointSession = current
       do { try await current.prepare() } catch { if onlineEndpointSession === current { onlineEndpointSession = nil }; current.invalidate(); throw error }
       guard onlineEndpointSession === current else { throw AppleSpeechFailure.cancelled }
       if args["diagnosticCaptureEnabled"] as? Bool == true, let sessionId = args["diagnosticSessionId"] as? String {
@@ -60,7 +74,7 @@ final class AppleSpeechAsrBridge: NSObject, FlutterStreamHandler {
       guard onlineEndpointSession === current else { throw AppleSpeechFailure.cancelled }
       result(["requestId": id, "sequence": sequence, "boundary": decision.boundary, "speechStarted": decision.speechStarted])
     case "endpoint.stop":
-      if let current = onlineEndpointSession as? AppleOnlineEndpointSession, current.id == id { current.invalidate(); onlineEndpointSession = nil }
+      if let current = onlineEndpointSession as? AppleOnlineEndpointSession, current.id == id { current.invalidate(); lastOnlineEndpointSession = current; onlineEndpointSession = nil }
       result(nil)
     default: result(FlutterMethodNotImplemented)
     }

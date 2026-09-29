@@ -6,9 +6,40 @@ import {textForLanguageObservation} from './text-language-evidence.js';
 import {realtimeLogger} from '../metrics/realtime-metrics.js';
 const fixture=JSON.parse(readFileSync(new URL('../../../../packages/contracts/fixtures/device-text-language-v1.json',import.meta.url),'utf8'));
 const response=(r:DeviceTextLanguageRequest,dominant:string|null='fr',hypotheses:Record<string,number>={fr:0.98,en:0.01})=>{
-  const {text,...binding}=r;return {...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant,hypotheses};
+  const {text,audioRange,...binding}=r;return {...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant,hypotheses};
 };
 afterEach(()=>vi.useRealTimers());
+it('keeps old Apps on the exact old challenge without adding a timeout or fabricating speech evidence',async()=>{
+  let request!:DeviceTextLanguageRequest;const send=vi.fn((r:DeviceTextLanguageRequest)=>{request=r;return true;});
+  const broker=new DeviceTextLanguageBroker('s',['en'],send,2000,false);
+  const range={startSample:0,endSample:1000,sampleRate:16000 as const};
+  const p=broker.identify('old',1,'Hello everyone.',range);
+  expect(request).not.toHaveProperty('audioRange');broker.accept(response(request,'en',{en:0.99}));
+  await expect(p).resolves.toMatchObject({status:'detected',language:'en'});
+  await expect(broker.confirmSpeech('old',1,'Hello everyone.',range)).resolves.toBe(true);
+  expect(send).toHaveBeenCalledTimes(1);broker.close();
+});
+it('accepts fully covered negative speech evidence only for the exact nonce/revision/hash/audio range',async()=>{
+  let r!:DeviceTextLanguageRequest;const broker=new DeviceTextLanguageBroker('s',['zh','en'],v=>{r=v;return true;});
+  const range={startSample:32000,endSample:48000,sampleRate:16000 as const};
+  const decision=broker.identify('seg',1,'Can you book a room.',range);
+  const e={method:'ios_silero_render_v1',range:{sampleRate:16000,endSample:48000,startSample:32000},
+    decision:'non_speech',coveredThroughSample:60000,reason:'no_speech_support'};
+  expect(broker.accept({...response(r,'en',{en:0.99}),audioEvidence:{...e,range:{...range,startSample:31000}}})).toBe(false);
+  expect(broker.accept({...response(r,'en',{en:0.99}),audioEvidence:{...e,coveredThroughSample:47000}})).toBe(false);
+  expect(broker.accept({...response(r,'en',{en:0.99}),audioEvidence:e})).toBe(true);
+  await expect(decision).resolves.toEqual({status:'non_speech',reason:'no_speech_support'});
+  await expect(broker.confirmSpeech('seg',1,'Can you book a room.',range)).resolves.toBe(false);
+  broker.close();await expect(broker.confirmSpeech('seg',1,'Can you book a room.',range)).resolves.toBe(true);
+});
+it.each(['speech','unknown','missing'])('does not suppress real speech or fabricate negative evidence (%s)',async kind=>{
+  let r!:DeviceTextLanguageRequest;const broker=new DeviceTextLanguageBroker('s',['en'],v=>{r=v;return true;});
+  const range={startSample:0,endSample:4000,sampleRate:16000 as const};
+  const p=broker.confirmSpeech('seg',1,'Okay.',range);
+  broker.accept({...response(r,'en',{en:0.99}),...(kind==='missing'?{}:{audioEvidence:{method:'ios_silero_render_v1',range,
+    decision:kind,coveredThroughSample:5000,reason:kind==='speech'?'speech_overlap':'uncovered'}})});
+  await expect(p).resolves.toBe(true);broker.close();
+});
 it('accepts the exact shared mobile response contract; rejects extra choice/authority and malformed probabilities',()=>{
   expect(isDeviceTextLanguageResult(fixture.response)).toBe(true);
   for(const patch of [{targetLanguage:'zh'},{hypotheses:{fr:2}},{hypotheses:{fr:0.9,en:0.9}},

@@ -6,5 +6,8 @@ Uri realtimeGatewayEndpoint(RealtimeSession session) => session.endpoint;
 Iterable<String> realtimeGatewayProtocols(RealtimeSession session) => <String>[
       'ai-phone.realtime.v1',
       'ai-phone.token.${session.realtimeToken}',
-      if (session.syncBinding != null && supportsDeviceTextLanguage) deviceTextLanguageProtocol,
+      if (session.syncBinding != null && supportsDeviceTextLanguage)
+        deviceTextLanguageProtocol,
+      if (session.syncBinding != null && supportsDeviceTextLanguage)
+        deviceSpeechEvidenceProtocol,
     ];

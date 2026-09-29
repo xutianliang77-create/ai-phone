@@ -23,6 +23,11 @@ final class AppleOnlineEndpointSession {
   private var pending: [Float] = []
   private let trace = CoreMlNemotronDiagnosticRecorder(metadataOnly: true, maximumTimelineEvents: 4096)
   private var tracing = false, inputSamples = 0, analysisSamples = 0
+  private let productSessionId: String?
+  private let renderReference: PcmRenderReference?
+  private var activity: AppleSpeechActivityGate
+  private var evidenceFloor = 0
+  private var renderEchoRanges: [Range<Int>] = []
 
   func startDiagnostics(sessionId: String) {
     guard !sessionId.isEmpty, sessionId.count <= 240 else { return }
@@ -40,7 +45,8 @@ final class AppleOnlineEndpointSession {
   private var state = VadStreamState.initial()
   #endif
 
-  init(id: String, sampleRate: Int, configuration: AppleSpeechConfiguration) throws {
+  init(id: String, sampleRate: Int, configuration: AppleSpeechConfiguration,
+    productSessionId: String? = nil, renderReference: PcmRenderReference? = nil) throws {
     guard !id.isEmpty, id.count <= 120, [16000, 24000].contains(sampleRate),
       let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
       let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false) else {
@@ -49,6 +55,8 @@ final class AppleOnlineEndpointSession {
     self.id = id; inputFormat = input; outputFormat = output
     converter = AVAudioConverter(from: input, to: output)
     self.configuration = configuration
+    self.productSessionId = productSessionId; self.renderReference = renderReference
+    activity = AppleSpeechActivityGate(preRollSamples:configuration.preRollSamples)
     endpoint = CoreMlNemotronEndpointDetector(vadThreshold: configuration.threshold,
       vadNegativeThreshold: configuration.negativeThreshold, minSpeechMs: configuration.minSpeechMs,
       endpointSilenceMs: configuration.silenceMs)
@@ -104,12 +112,21 @@ final class AppleOnlineEndpointSession {
       guard active else { throw AppleSpeechFailure.cancelled }
       state = result.state
       // Feed the WHOLE 256 ms VAD window, not just the latest 40 ms capture packet.
+      let echo = renderReference?.match(frame,analysisStart:analysisSamples,sessionId:productSessionId)
       let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
-        provider: "fluidaudio_silero")
+        provider: "fluidaudio_silero",speechStartAllowed:echo?.matched != true)
+      let through = analysisSamples + frame.count
+      activity.advance(through:through,speechEvent:decision.speechStarted ? (true,through) :
+        decision.shouldFinalize ? (false,max(0,through-decision.trailingSilenceSamples)) : nil)
+      if echo?.matched == true { renderEchoRanges.append(analysisSamples..<through) }
+      evidenceFloor = max(0,through - 16000*90)
+      activity.prune(before:evidenceFloor); renderEchoRanges.removeAll { $0.upperBound <= evidenceFloor }
       if tracing { trace.record(type: "vad.frame", payload: ["startSample": analysisSamples,
         "endSample": analysisSamples + frame.count, "sampleRate": 16000, "inputThroughSample": inputSamples,
         "probability": Double(result.probability), "hasSpeech": decision.hasSpeech, "rms": decision.rms,
         "speechStarted": decision.speechStarted, "finalized": decision.shouldFinalize,
+        "renderEchoMatched": echo?.matched ?? false, "renderCorrelation": echo?.correlation ?? 0,
+        "renderLagMs": echo?.lagMs ?? 0,
         "confirmedSpeechSamples": decision.confirmedSpeechSamples, "trailingSilenceSamples": decision.trailingSilenceSamples]) }
       analysisSamples += frame.count
       ended = decision.shouldFinalize || ended
@@ -123,8 +140,18 @@ final class AppleOnlineEndpointSession {
   }
   func invalidate() {
     active = false
+    activity.finish()
+    #if canImport(FluidAudio)
+    vad = nil; state = VadStreamState.initial()
+    #endif
     if tracing { trace.record(type: "endpoint.stop", payload: ["inputSamples": inputSamples,
       "analysisSamples": analysisSamples, "unprocessedAnalysisTail": pending.count, "lastSequence": sequence]); trace.finish(); tracing = false }
     pending.removeAll(); converter?.reset()
+  }
+
+  func audioEvidence(sessionId: String, range: [String:Any]) -> [String:Any] {
+    appleOnlineAudioEvidence(sessionMatches:productSessionId == sessionId,
+      inputSampleRate:Int(inputFormat.sampleRate),range:range,analysedThrough:analysisSamples,
+      retainedFrom:evidenceFloor,activity:activity,renderEchoRanges:renderEchoRanges)
   }
 }

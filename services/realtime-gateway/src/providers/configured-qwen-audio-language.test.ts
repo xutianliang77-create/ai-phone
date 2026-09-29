@@ -13,7 +13,7 @@ it.each(['wire','mixed','terms','short'])('actual vendor wire + device text LID 
   const attempts:PublicModelAttemptEvent[]=[],requests:Array<{Source:string;Target:string}>=[];
   const sources=['zh','en','ja','fr'] as const,pair=['zh','en'] as const;
   const textLanguage=new DeviceTextLanguageBroker('session',sources,r=>{
-    const {text,...binding}=r,language=text.includes('こんにちは')||text.includes('会議')?'ja':text.includes('réunion')?'fr':/[\u4e00-\u9fff]/u.test(text)?'zh-Hans':'en';
+    const {text,audioRange,...binding}=r,language=text.includes('こんにちは')||text.includes('会議')?'ja':text.includes('réunion')?'fr':/[\u4e00-\u9fff]/u.test(text)?'zh-Hans':'en';
     queueMicrotask(()=>textLanguage.accept({...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:language,hypotheses:{[language]:0.99}}));return true;
   });
   const plan={asr:{execution:'public',scopeKey:'asr',reason:'online_selected'},translation:{execution:'public',scopeKey:'mt',reason:'online_selected'},tts:{execution:'disabled'}} as const;

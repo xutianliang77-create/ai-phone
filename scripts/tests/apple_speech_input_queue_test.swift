@@ -55,6 +55,23 @@ struct AppleSpeechInputQueueTest {
     tail.advance(through: 4096, speechEvent: (true, 1000)); tail.finish()
     precondition(tail.decision(start: 1000, end: 4000) == .accept)
 
+    let wanted:[String:Any] = ["startSample":1000,"endSample":4000,"sampleRate":16000]
+    func evidence(_ gate:AppleSpeechActivityGate,_ through:Int=32000,_ rate:Int=16000,
+      _ matches:Bool=true,_ floor:Int=0,_ echo:[Range<Int>]=[]) -> [String:Any] {
+      appleOnlineAudioEvidence(sessionMatches:matches,inputSampleRate:rate,range:wanted,
+        analysedThrough:through,retainedFrom:floor,activity:gate,renderEchoRanges:echo)
+    }
+    precondition(evidence(silence)["decision"] as? String == "non_speech")
+    precondition(evidence(silence,3000)["decision"] as? String == "unknown") // EOF tail not analysed
+    precondition(evidence(silence,32000,24000)["decision"] as? String == "unknown") // different resampler clock
+    precondition(evidence(silence,32000,16000,false)["reason"] as? String == "stale")
+    precondition(evidence(silence,32000,16000,true,2000)["decision"] as? String == "unknown") // forgotten history
+    precondition(evidence(tail,4096)["decision"] as? String == "speech") // genuine short/near speech
+    precondition(evidence(tail,4096,16000,true,0,[0..<2048,2048..<4096])["reason"] as? String == "render_echo")
+    precondition(evidence(tail,4096,16000,true,0,[0..<2048,3072..<4096])["decision"] as? String == "speech") // missing echo support cannot delete double-talk
+    var bounded = speech;bounded.prune(before:10000)
+    precondition(bounded.decision(start:7000,end:9000) == .reject)
+
     let queue = AppleSpeechInputQueue(capacity: 4)
     queue.append([1, 2]); queue.append([3]); queue.finish(tail: [4])
     queue.append([5])

@@ -3,7 +3,7 @@ import type WebSocket from "ws";
 import type {RealtimeEnv} from "../config/env.js";
 import {extractRealtimeConnectionToken} from "../auth/realtime-connection-token.js";
 import {verifyRealtimeToken} from "../auth/realtime-token-verifier.js";
-import {publicRuntimeTokenBinding,DEVICE_TEXT_LANGUAGE_PROTOCOL,type TranslationLanguageCode} from "@translation/contracts";
+import {publicRuntimeTokenBinding,DEVICE_TEXT_LANGUAGE_PROTOCOL,DEVICE_SPEECH_EVIDENCE_PROTOCOL,type TranslationLanguageCode} from "@translation/contracts";
 import {DeviceTextLanguageBroker} from './device-text-language.js';
 import {createSessionEventSink,bindPublicSessionEventSink} from "../sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../sessions/public-admission-client.js";
@@ -69,13 +69,16 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     await abortable(admission.authorize("connect"),stop.signal);
     const material=createPublicRuntimeMaterialClient(sink,claims,env.publicDeploymentId!,options.credentialAccessSecret);
     const {snapshot,authorization,terminology}=await material.configuration(stop.signal);
+    const protocols=request.headers['sec-websocket-protocol'];
+    const capabilities=(Array.isArray(protocols)?protocols.join(','):protocols??'').split(',').map(x=>x.trim());
+    const deviceObservation=capabilities.includes(DEVICE_TEXT_LANGUAGE_PROTOCOL);
     if(snapshot.components.asr?.protocol==='qwen_audio_streaming'&&claims.sourceLanguage==='auto'){
-      const protocols=request.headers['sec-websocket-protocol'];
-      if(!(Array.isArray(protocols)?protocols.join(','):protocols??'').split(',').map(x=>x.trim()).includes(DEVICE_TEXT_LANGUAGE_PROTOCOL))
-        throw Error('public_device_text_language_required');
+      if(!deviceObservation)throw Error('public_device_text_language_required');
       if(options.recoverySocketAssembly)throw Error('public_text_language_recovery_not_supported');
+    }
+    if(deviceObservation){
       textLanguage=new DeviceTextLanguageBroker(claims.sessionId,authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair??[],
-        event=>{if(ws.readyState!==1)return false;sendRealtimeEvent(ws,event);return true;});
+        event=>{if(ws.readyState!==1)return false;sendRealtimeEvent(ws,event);return true;},2000,capabilities.includes(DEVICE_SPEECH_EVIDENCE_PROTOCOL));
       ws.once('close',()=>textLanguage?.close());ws.once('error',()=>textLanguage?.close());
     }
     let started=false;const purpose=()=>started?"dispatch" as const:"connect" as const;

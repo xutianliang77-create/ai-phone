@@ -41,6 +41,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private publicSessionClaimed = false;
   private readonly deviceSpeakerReceiver?: LmStudioRealtimeProviderOptions["deviceSpeakerReceiver"];
   private readonly deviceSpeakerRefresh?:LmStudioRealtimeProviderOptions["deviceSpeakerRefresh"];
+  private readonly confirmSpeech?:LmStudioRealtimeProviderOptions["confirmSpeech"];
   private speakerEvidenceClock?:{sequence:number;receivedAtMs:number;throughMs:number};
   private readonly speakerAssemblies=new PendingSpeakerAssemblies();
 
@@ -48,6 +49,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
     this.deviceSpeakerRefresh=this.publicSession&&this.deviceSpeakerReceiver?options.deviceSpeakerRefresh:undefined;
+    this.confirmSpeech=this.publicSession?options.confirmSpeech:undefined;
     this.semanticSegments = new SegmentAssembler({
       maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
       emitSemanticContinuationRevisions:!!this.publicSession,
@@ -272,12 +274,17 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
-    transcript=this.deviceSpeakerRefresh?.([transcript])[0]??transcript;
     const text = cleanRealtimeText(transcript.text);
     if (!text) {
       if (transcript.isFinal === true) yield* continuationTombstones(session, transcript, [transcript.segmentId]);
       return;
     }
+    if(transcript.isFinal!==false&&this.confirmSpeech&&!(await this.confirmSpeech(transcript))){
+      if(this.isCurrent(session))yield* continuationTombstones(session,{...transcript,text:'',isFinal:true},[transcript.segmentId]);
+      return;
+    }
+    if(!this.isCurrent(session))return;
+    transcript=this.deviceSpeakerRefresh?.([transcript])[0]??transcript;
     const input={...transcript,text,...analyzeTurnLanguage(text,transcript.language)};
     const assembled = this.semanticSegmentsFor(session).push(session.sessionId,input);
     if(this.publicSession)logPublicAsrAssembly(session.sessionId,"push",assembled,input);

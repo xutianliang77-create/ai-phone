@@ -1,9 +1,10 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {DEVICE_TEXT_LANGUAGE_METHOD,isDeviceTextLanguageResult,type DeviceTextLanguageRequest,type TranslationLanguageCode} from '@translation/contracts';
+import {DEVICE_TEXT_LANGUAGE_METHOD,isDeviceTextLanguageResult,isDeviceSpeechAudioRange,type DeviceTextLanguageRequest,type TranslationLanguageCode,type DeviceSpeechAudioRange,type DeviceSpeechAudioEvidence} from '@translation/contracts';
 import {aggregateTextLanguages,textForLanguageObservation} from './text-language-evidence.js';
 import {logPublicAsrLanguage} from '../metrics/public-asr-boundary-trace.js';
 
 export type TextLanguageDecision={status:'detected';language:TranslationLanguageCode;confidence:number}|
+  {status:'non_speech';reason:'no_speech_support'|'render_echo'}|
   {status:'unknown';reason:'unavailable'|'timeout'|'ambiguous'|'unsupported'|'stale'|'mixed_unaligned'};
 type Pending={request:DeviceTextLanguageRequest;finish:(value:TextLanguageDecision)=>void};
 /** Owned by ONE authenticated socket, not a global/account cache. Replies are
@@ -11,17 +12,20 @@ type Pending={request:DeviceTextLanguageRequest;finish:(value:TextLanguageDecisi
 export class DeviceTextLanguageBroker {
   private pending=new Map<string,Pending>();
   private closed=false;
+  private speechEvidence=new Map<string,DeviceSpeechAudioEvidence|undefined>();
   constructor(private readonly sessionId:string,private readonly sources:readonly TranslationLanguageCode[],
-    private readonly send:(request:DeviceTextLanguageRequest)=>boolean,private readonly timeoutMs=2000){}
-  identify(segmentId:string,revision:number,text:string):Promise<TextLanguageDecision>{
-    if(this.closed||!text.trim()||text.length>16000||!Number.isSafeInteger(revision)||revision<1||this.pending.size>=32)
+    private readonly send:(request:DeviceTextLanguageRequest)=>boolean,private readonly timeoutMs=2000,
+    private readonly speechEvidenceSupported=true){}
+  identify(segmentId:string,revision:number,text:string,audioRange?:DeviceSpeechAudioRange):Promise<TextLanguageDecision>{
+    if(!this.speechEvidenceSupported)audioRange=undefined;
+    if(this.closed||!text.trim()||text.length>16000||!Number.isSafeInteger(revision)||revision<1||this.pending.size>=32||audioRange&&!isDeviceSpeechAudioRange(audioRange))
       return Promise.resolve({status:'unknown',reason:'unavailable'});
     for(const entry of this.pending.values())if(entry.request.segmentId===segmentId)entry.finish({status:'unknown',reason:'stale'});
     const sourceTextSha256=createHash('sha256').update(text,'utf8').digest('hex');
     text=textForLanguageObservation(text);
     const request:DeviceTextLanguageRequest={type:'text.language.request',method:DEVICE_TEXT_LANGUAGE_METHOD,
       sessionId:this.sessionId,segmentId,revision,requestId:randomUUID(),text,
-      textSha256:createHash('sha256').update(text,'utf8').digest('hex')};
+      textSha256:createHash('sha256').update(text,'utf8').digest('hex'),...(audioRange?{audioRange:{...audioRange}}:{})};
     return new Promise(resolve=>{
       let timer:ReturnType<typeof setTimeout>|undefined;
       const finish=(value:TextLanguageDecision)=>{
@@ -42,6 +46,16 @@ export class DeviceTextLanguageBroker {
     const entry=this.pending.get(value.requestId);if(!entry)return false;
     const r=entry.request;
     if(value.segmentId!==r.segmentId||value.revision!==r.revision||value.textSha256!==r.textSha256)return false;
+    if(value.audioEvidence&&(!r.audioRange||['startSample','endSample','sampleRate'].some(k=>
+      value.audioEvidence!.range[k as keyof DeviceSpeechAudioRange]!==r.audioRange![k as keyof DeviceSpeechAudioRange])))return false;
+    if(r.audioRange){
+      const key=this.speechKey(r.segmentId,r.revision,r.audioRange);
+      if(this.speechEvidence.size>=256&&!this.speechEvidence.has(key))this.speechEvidence.delete(this.speechEvidence.keys().next().value!);
+      this.speechEvidence.set(key,value.audioEvidence);
+      if(value.audioEvidence?.decision==='non_speech'){
+        entry.finish({status:'non_speech',reason:value.audioEvidence.reason as 'no_speech_support'|'render_echo'});return true;
+      }
+    }
     const raw=Object.entries(value.hypotheses).sort((a,b)=>b[1]-a[1]);
     const entries=aggregateTextLanguages(value.hypotheses);
     const top=entries[0],second=entries[1]?.[1]??0;
@@ -68,5 +82,20 @@ export class DeviceTextLanguageBroker {
     else entry.finish({status:'detected',language:language as TranslationLanguageCode,confidence:Math.min(1,top[1])});
     return true;
   }
-  close(){this.closed=true;for(const entry of this.pending.values())entry.finish({status:'unknown',reason:'unavailable'});}
+  /** Same challenge/nonce/cache, also usable by fixed-language and other ASR adapters.
+   * Missing/old-device evidence never pretends to be negative speech evidence. */
+  async confirmSpeech(segmentId:string,revision:number,text:string,range:DeviceSpeechAudioRange):Promise<boolean>{
+    if(!this.speechEvidenceSupported)return true;
+    const key=this.speechKey(segmentId,revision,range);
+    if(!this.speechEvidence.has(key))await this.identify(segmentId,revision,text,range);
+    return this.speechEvidence.get(key)?.decision!=='non_speech';
+  }
+  private speechKey(id:string,revision:number,r:DeviceSpeechAudioRange){return `${id}:${revision}:${r.sampleRate}:${r.startSample}:${r.endSample}`;}
+  close(){this.closed=true;for(const entry of this.pending.values())entry.finish({status:'unknown',reason:'unavailable'});this.speechEvidence.clear();}
+}
+
+export function transcriptAudioRange(startMs:number|undefined,endMs:number|undefined,sampleRate:number):DeviceSpeechAudioRange|undefined {
+  if(startMs===undefined||endMs===undefined||!Number.isFinite(startMs)||!Number.isFinite(endMs))return;
+  const r={startSample:Math.floor(startMs*sampleRate/1000),endSample:Math.ceil(endMs*sampleRate/1000),sampleRate};
+  return isDeviceSpeechAudioRange(r)?r:undefined;
 }

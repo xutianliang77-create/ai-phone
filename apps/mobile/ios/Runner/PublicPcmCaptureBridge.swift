@@ -14,6 +14,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
   private var tracing = false
   private var pendingStart: (id:String,result:FlutterResult)?
   private var startTimeout: DispatchWorkItem?
+  let renderReference = PcmRenderReference()
+  private var productSessionId: String?
   var hasCapture: Bool { captureId != nil }
 
   init(coordinator: AudioSessionCoordinator) { self.coordinator = coordinator }
@@ -51,6 +53,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           },recoverSharedConfiguration:true)
         let mailbox = PublicPcmMailbox()
         self.input = input; captureId = id; starting = true; self.mailbox = mailbox
+        productSessionId = args["productSessionId"] as? String
+        renderReference.reset(sessionId:productSessionId,sampleRate:rate)
         if let session = args["diagnosticSessionId"] as? String, !session.isEmpty, session.count <= 240 {
           tracing = true
           trace.start(enabled: true, sessionId: "public-pcm-" + id,
@@ -114,11 +118,17 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
   }
   func play(_ pcm: Data, sampleRate: Int, completion: @escaping (Error?) -> Void) throws {
     guard let input, input.canPlayPcm, let output = input.pcmPlayback else { throw failure("pcm_reference_not_running") }
-    record("tts.begin", ["sampleRate":sampleRate,"bytes":pcm.count,"sharedPlaybackReference":true])
+    let audio = AVAudioSession.sharedInstance()
+    let acousticRoute = audio.currentRoute.outputs.contains { [.builtInSpeaker,.builtInReceiver].contains($0.portType) }
+    let captureSample = input.payload()["convertedSamples"] as? Int ?? -1
     try output.play(pcm, sampleRate:sampleRate) { [weak self] error in
       self?.record("tts.end", ["completion":error == nil ? "finished" : "cancelled"])
       completion(error)
     }
+    renderReference.record(pcm,sampleRate:sampleRate,captureSample:captureSample,
+      sessionId:productSessionId,acousticRoute:acousticRoute)
+    record("tts.begin", ["sampleRate":sampleRate,"bytes":pcm.count,"sharedPlaybackReference":true,
+      "captureSample":captureSample,"acousticRoute":acousticRoute])
   }
   func stopPlayback() { input?.pcmPlayback?.stop() }
   @discardableResult private func drain(_ mailbox: PublicPcmMailbox, id: String) -> Bool {
@@ -139,6 +149,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     captureId = nil; mailbox = nil
     if let input { record("capture.stop", input.payload()) }
     input = nil
+    productSessionId = nil
+    renderReference.reset(sessionId:nil,sampleRate:16000)
     if tracing { trace.finish(); tracing = false }
     return confirmed
   }

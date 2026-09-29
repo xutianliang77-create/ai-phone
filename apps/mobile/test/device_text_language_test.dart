@@ -64,6 +64,48 @@ void main() {
     expect(result['hypotheses'], isEmpty);
   });
   test(
+      'audio evidence echoes the exact sample range without turning it into language or billing authority',
+      () async {
+    const range = {'startSample': 0, 'endSample': 4096, 'sampleRate': 16000};
+    final r = {...request, 'audioRange': range};
+    final answer = await answerTextLanguageChallenge(
+        r, 'session', (_) async => observation,
+        speechObserve: (session, wanted) async {
+      expect(session, 'session');
+      expect(wanted, range);
+      return {
+        'method': deviceSpeechEvidenceMethod,
+        'range': range,
+        'decision': 'non_speech',
+        'coveredThroughSample': 16000,
+        'reason': 'render_echo'
+      };
+    });
+    expect(answer!['audioEvidence'], isNotNull);
+    expect(answer['evidence'], 'text_only_not_acoustic');
+    expect(answer.containsKey('targetLanguage'), false);
+    final stale = await answerTextLanguageChallenge(
+        r, 'session', (_) async => observation,
+        speechObserve: (_, __) async => {
+              'method': deviceSpeechEvidenceMethod,
+              'range': {...range, 'endSample': 5000},
+              'decision': 'non_speech',
+              'coveredThroughSample': 16000,
+              'reason': 'render_echo'
+            });
+    expect(stale!.containsKey('audioEvidence'), false);
+    final missing = await answerTextLanguageChallenge(
+        r, 'session', (_) async => observation,
+        speechObserve: (_, __) async => throw MissingPluginException());
+    expect(missing!.containsKey('audioEvidence'), false);
+    expect(
+        await answerTextLanguageChallenge({
+          ...r,
+          'audioRange': {...range, 'startSample': true}
+        }, 'session', (_) async => observation),
+        isNull);
+  });
+  test(
       'public socket handles one challenge and tail after End; post-ended and old socket replies are discarded',
       () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

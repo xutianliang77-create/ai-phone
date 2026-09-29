@@ -1,5 +1,6 @@
 import type {QwenAudioSentence} from './qwen-audio-streaming-protocol.js';
 import type {DeviceTextLanguageBroker,TextLanguageDecision} from '../connection/device-text-language.js';
+import {transcriptAudioRange} from '../connection/device-text-language.js';
 import {textForLanguageObservation} from '../connection/text-language-evidence.js';
 import {isProtectedSpeakerCut} from '../speaker/speaker-split-protected-surface.js';
 
@@ -9,13 +10,16 @@ export interface RoutedAudioSentence {id:string;sentence:QwenAudioSentence;decis
 /** Script changes are a request to inspect bounded clauses, NOT a source-
  * language decision. Only independently confirmed phone observations can route
  * a child. Same-language clauses keep the supplier's complete semantic final. */
-export async function routeQwenAudioLanguage(sentence:QwenAudioSentence,id:string,broker:DeviceTextLanguageBroker):Promise<RoutedAudioSentence[]> {
+export async function routeQwenAudioLanguage(sentence:QwenAudioSentence,id:string,broker:DeviceTextLanguageBroker,sampleRate=16000):Promise<RoutedAudioSentence[]> {
   const ranges=clauseRanges(sentence.text);
   const scripts=ranges.map(r=>scriptSignature(textForLanguageObservation(sentence.text.slice(r.start,r.end))));
   const whole=(decision:TextLanguageDecision)=>[{id,sentence,decision}];
-  if(new Set(scripts.filter(Boolean)).size<2){return whole(await broker.identify(id,1,sentence.text));}
+  if(new Set(scripts.filter(Boolean)).size<2){return whole(await broker.identify(id,1,sentence.text,transcriptAudioRange(sentence.startMs,sentence.endMs,sampleRate)));}
   if(ranges.length>8)return whole({status:'unknown',reason:'mixed_unaligned'});
-  const decisions=await Promise.all(ranges.map((r,index)=>broker.identify(`${id}.language.${index+1}`,1,sentence.text.slice(r.start,r.end))));
+  const decisions=await Promise.all(ranges.map((r,index)=>{
+    const child=timedClause(sentence,r);
+    return broker.identify(`${id}.language.${index+1}`,1,sentence.text.slice(r.start,r.end),child?transcriptAudioRange(child.startMs,child.endMs,sampleRate):undefined);
+  }));
   const first=decisions[0];
   if(first.status==='detected'&&decisions.every(d=>d.status==='detected'&&d.language===first.language)){
     return whole({...first,confidence:Math.min(...decisions.map(d=>d.status==='detected'?d.confidence:0))});

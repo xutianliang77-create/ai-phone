@@ -197,6 +197,13 @@ struct AppleSpeechActivityGate {
 
   mutating func finish() { finished = true }
 
+  /// Online evidence is bounded; forgotten history must be reported unknown by
+  /// its caller, never reinterpreted as no speech. Local ASR does not call this.
+  mutating func prune(before sample: Int) {
+    intervals.removeAll { $0.upperBound <= sample }
+    if let start = activeStart, start < sample { activeStart = sample }
+  }
+
   func decision(start: Int, end: Int) -> Decision {
     guard start >= 0, end >= start else { return .reject }
     let overlaps = intervals.contains { start < $0.upperBound && end > $0.lowerBound }
@@ -205,6 +212,32 @@ struct AppleSpeechActivityGate {
     // A later VAD start may still establish evidence within its pre-roll.
     if !finished && end > max(0, processedThrough - evidenceWaitSamples) { return .wait }
     return .reject
+  }
+}
+
+/// The original activity gate's result is projected only over known, retained
+/// sample coverage. Unknown clocks, stale sessions and the unanalysed EOF tail
+/// cannot be reported as negative speech evidence.
+func appleOnlineAudioEvidence(sessionMatches:Bool, inputSampleRate:Int, range:[String:Any],
+  analysedThrough:Int, retainedFrom:Int, activity:AppleSpeechActivityGate, renderEchoRanges:[Range<Int>]) -> [String:Any] {
+  let covered = inputSampleRate == 16000 ? analysedThrough : 0
+  func reply(_ decision:String,_ reason:String) -> [String:Any] {
+    ["method":"ios_silero_render_v1","range":range,"decision":decision,
+      "coveredThroughSample":covered,"reason":reason]
+  }
+  guard sessionMatches else { return reply("unknown","stale") }
+  guard let start = range["startSample"] as? Int, let end = range["endSample"] as? Int,
+    let rate = range["sampleRate"] as? Int, rate == 16000, inputSampleRate == 16000,
+    start >= retainedFrom, end > start, end <= analysedThrough else { return reply("unknown","uncovered") }
+  var through = start
+  for echo in renderEchoRanges where echo.upperBound > through && echo.lowerBound < end {
+    if echo.lowerBound > through { break }; through = max(through,echo.upperBound)
+    if through >= end { return reply("non_speech","render_echo") }
+  }
+  switch activity.decision(start:start,end:end) {
+  case .accept: return reply("speech","speech_overlap")
+  case .reject: return reply("non_speech","no_speech_support")
+  case .wait: return reply("unknown","uncovered")
   }
 }
 

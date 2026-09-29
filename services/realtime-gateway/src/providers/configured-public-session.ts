@@ -11,6 +11,7 @@ import {createConfiguredPublicTtsOutputQueue} from "../tts/realtime-tts-output-f
 import type {ConfiguredPublicTtsOptions} from "../tts/configured-public-tts.js";
 import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
 import { DeviceSpeakerAttributionProvider } from "../speaker/device-speaker-attribution-provider.js";
+import {transcriptAudioRange} from '../connection/device-text-language.js';
 
 export interface ConfiguredPublicSessionOptions {
   terminology?:PublicSessionTerminology;
@@ -157,6 +158,10 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     resolveCredentials:options.output.resolveCredentials,fetchFn:options.output.fetchFn,socketFactory:options.output.socketFactory},options.output.isSessionActive,options.output.maxPendingOutputs):undefined;
   const provider=new LmStudioRealtimeProvider({providerName: `public:${mt!.vendor}`, baseUrl: mt!.endpoint, model: mt!.modelId,
     timeoutMs: mt!.timeoutMs, maxTokens: mt!.maxTokens, asrProvider, translationClient, publicSession: session,
+    ...(options.textLanguage?{confirmSpeech:async(transcript:import('../asr/asr-provider.js').TranscriptResult)=>{
+      const range=transcript.timing?.source==='model'?transcriptAudioRange(transcript.timing.startMs,transcript.timing.endMs,binding.sampleRate):undefined;
+      return !range||options.textLanguage!.confirmSpeech(transcript.segmentId,transcript.revision??1,transcript.text,range);
+    }}:{}),
     ...(phoneSpeaker?{deviceSpeakerReceiver:phoneSpeaker.accept.bind(phoneSpeaker),deviceSpeakerRefresh:(parts:import("../asr/asr-provider.js").TranscriptResult[])=>
       phoneSpeaker.refresh(parts,asrProvider instanceof SpeakerAwareAsrProvider?asrProvider.deviceSpeakerBoundaryGuards(binding.sessionId):[])}:{}),
     // Keep one transport batch below Qwen's minimum configurable 200ms silence window,

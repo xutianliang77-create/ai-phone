@@ -22,6 +22,8 @@ export interface TranslationClient {
 export interface LmStudioRealtimeProviderOptions {
   deviceSpeakerReceiver?: (event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) => boolean;
   deviceSpeakerRefresh?: (transcripts:TranscriptResult[])=>TranscriptResult[];
+  /** Optional public device quality evidence. Never changes audio/billing watermarks. */
+  confirmSpeech?: (transcript:TranscriptResult)=>Promise<boolean>;
   /** Internal public assembly only: one exact session, no implicit reconnect/rebind. */
   publicSession?: RealtimeProviderSession;
   providerName?: string;
