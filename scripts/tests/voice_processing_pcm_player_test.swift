@@ -59,6 +59,25 @@ final class FakePcmNode: VoiceProcessingPcmNode {
     precondition(residualMatch.matched && residualMatch.correlation >= 0.46 && residualMatch.correlation < 0.6)
     let independentNear = zip(residual,near).map { $0 + $1 * 1.5 }
     precondition(!reference.match(independentNear,analysisStart:4096,sessionId:"s").matched)
+    // Physical 3002 case: a direct 0.468 match, one weaker intervening frame,
+    // then an echo onset at 0.429 with the same lag. Carry cannot self-renew.
+    var echoGate = PcmRenderEchoGate()
+    precondition(echoGate.evaluate(.init(matched:true,correlation:0.468,lagMs:-252),
+      analysisStart:147456,frameSamples:4096).matched)
+    precondition(!echoGate.evaluate(.init(matched:false,correlation:0.215,lagMs:307),
+      analysisStart:151552,frameSamples:4096).matched)
+    let physicalResidual = echoGate.evaluate(.init(matched:false,correlation:0.429,lagMs:-267),
+      analysisStart:155648,frameSamples:4096)
+    precondition(physicalResidual.matched && physicalResidual.carried)
+    precondition(!echoGate.evaluate(.init(matched:false,correlation:0.349,lagMs:-239),
+      analysisStart:159744,frameSamples:4096).matched)
+    var independentGate = PcmRenderEchoGate()
+    _ = independentGate.evaluate(.init(matched:true,correlation:0.468,lagMs:-252),
+      analysisStart:147456,frameSamples:4096)
+    precondition(!independentGate.evaluate(.init(matched:false,correlation:0.429,lagMs:100),
+      analysisStart:155648,frameSamples:4096).matched)
+    precondition(!independentGate.evaluate(.init(matched:false,correlation:0.39,lagMs:-267),
+      analysisStart:159744,frameSamples:4096).matched)
     precondition(!reference.match(echo,analysisStart:4096,sessionId:"other").matched)
     precondition(!reference.match(echo,analysisStart:180000,sessionId:"s").matched)
     reference.reset(sessionId:"s",sampleRate:16000)

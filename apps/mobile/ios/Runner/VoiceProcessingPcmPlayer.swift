@@ -21,6 +21,32 @@ struct PcmCaptureReadiness {
   }
 }
 
+/// A render echo may fall below the direct waveform threshold for one frame
+/// after Apple's voice processor changes its residual. Only a recent direct
+/// match with the same measured delay may protect the next two VAD windows;
+/// carried matches never extend the window. Independent or later speech wins.
+struct PcmRenderEchoGate {
+  struct Decision { let matched: Bool, carried: Bool }
+  private var lastDirect: (start: Int, lagMs: Int)?
+
+  mutating func evaluate(_ match: PcmRenderReference.Match,
+    analysisStart: Int, frameSamples: Int) -> Decision {
+    let carried: Bool
+    if let previous = lastDirect, !match.matched, frameSamples > 0 {
+      let distance = analysisStart - previous.start
+      carried = distance > 0 && distance <= frameSamples * 2 &&
+        match.correlation >= 0.40 && abs(match.lagMs - previous.lagMs) <= 40
+    } else { carried = false }
+    if match.matched { lastDirect = (analysisStart, match.lagMs) }
+    else if let previous = lastDirect,
+      frameSamples <= 0 || analysisStart <= previous.start ||
+      analysisStart - previous.start > frameSamples * 2 { lastDirect = nil }
+    return Decision(matched: match.matched || carried, carried: carried)
+  }
+
+  mutating func reset() { lastDirect = nil }
+}
+
 protocol VoiceProcessingPcmNode: AnyObject {
   func schedule(_ buffer: AVAudioPCMBuffer, completion: @escaping () -> Void)
   func play()

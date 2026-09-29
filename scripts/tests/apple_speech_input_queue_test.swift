@@ -77,6 +77,8 @@ struct AppleSpeechInputQueueTest {
     precondition(!blocked.hasSpeech && !blocked.speechStarted)
     for p in [0.355,0.418] { precondition(!echoDetector.acceptVadFrame(probability:p,samples:capturedFrame,
       provider:"phone_replayed_false_turn").speechStarted) }
+    precondition(echoDetector.acceptVadFrame(probability:0.81,samples:capturedFrame,
+      provider:"independent_near_voice_after_bounded_echo",speechStartAllowed:true).speechStarted)
     var bounded = speech;bounded.prune(before:10000)
     precondition(bounded.decision(start:7000,end:9000) == .reject)
 

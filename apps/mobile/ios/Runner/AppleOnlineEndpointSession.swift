@@ -25,6 +25,7 @@ final class AppleOnlineEndpointSession {
   private var tracing = false, inputSamples = 0, analysisSamples = 0
   private let productSessionId: String?
   private let renderReference: PcmRenderReference?
+  private var renderEchoGate = PcmRenderEchoGate()
   private var activity: AppleSpeechActivityGate
   private var evidenceFloor = 0
   private var renderEchoRanges: [Range<Int>] = []
@@ -113,19 +114,23 @@ final class AppleOnlineEndpointSession {
       state = result.state
       // Feed the WHOLE 256 ms VAD window, not just the latest 40 ms capture packet.
       let echo = renderReference?.match(frame,analysisStart:analysisSamples,sessionId:productSessionId)
+      let echoDecision = echo.map { renderEchoGate.evaluate($0,
+        analysisStart:analysisSamples,frameSamples:frame.count) } ??
+        PcmRenderEchoGate.Decision(matched:false,carried:false)
       let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
-        provider: "fluidaudio_silero",speechStartAllowed:echo?.matched != true)
+        provider: "fluidaudio_silero",speechStartAllowed:!echoDecision.matched)
       let through = analysisSamples + frame.count
       activity.advance(through:through,speechEvent:decision.speechStarted ? (true,through) :
         decision.shouldFinalize ? (false,max(0,through-decision.trailingSilenceSamples)) : nil)
-      if echo?.matched == true { renderEchoRanges.append(analysisSamples..<through) }
+      if echoDecision.matched { renderEchoRanges.append(analysisSamples..<through) }
       evidenceFloor = max(0,through - 16000*90)
       activity.prune(before:evidenceFloor); renderEchoRanges.removeAll { $0.upperBound <= evidenceFloor }
       if tracing { trace.record(type: "vad.frame", payload: ["startSample": analysisSamples,
         "endSample": analysisSamples + frame.count, "sampleRate": 16000, "inputThroughSample": inputSamples,
         "probability": Double(result.probability), "hasSpeech": decision.hasSpeech, "rms": decision.rms,
         "speechStarted": decision.speechStarted, "finalized": decision.shouldFinalize,
-        "renderEchoMatched": echo?.matched ?? false, "renderCorrelation": echo?.correlation ?? 0,
+        "renderEchoMatched": echoDecision.matched, "renderEchoCarried": echoDecision.carried,
+        "renderCorrelation": echo?.correlation ?? 0,
         "renderLagMs": echo?.lagMs ?? 0,
         "confirmedSpeechSamples": decision.confirmedSpeechSamples, "trailingSilenceSamples": decision.trailingSilenceSamples]) }
       analysisSamples += frame.count
@@ -141,6 +146,7 @@ final class AppleOnlineEndpointSession {
   func invalidate() {
     active = false
     activity.finish()
+    renderEchoGate.reset()
     #if canImport(FluidAudio)
     vad = nil; state = VadStreamState.initial()
     #endif
