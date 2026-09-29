@@ -45,7 +45,11 @@ export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
   try{
     const audioLevel=pcm&&(value.stage==="accepted"||value.stage==="provider_audio")?publicPcm16Level(pcm):undefined;
     const pcmSha256=audioLevel&&pcm?createHash('sha256').update(pcm).digest('hex'):undefined;
-    realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel,pcmSha256}:{})},"Public ASR QA boundary");
+    // Hex digests can accidentally contain an 11-digit phone number and be
+    // redacted. Numeric bytes retain an exact digest without exempting any
+    // string or log field from the existing privacy sanitizer.
+    const pcmDigestBytes=pcmSha256?Array.from(Buffer.from(pcmSha256,'hex')):undefined;
+    realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel,pcmSha256,pcmDigestBytes}:{})},"Public ASR QA boundary");
   }catch{/* QA diagnostics must not advance a watermark then abort the audio path. */}
 }
 

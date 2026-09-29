@@ -1,9 +1,19 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {createHash} from "node:crypto";
+import {redactLogObject} from '@translation/contracts';
 import {realtimeLogger} from "./realtime-metrics.js";
 import {logPublicAsrBoundary,publicAsrBoundaryTracePayload,logPublicSessionEnd,publicSessionEndTracePayload,publicPcm16Level,publicAsrAssemblyTracePayload,logPublicAsrAssembly,logPublicLateSpeakerExpiry} from "./public-asr-boundary-trace.js";
 
 afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();});
+
+it('preserves an exact numeric digest without disabling phone-number or credential redaction',()=>{
+  const hex='6a7ebb3faae41b16439740549fa8059697cb8daee42bc92e0ba1c47414d41a1b';
+  const bytes=Array.from(Buffer.from(hex,'hex'));
+  const redacted=redactLogObject({pcmSha256:hex,pcmDigestBytes:bytes,phone:'13912345678',token:'SYNTHETIC_SECRET'});
+  expect(redacted.pcmSha256).toContain('[REDACTED]');
+  expect(Buffer.from(redacted.pcmDigestBytes).toString('hex')).toBe(hex);
+  expect(redacted.phone).toBe('[REDACTED]');expect(redacted.token).toBe('[REDACTED]');
+});
 
 it("records only bounded expiry/language/watermark facts and cannot fail processing",()=>{
   const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{});
@@ -38,7 +48,8 @@ it("does not inspect or log PCM without explicit diagnostics and never logs its 
   logPublicAsrBoundary(value,pcm);expect(sample).not.toHaveBeenCalled();expect(info).not.toHaveBeenCalled();
   vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
   logPublicAsrBoundary(value,pcm);
-  expect(info.mock.calls[0]![0]).toEqual({...value,pcmSha256:createHash('sha256').update(pcm).digest('hex'),audioLevel:{sampleCount:2,zeroSamples:0,peakAbs:4,rms:3.536}});
+  expect(info.mock.calls[0]![0]).toEqual({...value,pcmSha256:createHash('sha256').update(pcm).digest('hex'),
+    pcmDigestBytes:Array.from(createHash('sha256').update(pcm).digest()),audioLevel:{sampleCount:2,zeroSamples:0,peakAbs:4,rms:3.536}});
   expect(info.mock.calls[0]![0]).not.toHaveProperty("pcm");expect(info.mock.calls[0]![0]).not.toHaveProperty("data");
 });
 

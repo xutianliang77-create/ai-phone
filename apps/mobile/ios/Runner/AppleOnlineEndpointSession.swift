@@ -76,6 +76,13 @@ final class AppleOnlineEndpointSession {
     guard let vad else { throw AppleSpeechFailure.sileroMissing }
     let bytes = [UInt8](data), count = data.count / 2
     let inputStart = inputSamples
+    if tracing && inputStart == 0 {
+      let audio = AVAudioSession.sharedInstance()
+      trace.record(type: "audio.route", payload: ["category": audio.category.rawValue, "mode": audio.mode.rawValue,
+        "hardwareSampleRate": audio.sampleRate, "inputChannels": audio.inputNumberOfChannels,
+        "inputs": audio.currentRoute.inputs.map { $0.portType.rawValue },
+        "outputs": audio.currentRoute.outputs.map { $0.portType.rawValue }])
+    }
     guard let pcm = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: AVAudioFrameCount(count)),
       let channel = pcm.floatChannelData?[0] else { throw AppleSpeechFailure.invalidConfiguration }
     pcm.frameLength = AVAudioFrameCount(count)

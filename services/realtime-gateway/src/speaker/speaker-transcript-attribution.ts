@@ -26,14 +26,14 @@ export function attributeSpeakerTranscripts(
   fallbackSpeakerId: (transcript: TranscriptResult) => string | undefined,
   boundaries: SpeakerBoundaryGuard[] = [],
   isConfirmedSpeakerId: (speakerId: string) => boolean = () => true,
-  options: {deviceBoundaryPolicy?:boolean} = {},
+  options: {deviceBoundaryPolicy?:boolean;deviceEvidenceThroughMs?:number} = {},
 ) {
   return transcripts.map((transcript) => {
     const crossedBoundaries = boundaries.filter((boundary) =>
       crossesBoundary(transcript, boundary.boundaryMs)
     );
     if (crossedBoundaries.length > 0) {
-      if(options.deviceBoundaryPolicy)return attributeDeviceSpeakerBoundary(transcript,spans,crossedBoundaries,isConfirmedSpeakerId);
+      if(options.deviceBoundaryPolicy)return attributeDeviceSpeakerBoundary(transcript,spans,crossedBoundaries,isConfirmedSpeakerId,options.deviceEvidenceThroughMs);
       return mixedSpeakerFallback(transcript, crossedBoundaries);
     }
     if(options.deviceBoundaryPolicy){

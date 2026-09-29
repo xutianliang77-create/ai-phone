@@ -40,6 +40,7 @@ describe("public branch of original session sink",()=>{
     expect(info.mock.calls.filter(call=>call[1]==="Public ASR QA boundary").map(call=>call[0]))
       .toEqual([{sessionId:"s",stage:"accepted",sequence:1,startSample:160,endSample:320,acceptedSamples:320,
         pcmSha256:createHash('sha256').update(Buffer.alloc(320)).digest('hex'),
+        pcmDigestBytes:Array.from(createHash('sha256').update(Buffer.alloc(320)).digest()),
         audioLevel:{sampleCount:160,zeroSamples:160,peakAbs:0,rms:0}}]);
   });
   it("confirms the phase at queue execution, not the stale phase before a pending pause",async()=>{

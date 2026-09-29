@@ -2,7 +2,7 @@ import type { SpeakerSpan } from "./speaker-attribution-provider.js";
 import type { SpeakerBoundaryGuard } from
   "./speaker-transcript-attribution.js";
 
-const retentionMs = 120_000;
+export const speakerEvidenceRetentionMs = 120_000;
 
 export function retainRecentSpeakerSpans(
   existing: SpeakerSpan[],
@@ -17,7 +17,7 @@ export function retainRecentSpeakerSpans(
     (latest, span) => Math.max(latest, span.endMs),
     0,
   );
-  const cutoffMs = newestEndMs - retentionMs;
+  const cutoffMs = newestEndMs - speakerEvidenceRetentionMs;
   return spans.filter((span) => span.endMs >= cutoffMs);
 }
 
@@ -25,7 +25,7 @@ export function retainRecentSpeakerBoundaries<T extends SpeakerBoundaryGuard>(
   existing: T[],
   boundary: T,
 ): T[] {
-  const cutoffMs = boundary.boundaryMs - retentionMs;
+  const cutoffMs = boundary.boundaryMs - speakerEvidenceRetentionMs;
   return [...existing, boundary].filter((item) =>
     item.boundaryMs >= cutoffMs
   );

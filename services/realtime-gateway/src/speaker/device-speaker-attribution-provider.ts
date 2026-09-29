@@ -3,7 +3,7 @@ import { acceptedAudioRange } from "../connection/accepted-audio-range.js";
 import type { SpeakerAttributionProvider, SpeakerSessionInput, SpeakerSpan } from "./speaker-attribution-provider.js";
 import type {TranscriptResult} from "../asr/asr-provider.js";
 import {attributeSpeakerTranscripts,type SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
-import {retainRecentSpeakerSpans} from "./speaker-evidence-retention.js";
+import {retainRecentSpeakerSpans,speakerEvidenceRetentionMs} from "./speaker-evidence-retention.js";
 import {traceAcceptedDeviceSpeaker} from '../metrics/public-audio-evidence-trace.js';
 
 /** No microphone, model, embeddings, identity lookup or network calls here.
@@ -15,13 +15,15 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
   private active = false;
   private sequence = 0;
   private through = 0;
+  private completeEvidence = true;
+  private retainedFromMs = 0;
   private pending: SpeakerSpan[] = [];
   private recent: SpeakerSpan[] = [];
   constructor(private readonly sessionId: string, private readonly sampleRate: 16000 | 24000) {}
 
   async createSession(input: SpeakerSessionInput) {
     if (input.sessionId !== this.sessionId || input.options.allowVoiceIdentity) throw Error("device_speaker_scope");
-    this.active = true; this.sequence = 0; this.through = 0; this.pending = []; this.recent=[];
+    this.active = true; this.sequence = 0; this.through = 0; this.pending = []; this.recent=[]; this.completeEvidence = true; this.retainedFromMs = 0;
   }
   accept(value: DeviceSpeakerEvidenceEvent, acceptedSamples: number): boolean {
     if (!this.active) return false;
@@ -29,11 +31,15 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
     if (!event || event.sequence <= this.sequence || event.throughSample <= this.through ||
       event.spans.some(span => span.startSample < this.through) || this.pending.length + event.spans.length > 512) return false;
     traceAcceptedDeviceSpeaker(event,acceptedSamples);
+    if(event.sequence!==this.sequence+1)this.completeEvidence=false;
     const rate = this.sampleRate / 1000;
     const spans = event.spans.map(span => ({speakerId:`device-speaker-${span.speaker + 1}`,
       startMs:span.startSample/rate,endMs:span.endSample/rate,confidence:span.confidence,overlap:span.overlap,final:true}));
     this.pending.push(...spans); this.sequence = event.sequence; this.through = event.throughSample;
-    this.recent=retainRecentSpeakerSpans(this.recent,spans).slice(-6000);
+    const retained=retainRecentSpeakerSpans(this.recent,spans);
+    this.retainedFromMs=Math.max(this.retainedFromMs,this.through/rate-speakerEvidenceRetentionMs,
+      ...retained.slice(0,Math.max(0,retained.length-6000)).map(s=>s.endMs));
+    this.recent=retained.slice(-6000);
     return true;
   }
   /** Read-only projection of the same validated evidence used by the timeline.
@@ -42,7 +48,8 @@ export class DeviceSpeakerAttributionProvider implements SpeakerAttributionProvi
     return transcripts.map(t=>{
       if(!this.active||!t.timing||t.timing.endMs>this.through/(this.sampleRate/1000))
         return {...t,speaker:{speakerId:"unknown",role:"unknown",source:"unknown"}};
-      return attributeSpeakerTranscripts([t],this.recent,()=>undefined,boundaries,()=>true,{deviceBoundaryPolicy:true})[0];
+      return attributeSpeakerTranscripts([t],this.recent,()=>undefined,boundaries,()=>true,
+        {deviceBoundaryPolicy:true,deviceEvidenceThroughMs:this.completeEvidence&&t.timing.startMs>=this.retainedFromMs?this.through/(this.sampleRate/1000):undefined})[0];
     });
   }
   async pushAudio(frame: AudioFrame): Promise<SpeakerSpan[]> {

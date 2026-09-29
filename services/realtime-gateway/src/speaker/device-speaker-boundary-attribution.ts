@@ -3,6 +3,8 @@ import type {SpeakerSpan} from "./speaker-attribution-provider.js";
 import type {SpeakerBoundaryGuard} from "./speaker-transcript-attribution.js";
 import {evaluateSpeakerSpan,MINIMUM_SPEAKER_EVIDENCE_MS} from "./speaker-segment-aligner.js";
 import {DEFAULT_MINIMUM_CONFIDENCE} from "./speech-turn-coordinator.js";
+import {deviceSpeakerAlignment} from './device-speaker-alignment.js';
+import {speakerEvidenceRetentionMs} from './speaker-evidence-retention.js';
 
 /** Phone-only alignment policy. A sequential switch is not simultaneous speech.
  * An estimated edge may use the inherited 160ms minimum-evidence threshold;
@@ -10,6 +12,7 @@ import {DEFAULT_MINIMUM_CONFIDENCE} from "./speech-turn-coordinator.js";
 export function attributeDeviceSpeakerBoundary<T extends Pick<TranscriptResult,"timing"|"speaker"|"turnId"|"tokenTimings">>(
   transcript:T,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],
   isConfirmed:(id:string)=>boolean,
+  evidenceThroughMs?:number,
 ):T {
   const timing=transcript.timing!;
   const clipped=spans.map(span=>({...span,startMs:Math.max(timing.startMs,span.startMs),endMs:Math.min(timing.endMs,span.endMs)}))
@@ -17,11 +20,36 @@ export function attributeDeviceSpeakerBoundary<T extends Pick<TranscriptResult,"
   const concurrent=simultaneousSpeakers(clipped);
   const overlap=timing.overlap===true||(timing.activeSpeakerIds?.length??0)>1||concurrent.length>0;
   if(!overlap){
+    const complete=alignCompleteModelEdge(transcript,clipped,boundaries,isConfirmed,evidenceThroughMs);
+    if(complete)return complete;
     const aligned=alignEstimatedEdge(transcript,clipped,boundaries,isConfirmed);
     if(aligned)return aligned;
   }
   return {...transcript,speaker:{speakerId:"unknown",role:"unknown",source:"unknown"},timing:{...timing,
     overlap,activeSpeakerIds:overlap?[...new Set([...(timing.activeSpeakerIds??[]),...concurrent])]:[]}};
+}
+
+/** A quantized phone turn edge is not an extra voice. For precise ASR time,
+ * require the server-owned immutable phone watermark to cover the WHOLE
+ * interval, then reuse the ordinary device single-speaker coverage/confidence
+ * rule. Never ignore even a 1ms rival span or change the text/audio timestamps. */
+function alignCompleteModelEdge<T extends Pick<TranscriptResult,'timing'|'speaker'|'turnId'|'tokenTimings'>>(
+  transcript:T,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],isConfirmed:(id:string)=>boolean,through?:number,
+):T|undefined {
+  const timing=transcript.timing!;
+  if(timing.source!=='model'||!Number.isFinite(through)||through!<timing.endMs||boundaries.length!==1)return;
+  if(timing.startMs<Math.max(0,through!-speakerEvidenceRetentionMs))return;
+  const edge=boundaries[0],before=edge.boundaryMs-timing.startMs,after=timing.endMs-edge.boundaryMs;
+  const nearStart=before>0&&before<MINIMUM_SPEAKER_EVIDENCE_MS&&after>=MINIMUM_SPEAKER_EVIDENCE_MS;
+  const nearEnd=after>0&&after<MINIMUM_SPEAKER_EVIDENCE_MS&&before>=MINIMUM_SPEAKER_EVIDENCE_MS;
+  if(!nearStart&&!nearEnd||edge.previousSpeakerId===edge.nextSpeakerId)return;
+  const expected=nearStart?edge.nextSpeakerId:edge.previousSpeakerId;
+  const prior=transcript.speaker?.speakerId;
+  if(expected==='unknown'||!isConfirmed(expected)||prior&&prior!=='unknown'&&prior!==expected)return;
+  const alignment=deviceSpeakerAlignment(timing,spans);
+  if(alignment?.speaker.speakerId!==expected||alignment.timing.overlap)return;
+  const turnId=nearStart?edge.nextTurnId:edge.previousTurnId;
+  return {...transcript,...alignment,...(turnId?{turnId}:{})};
 }
 
 function alignEstimatedEdge<T extends Pick<TranscriptResult,"timing"|"speaker"|"turnId"|"tokenTimings">>(transcript:T,spans:SpeakerSpan[],boundaries:SpeakerBoundaryGuard[],isConfirmed:(id:string)=>boolean) {

@@ -11,6 +11,7 @@ export class DeviceSpeakerTimeline {
   private spans: SpeakerRevisionSpan[] = [];
   private through = 0;
   private generation = 0;
+  private completeEvidence = true;
   private readonly labels = Object.fromEntries([1,2,3,4].map(i => [`device-speaker-${i}`, `device-speaker-${i}`]));
   constructor(private readonly sessionId: string, private readonly send: (event: ServerRealtimeEvent) => void,
     private readonly boundaries:()=>SpeakerBoundaryGuard[]=()=>[]) {}
@@ -30,6 +31,7 @@ export class DeviceSpeakerTimeline {
   /** Only call after the provider validated session/rate/model and accepted PCM. */
   accept(event: DeviceSpeakerEvidenceEvent) {
     const rate = event.sampleRate / 1000;
+    if(event.sequence!==this.generation+1)this.completeEvidence=false;
     this.through = event.throughSample/rate; this.generation = event.sequence;
     this.spans.push(...event.spans.map(s => ({speakerId:`device-speaker-${s.speaker+1}`,
       startMs:s.startSample/rate,endMs:s.endSample/rate,confidence:s.confidence,overlap:s.overlap})));
@@ -47,7 +49,7 @@ export class DeviceSpeakerTimeline {
     const result = reconcileSpeakerRevision({sessionId:this.sessionId,generation:this.generation,
       windowStartMs:start,windowEndMs:this.through,provider:"on_device",model:"sortformer_v2_1_fastest",
       speakerCount:new Set(this.spans.map(s => s.speakerId)).size,
-      spans:this.spans.map(s => ({...s,startMs:s.startMs-start,endMs:s.endMs-start}))},eligible,this.labels,this.boundaries());
+      spans:this.spans.map(s => ({...s,startMs:s.startMs-start,endMs:s.endMs-start}))},eligible,this.labels,this.boundaries(),this.completeEvidence);
     traceDeviceSpeakerAssociation(this.sessionId,this.through,this.generation,eligible,result);
     for (const update of result.updates) {
       const segment = this.segments.get(update.segmentId)!;

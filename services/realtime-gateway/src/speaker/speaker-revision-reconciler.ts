@@ -46,6 +46,7 @@ export function reconcileSpeakerRevision(
   segments: RevisableSpeakerSegment[],
   stableSessionLabels?: Record<string, string>,
   deviceBoundaries:SpeakerBoundaryGuard[] = [],
+  completeDeviceEvidence = false,
 ): SpeakerRevisionReconcileResult {
   const validation = validateSpeakerRevision(revision);
   if (validation) return rejected(validation);
@@ -64,7 +65,7 @@ export function reconcileSpeakerRevision(
   }
   const labelMapping = stableSessionLabels ?? mapRevisionLabels(spans, eligible);
   const updates = eligible.flatMap((segment) =>
-    updateForSegment(segment, spans, labelMapping, stableSessionLabels !== undefined,deviceBoundaries)
+    updateForSegment(segment, spans, labelMapping, stableSessionLabels !== undefined,deviceBoundaries,completeDeviceEvidence?revision.windowEndMs:undefined)
   );
   return { accepted: true, updates, labelMapping };
 }
@@ -75,14 +76,17 @@ function updateForSegment(
   labelMapping: Record<string, string>,
   stableSessionLabels = false,
   deviceBoundaries:SpeakerBoundaryGuard[] = [],
+  evidenceThroughMs?:number,
 ): SpeakerUpdatedEvent[] {
   const timing = segment.timing!;
   if (timing.overlap === true) return [];
   if(stableSessionLabels){
     const crossed=deviceBoundaries.filter(b=>timing.startMs<b.boundaryMs&&timing.endMs>b.boundaryMs);
-    const aligned=crossed.length?attributeDeviceSpeakerBoundary(segment,spans,crossed,()=>true):deviceSpeakerAlignment(timing,spans);
+    const aligned=crossed.length?attributeDeviceSpeakerBoundary(segment,spans,crossed,()=>true,evidenceThroughMs):deviceSpeakerAlignment(timing,spans);
     if(!aligned?.speaker||!aligned.timing)return [];
-    if(!aligned||sameSpeaker(segment.speaker,aligned.speaker)&&sameTiming(timing,aligned.timing))return [];
+    if(sameSpeaker(segment.speaker,aligned.speaker)&&sameTiming(timing,aligned.timing))return [];
+    // Metadata-only repair preserves the stored turn. Source assembly owns
+    // turn reassignment and its corresponding transcript/translation revision.
     return [{type:"speaker.updated",sessionId:segment.sessionId,segmentId:segment.segmentId,turnId:segment.turnId,
       revision:segment.revision,speakerRevision:(segment.speakerRevision??0)+1,speaker:aligned.speaker,timing:aligned.timing}];
   }
