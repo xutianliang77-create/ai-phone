@@ -66,7 +66,7 @@ abstract interface class AudioSessionCoordinator {
   Stream<AudioSessionEvent> get events;
   bool get managesPlatformAudioSession;
 
-  Future<void> beginCapture({bool voiceProcessing = true});
+  Future<void> beginCapture({bool voiceProcessing = true, bool publicPlaybackReference = false});
   Future<void> endCapture();
   Future<void> dispose();
 }
@@ -81,7 +81,7 @@ class NoopAudioSessionCoordinator implements AudioSessionCoordinator {
   Stream<AudioSessionEvent> get events => const Stream.empty();
 
   @override
-  Future<void> beginCapture({bool voiceProcessing = true}) async {}
+  Future<void> beginCapture({bool voiceProcessing = true, bool publicPlaybackReference = false}) async {}
 
   @override
   Future<void> endCapture() async {}
@@ -121,10 +121,13 @@ class SystemAudioSessionCoordinator implements AudioSessionCoordinator {
   }
 
   @override
-  Future<void> beginCapture({bool voiceProcessing = true}) =>
+  Future<void> beginCapture({bool voiceProcessing = true, bool publicPlaybackReference = false}) =>
       _methodChannel.invokeMethod<void>(
         'beginCapture',
-        <String, Object?>{'voiceProcessing': voiceProcessing},
+        <String, Object?>{
+          'voiceProcessing': voiceProcessing,
+          if (publicPlaybackReference) 'publicPlaybackReference': true,
+        },
       );
 
   @override

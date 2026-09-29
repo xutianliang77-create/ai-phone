@@ -15,7 +15,8 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
   private var configured = false
   private var interrupted = false
   private var eventSink: FlutterEventSink?
-  private weak var lastInvalidatedEngine: AVAudioEngine?
+  private let captureEngineEvents = CaptureEngineInvalidationGate<AVAudioEngine>()
+  private var publicEngineInvalidated: (() -> Void)?
 
   override init() {
     super.init()
@@ -60,7 +61,8 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
         let voiceProcessing = arguments?["voiceProcessing"] as? Bool ?? true
         try beginCapture(
           owner: flutterCaptureOwner,
-          voiceProcessing: voiceProcessing
+          voiceProcessing: voiceProcessing,
+          managedEngine: arguments?["publicPlaybackReference"] as? Bool ?? false
         )
         result(nil)
       } catch {
@@ -95,11 +97,13 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     return nil
   }
 
-  func beginCapture(owner: String, voiceProcessing: Bool = true) throws {
+  func beginCapture(owner: String, voiceProcessing: Bool = true,
+                    managedEngine: Bool = false) throws {
     try begin(
       owner: owner,
       role: .capture,
-      voiceProcessing: voiceProcessing
+      voiceProcessing: voiceProcessing,
+      managedEngine: managedEngine
     )
   }
 
@@ -115,13 +119,30 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     end(owner: owner, role: .playback)
   }
 
+  func bindPublicCaptureEngine(_ engine: AVAudioEngine, onInvalidated: @escaping () -> Void) {
+    withLock {
+      captureEngineEvents.bind(engine)
+      publicEngineInvalidated = onInvalidated
+    }
+  }
+
+  func unbindPublicCaptureEngine(_ engine: AVAudioEngine) {
+    withLock {
+      if captureEngineEvents.unbind(engine) { publicEngineInvalidated = nil }
+    }
+  }
+
   private func begin(
     owner: String,
     role: Role,
-    voiceProcessing: Bool = true
+    voiceProcessing: Bool = true,
+    managedEngine: Bool = false
   ) throws {
     lock.lock()
     defer { lock.unlock() }
+    if role == .capture && owner == flutterCaptureOwner {
+      captureEngineEvents.begin(managed: managedEngine)
+    }
     if contains(owner: owner, role: role) { return }
     insert(owner: owner, role: role)
     if role == .capture {
@@ -131,6 +152,7 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
       try activateLocked()
     } catch {
       remove(owner: owner, role: role)
+      if role == .capture && owner == flutterCaptureOwner { captureEngineEvents.end() }
       throw error
     }
   }
@@ -139,6 +161,7 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     lock.lock()
     defer { lock.unlock() }
     remove(owner: owner, role: role)
+    if role == .capture && owner == flutterCaptureOwner { captureEngineEvents.end() }
     if captureOwners.isEmpty && playbackOwners.isEmpty {
       deactivateLocked()
     }
@@ -236,17 +259,19 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
 
   @objc private func handleEngineConfigurationChange(_ notification: Notification) {
     guard let engine = notification.object as? AVAudioEngine else { return }
+    guard let token = captureEngineEvents.token(for: engine) else { return }
     // The engine notification runs on an internal queue; never tear it down there.
     DispatchQueue.main.async { [weak self, weak engine] in
-      guard let self, let engine, !engine.isRunning else { return }
+      guard let self, let engine else { return }
       var shouldRebuild = false
+      var diagnostic: (() -> Void)?
       self.withLock {
-        guard self.captureOwners.contains(self.flutterCaptureOwner),
-              !self.interrupted, self.lastInvalidatedEngine !== engine else { return }
-        self.lastInvalidatedEngine = engine
-        shouldRebuild = true
+        shouldRebuild = self.captureEngineEvents.shouldInvalidate(engine, token: token,
+          isRunning: engine.isRunning, interrupted: self.interrupted)
+        if shouldRebuild { diagnostic = self.publicEngineInvalidated }
       }
       if shouldRebuild {
+        diagnostic?()
         self.eventSink?(["type": "capture.invalidated"])
       }
     }

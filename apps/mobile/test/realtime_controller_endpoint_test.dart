@@ -92,16 +92,38 @@ void main() {
     try {
       await controller.start();
       expect(capture.startedConfigs.last.publicPlaybackReference,isTrue);
+      expect(audio.publicPlaybackReferenceValues.last,isTrue);
       expect(await controller.setAutoSpeakTranslation(false),isTrue);
       audio.emit(const AudioSessionEvent(type:AudioSessionEventType.captureInvalidated));
       await pumpEventQueue();
       expect(capture.startedConfigs.length,2);
       expect(capture.startedConfigs.last.publicPlaybackReference,isTrue);
+      expect(audio.publicPlaybackReferenceValues.last,isTrue);
       expect(await controller.setAutoSpeakTranslation(true),isTrue);
       await controller.setAutoSpeakTranslation(false);
       await controller.stop(); await controller.start();
       expect(capture.startedConfigs.last.publicPlaybackReference,isFalse);
+      expect(audio.publicPlaybackReferenceValues.last,isFalse);
     } finally { await controller.disposeAsync(); debugDefaultTargetPlatformOverride = null; }
+  });
+  test('managed capture engine ownership is only requested for spoken public iOS', () async {
+    try {
+      for (final platform in [TargetPlatform.iOS,TargetPlatform.android]) {
+        debugDefaultTargetPlatformOverride = platform;
+        for (final public in [true,false]) {
+          for (final spoken in [true,false]) {
+            final audio=FakeAudioSessionCoordinator(), capture=Capture();
+            final controller=realtimeControllerForTest(PublicRepository()..public=public,capture,
+              autoSpeakTranslation:spoken,audioSessionCoordinator:audio);
+            try {
+              await controller.start();
+              expect(audio.publicPlaybackReferenceValues.single,
+                platform==TargetPlatform.iOS && public && spoken);
+            } finally { await controller.disposeAsync(); }
+          }
+        }
+      }
+    } finally { debugDefaultTargetPlatformOverride=null; }
   });
   test('spoken iOS route rebuild retires playback without blocking capture or replaying the old chunk', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

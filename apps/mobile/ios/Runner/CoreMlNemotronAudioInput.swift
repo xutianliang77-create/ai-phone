@@ -15,6 +15,7 @@ final class CoreMlNemotronAudioInput {
   private var lastVoiceProcessingAgcEnabled = false
   private var voiceProcessingError: String?
   private var bypassedBeforeConfiguration: Bool?
+  private var engineInvalidations = 0
   private var lastChunkSamples = 0
   private var lastInputSampleRate = 0
   private var lastInputChannels = 0
@@ -47,10 +48,17 @@ final class CoreMlNemotronAudioInput {
   ) throws {
     _ = stop()
     try configureAudioSession()
+    if sharedPlaybackReference {
+      engineInvalidations = 0
+      audioSessionCoordinator.bindPublicCaptureEngine(engine) { [weak self] in
+        self?.engineInvalidations += 1
+      }
+    }
     do {
       try configureVoiceProcessing()
       if sharedPlaybackReference { pcmPlayback = try VoiceProcessingPcmPlayer(engine: engine) }
     } catch {
+      if sharedPlaybackReference { audioSessionCoordinator.unbindPublicCaptureEngine(engine) }
       deactivateAudioSession()
       throw error
     }
@@ -125,6 +133,8 @@ final class CoreMlNemotronAudioInput {
   }
 
   func stop(flushPending: Bool = false) -> [Float] {
+    // Retire ownership before any graph teardown can post notifications.
+    if sharedPlaybackReference { audioSessionCoordinator.unbindPublicCaptureEngine(engine) }
     pcmPlayback?.stop()
     if sharedPlaybackReference { engine.stop() }
     deactivateVoiceProcessing()
@@ -198,6 +208,7 @@ final class CoreMlNemotronAudioInput {
     if sharedPlaybackReference {
       payload["pcmReadiness"] = pcmReadiness.payload
       payload["bypassedBeforeConfiguration"] = bypassedBeforeConfiguration
+      payload["engineInvalidations"] = engineInvalidations
     }
     if let audioSessionError {
       payload["sessionError"] = audioSessionError

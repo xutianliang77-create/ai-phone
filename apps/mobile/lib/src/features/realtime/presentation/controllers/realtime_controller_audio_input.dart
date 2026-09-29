@@ -18,6 +18,7 @@ extension _RealtimeControllerAudioInput on RealtimeController {
         (publicPlayback && defaultTargetPlatform == TargetPlatform.iOS);
     await _audioSessionCoordinator.beginCapture(
       voiceProcessing: voiceProcessing,
+      publicPlaybackReference: publicPlayback && defaultTargetPlatform == TargetPlatform.iOS,
     );
     try {
       _audioSubscription =

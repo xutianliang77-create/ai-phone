@@ -7,6 +7,7 @@ class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
   int beginCaptureCalls = 0;
   int endCaptureCalls = 0;
   final voiceProcessingValues = <bool>[];
+  final publicPlaybackReferenceValues = <bool>[];
 
   @override
   bool get managesPlatformAudioSession => true;
@@ -17,9 +18,10 @@ class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
   void emit(AudioSessionEvent event) => _events.add(event);
 
   @override
-  Future<void> beginCapture({bool voiceProcessing = true}) async {
+  Future<void> beginCapture({bool voiceProcessing = true, bool publicPlaybackReference = false}) async {
     beginCaptureCalls += 1;
     voiceProcessingValues.add(voiceProcessing);
+    publicPlaybackReferenceValues.add(publicPlaybackReference);
   }
 
   @override

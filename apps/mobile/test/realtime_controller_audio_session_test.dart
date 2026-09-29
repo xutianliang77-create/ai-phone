@@ -256,11 +256,16 @@ void main() {
 
     await coordinator.beginCapture(voiceProcessing: false);
     await coordinator.endCapture();
+    await coordinator.beginCapture(publicPlaybackReference: true);
 
     expect(calls.map((call) => call.method),
-        <String>['beginCapture', 'endCapture']);
+        <String>['beginCapture', 'endCapture', 'beginCapture']);
     expect(calls.first.arguments, <String, Object?>{
       'voiceProcessing': false,
+    });
+    expect(calls.last.arguments, <String, Object?>{
+      'voiceProcessing': true,
+      'publicPlaybackReference': true,
     });
   });
 }
