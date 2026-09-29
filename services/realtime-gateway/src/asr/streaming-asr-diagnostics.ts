@@ -8,6 +8,7 @@ export interface StreamingAsrFailureContext {
   origin:StreamingAsrFailureOrigin;
   closeCode?:unknown;closeReason?:unknown;closeReasonBytes?:unknown;
   providerErrorCode?:unknown;providerErrorType?:unknown;providerErrorParam?:unknown;transportErrorCode?:unknown;
+  providerMessageSignals?:unknown;providerTaskId?:unknown;
   languageValueClass?:unknown;transcriptEmpty?:unknown;
   closeReasonSignals?:unknown;
   protocol?:unknown;
@@ -63,6 +64,8 @@ export function isStreamingAsrFailureEvent(event:unknown):event is Record<string
 export function streamingAsrProviderContext(event:Record<string,unknown>):StreamingAsrFailureContext {
   const error=object(event.error)?event.error:{};
   return {origin:"provider_error",providerErrorCode:safe(providerCodes,error.code),providerErrorType:safe(providerTypes,error.type),
+    ...(typeof error.message==="string"&&error.message.length<=4096?{
+      providerMessageSignals:reasonSignals.filter(([,pattern])=>pattern.test(error.message as string)).map(([label])=>label)}:{}),
     ...(error.param!==undefined&&error.param!==null?{providerErrorParam:safe(providerParams,error.param)}:{})};
 }
 const wireTypes=new Set([
@@ -96,6 +99,8 @@ export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uplo
     ...(context?.providerErrorCode!==undefined?{providerErrorCode:safe(providerCodes,context.providerErrorCode)}:{}),
     ...(context?.providerErrorType!==undefined?{providerErrorType:safe(providerTypes,context.providerErrorType)}:{}),
     ...(context?.providerErrorParam!==undefined?{providerErrorParam:safe(providerParams,context.providerErrorParam)}:{}),
+    ...(typeof context?.providerTaskId==="string"&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(context.providerTaskId)?{providerTaskId:context.providerTaskId}:{}),
+    ...(Array.isArray(context?.providerMessageSignals)?{providerMessageSignals:[...new Set(context.providerMessageSignals.filter(v=>typeof v==="string"&&signalLabels.has(v)))]}:{}),
     ...(context?.transportErrorCode!==undefined?{transportErrorCode:safe(transportCodes,context.transportErrorCode)}:{}),
     ...(context?.languageValueClass!==undefined?{languageValueClass:safe(languageClasses,context.languageValueClass)}:{}),
     ...(typeof context?.transcriptEmpty==="boolean"?{transcriptEmpty:context.transcriptEmpty}:{}),

@@ -98,10 +98,15 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
   setEventListener(sessionId:string,listener:(event:ServerRealtimeEvent)=>void){
     const owned=this.sessions.get(sessionId);if(!owned)return ()=>{};
-    return this.asrProvider.setPartialListener?.(sessionId,result=>{
+    const partial=this.asrProvider.setPartialListener?.(sessionId,result=>{
       if(!this.isCurrent(owned)||result.isFinal!==false)return;const text=cleanRealtimeText(result.text);if(!text)return;
       listener({type:"transcript.partial",sessionId,segmentId:result.segmentId,text,language:result.language,revision:0});
     })??(()=>{});
+    const failure=this.asrProvider.setFailureListener?.(sessionId,error=>{
+      if(!this.isCurrent(owned))return;
+      listener(providerError(sessionId,error.code,{provider:this.name,stage:"asr",retryable:false}));
+    })??(()=>{});
+    return ()=>{partial();failure();};
   }
   acceptDeviceSpeakerEvidence(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) {
     const session = this.sessions.get(event.sessionId);

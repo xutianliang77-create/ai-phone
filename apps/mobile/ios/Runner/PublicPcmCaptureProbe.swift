@@ -43,10 +43,12 @@ import UIKit
     // the existing speaker model in the normal UI is not another model call.
     try? await Task.sleep(nanoseconds:100_000_000_000)
     var cases: [[String: Any]] = []
-    for keepGraph in [false,true] {
+    let productionOnly = ProcessInfo.processInfo.environment["WUJIE_PUBLIC_PCM_QA_MODE"] == "production"
+    let modes = productionOnly ? [(false,true)] : [(false,false),(true,false)]
+    for (keepGraph,automatic) in modes {
       changes = []; restarts = 0; stats.reset()
       var acquired = false
-      var item: [String: Any] = ["mode":keepGraph ? "resume_same_graph" : "observe_stop_without_rebuild"]
+      var item: [String: Any] = ["mode":automatic ? "production_automatic_recovery" : keepGraph ? "resume_same_graph" : "observe_stop_without_rebuild"]
       do {
         guard AVAudioApplication.shared.recordPermission == .granted else { throw probeError("microphone_permission_required") }
         guard !coordinator.hasActiveAudio else { throw probeError("existing_capture_or_playback_busy") }
@@ -61,7 +63,7 @@ import UIKit
               self.restarts += 1
               do { try self.input?.resume() } catch { self.changes.append(["resumeError":error.localizedDescription]) }
             }
-          })
+          },recoverSharedConfiguration:automatic)
         input = capture
         try capture.start(chunkDurationMs:40,onRuntimeError:{[stats] code,_ in stats.fail(code)},onChunk:{[stats] samples in stats.accept(samples.count)})
         item["start"] = capture.configurationState()

@@ -12,6 +12,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
   private var mailbox: PublicPcmMailbox?
   private let trace = CoreMlNemotronDiagnosticRecorder(metadataOnly: true, maximumTimelineEvents: 4096)
   private var tracing = false
+  private var pendingStart: (id:String,result:FlutterResult)?
+  private var startTimeout: DispatchWorkItem?
   var hasCapture: Bool { captureId != nil }
 
   init(coordinator: AudioSessionCoordinator) { self.coordinator = coordinator }
@@ -46,7 +48,7 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           configurationChanged: { [weak self] state in
             guard let self, self.captureId == id else { return }
             self.record("capture.engine_configuration_change", state)
-          })
+          },recoverSharedConfiguration:true)
         let mailbox = PublicPcmMailbox()
         self.input = input; captureId = id; starting = true; self.mailbox = mailbox
         if let session = args["diagnosticSessionId"] as? String, !session.isEmpty, session.count <= 240 {
@@ -59,24 +61,37 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           mailbox.fail(code)
           DispatchQueue.main.async {
             guard let self, self.captureId == id else { return }
-            self.sink?(FlutterError(code: code, message: message, details: nil)); self.stop()
+            let error = FlutterError(code:code,message:message,details:nil)
+            if self.pendingStart != nil { self.finishStart(error) }
+            else { self.sink?(error) }
+            self.stop()
           }
         }, onChunk: { [weak self] samples in
           mailbox.append(VoiceProcessingPcmPlayer.encode(samples))
           DispatchQueue.main.async {
             guard let self, self.captureId == id else { return }
-            self.drain(mailbox, id:id)
+            if self.pendingStart != nil, let input = self.input, input.pcmReadiness.ready {
+              let readiness = input.pcmReadiness
+              self.record("capture.ready_after_first_pcm",["input":input.payload(),"readiness":readiness.payload])
+              self.finishStart(["captureId":id,"sampleRate":rate,"voiceProcessingEnabled":readiness.ready,
+                "readiness":readiness.payload,"sharedPlaybackReference":true,"firstPcmReady":true])
+            }
+            if self.pendingStart == nil { self.drain(mailbox, id:id) }
           }
         })
         let audio = AVAudioSession.sharedInstance()
         let readiness = input.pcmReadiness
-        record(readiness.ready ? "capture.ready" : "capture.not_ready",
+        record("capture.starting",
           ["input":input.payload(),"readiness":readiness.payload,"mode":audio.mode.rawValue,
           "inputs":audio.currentRoute.inputs.map { $0.portType.rawValue },
           "outputs":audio.currentRoute.outputs.map { $0.portType.rawValue }])
-        result(["captureId":id,"sampleRate":rate,"voiceProcessingEnabled":readiness.ready,
-          "readiness":readiness.payload,
-          "sharedPlaybackReference":input.pcmPlayback != nil])
+        pendingStart = (id,result)
+        let timeout = DispatchWorkItem { [weak self] in
+          guard let self, self.captureId == id, self.pendingStart?.id == id else { return }
+          self.finishStart(self.error("public_capture_first_pcm_timeout"));self.stop()
+        }
+        startTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline:.now()+3,execute:timeout)
         return
       }
       // A late stop from an older Dart generation must not stop a new capture.
@@ -113,6 +128,7 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     return true
   }
   @discardableResult private func stop(drainTail: Bool = false) -> Bool {
+    if pendingStart != nil { finishStart(error("public_capture_start_cancelled")) }
     let id = captureId
     var confirmed = true
     let tail = input?.stop(flushPending:drainTail) ?? []
@@ -125,6 +141,11 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     input = nil
     if tracing { trace.finish(); tracing = false }
     return confirmed
+  }
+  private func finishStart(_ response:Any?) {
+    let start = pendingStart;pendingStart = nil
+    startTimeout?.cancel();startTimeout = nil
+    start?.result(response)
   }
   private func record(_ type: String, _ payload: [String:Any]) {
     if tracing { trace.record(type:type,payload:payload) }

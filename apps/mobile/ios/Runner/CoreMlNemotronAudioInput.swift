@@ -32,17 +32,27 @@ final class CoreMlNemotronAudioInput {
   private let targetSampleRate: Double
   private let sharedPlaybackReference: Bool
   private let configurationChanged: (([String: Any]) -> Void)?
+  private let recoverSharedConfiguration: Bool
   private var lastEngineConfigurationChange: [String: Any]?
+  private var configurationRecoveriesWithoutPcm = 0
+  private var recoveryInputBuffers = 0
+  private var suspended = false
+  private var activeInputFormat: AVAudioFormat?
+  private var activeChunkDurationMs = 0
+  private var chunkHandler: (([Float]) -> Void)?
+  private var errorHandler: ((String, String) -> Void)?
   private(set) var pcmPlayback: VoiceProcessingPcmPlayer?
 
   init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr",
        sampleRate: Double = 16_000, sharedPlaybackReference: Bool = false,
-       configurationChanged: (([String: Any]) -> Void)? = nil) {
+       configurationChanged: (([String: Any]) -> Void)? = nil,
+       recoverSharedConfiguration: Bool = false) {
     self.audioSessionCoordinator = audioSessionCoordinator
     self.audioSessionOwner = owner
     self.targetSampleRate = sampleRate
     self.sharedPlaybackReference = sharedPlaybackReference
     self.configurationChanged = configurationChanged
+    self.recoverSharedConfiguration = recoverSharedConfiguration
   }
 
   func start(
@@ -51,6 +61,9 @@ final class CoreMlNemotronAudioInput {
     onChunk: @escaping ([Float]) -> Void
   ) throws {
     _ = stop()
+    suspended = false
+    configurationRecoveriesWithoutPcm = 0; recoveryInputBuffers = 0
+    activeChunkDurationMs = chunkDurationMs; chunkHandler = onChunk; errorHandler = onRuntimeError
     try configureAudioSession()
     if sharedPlaybackReference {
       engineInvalidations = 0
@@ -65,8 +78,24 @@ final class CoreMlNemotronAudioInput {
       throw error
     }
 
+    resetStats()
+    try installInputTap(chunkDurationMs:chunkDurationMs,onRuntimeError:onRuntimeError,onChunk:onChunk)
+    engine.prepare()
+    do {
+      try engine.start()
+      running = true
+    } catch {
+      _ = stop()
+      throw error
+    }
+  }
+
+  private func installInputTap(chunkDurationMs:Int,
+    onRuntimeError:@escaping (String,String)->Void,onChunk:@escaping ([Float])->Void) throws {
     let input = engine.inputNode
     let inputFormat = input.outputFormat(forBus: 0)
+    guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw inputError("audio_input_format_unavailable") }
+    activeInputFormat = inputFormat
     lastInputSampleRate = Int(inputFormat.sampleRate)
     lastInputChannels = Int(inputFormat.channelCount)
     let targetFormat = AVAudioFormat(
@@ -78,7 +107,6 @@ final class CoreMlNemotronAudioInput {
     let converter = AVAudioConverter(from: inputFormat, to: targetFormat)
     let chunkSamples = max(1, Int(targetSampleRate * Double(chunkDurationMs) / 1000.0))
     lastChunkSamples = chunkSamples
-    resetStats()
 
     input.installTap(
       onBus: 0,
@@ -123,18 +151,10 @@ final class CoreMlNemotronAudioInput {
       }
     }
     tapInstalled = true
-
-    engine.prepare()
-    do {
-      try engine.start()
-      running = true
-    } catch {
-      stop()
-      throw error
-    }
   }
 
   func stop(flushPending: Bool = false) -> [Float] {
+    suspended = true
     // Retire ownership before any graph teardown can post notifications.
     if sharedPlaybackReference { audioSessionCoordinator.unbindPublicCaptureEngine(engine) }
     pcmPlayback?.stop()
@@ -158,14 +178,34 @@ final class CoreMlNemotronAudioInput {
       return tail
     }
     running = false
+    chunkHandler = nil; errorHandler = nil; activeInputFormat = nil
     deactivateAudioSession()
     return tail
   }
 
-  func pause() { pcmPlayback?.stop(); engine.pause(); running = false }
+  func pause() { suspended = true; pcmPlayback?.stop(); engine.pause(); running = false }
   func resume() throws {
-    if sharedPlaybackReference { bindSharedEngine() }
-    try engine.start(); running = true
+    suspended = false
+    if sharedPlaybackReference {
+      guard tapInstalled, let chunkHandler, let errorHandler else { throw inputError("audio_capture_not_started") }
+      if !engine.isRunning && engine.inputNode.outputFormat(forBus:0) != activeInputFormat {
+        engine.inputNode.removeTap(onBus:0);tapInstalled = false
+        // Keep converted pending samples and the public sample clock. Only
+        // the raw-input converter/tap changes when a Bluetooth format changes.
+        queue.sync {}
+        try installInputTap(chunkDurationMs:activeChunkDurationMs,onRuntimeError:errorHandler,onChunk:chunkHandler)
+      }
+      bindSharedEngine()
+    }
+    if !engine.isRunning { try engine.start() }
+    running = true
+    if sharedPlaybackReference {
+      let state = pcmReadiness
+      // Running may change while the I/O configuration notification settles;
+      // the public start response still requires a real first PCM chunk.
+      guard state.referenceBound && state.inputProcessing && state.outputProcessing && !state.bypassed
+        else { throw inputError("audio_capture_resume_unconfirmed") }
+    }
   }
 
   private func bindSharedEngine() {
@@ -175,6 +215,20 @@ final class CoreMlNemotronAudioInput {
       let state = self.configurationState()
       self.lastEngineConfigurationChange = state
       self.configurationChanged?(state)
+      if self.recoverSharedConfiguration && self.running && !self.suspended {
+        let buffers = self.queue.sync { self.totalInputBuffers }
+        self.configurationRecoveriesWithoutPcm = buffers > self.recoveryInputBuffers ? 1 : self.configurationRecoveriesWithoutPcm + 1
+        self.recoveryInputBuffers = buffers
+        do {
+          guard self.configurationRecoveriesWithoutPcm <= 3 else { throw self.inputError("audio_configuration_unstable") }
+          self.pcmPlayback?.stop()
+          try self.resume()
+        } catch {
+          if let handler = self.errorHandler { self.queue.async {
+            self.emitRuntimeError(code:"audio_configuration_unstable",message:error.localizedDescription,handler:handler)
+          } }
+        }
+      }
     }
   }
 
@@ -245,6 +299,7 @@ final class CoreMlNemotronAudioInput {
       payload["pcmReadiness"] = pcmReadiness.payload
       payload["bypassedBeforeConfiguration"] = bypassedBeforeConfiguration
       payload["engineInvalidations"] = engineInvalidations
+      payload["configurationRecoveriesWithoutPcm"] = configurationRecoveriesWithoutPcm
       if let lastEngineConfigurationChange { payload["lastEngineConfigurationChange"] = lastEngineConfigurationChange }
     }
     if let audioSessionError {
@@ -345,6 +400,10 @@ final class CoreMlNemotronAudioInput {
     audioSessionCoordinator.endCapture(owner: audioSessionOwner)
     audioSessionActive = false
     audioSessionError = nil
+  }
+
+  private func inputError(_ code:String) -> NSError {
+    NSError(domain:"CoreMlNemotronAudioInput",code:1,userInfo:[NSLocalizedDescriptionKey:code])
   }
 
   static func convertPcm(

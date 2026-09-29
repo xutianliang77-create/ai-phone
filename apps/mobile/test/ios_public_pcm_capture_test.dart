@@ -36,11 +36,13 @@ void main() {
   late IosPublicPcmCapture input;
   late String captureId;
   var ready = true;
+  var firstPcmReady = true;
   var sendStopTail = false;
   var failStop = false;
   setUp(() {
     calls.clear();
     ready = true;
+    firstPcmReady = true;
     sendStopTail = false;
     failStop = false;
     input = IosPublicPcmCapture();
@@ -66,6 +68,7 @@ void main() {
           'sampleRate': args['sampleRate'],
           'voiceProcessingEnabled': ready,
           'sharedPlaybackReference': ready,
+          'firstPcmReady': firstPcmReady,
           if (!ready) 'readiness': {'ready': false, 'reason': 'engine_not_running'},
         };
       }
@@ -164,6 +167,33 @@ void main() {
     await expectLater(input.start(const AudioCaptureConfig(), (_) {}, (_) {}),
         throwsA(isA<StateError>().having((e) => e.message, 'reason', contains('engine_not_running'))));
     expect(calls.map((x) => x.method), ['start', 'stop']);
+  });
+  test('engine flags without a first PCM acknowledgement do not report ready', () async {
+    firstPcmReady = false;
+    await expectLater(input.start(const AudioCaptureConfig(), (_) {}, (_) {}),throwsA(isA<StateError>()));
+    expect(calls.map((c)=>c.method),['start','stop']);
+  });
+  test('first PCM arriving before the native ACK is retained until start completes', () async {
+    final reply = Completer<Map<String,Object?>>(), frames = <Uint8List>[];
+    messenger.setMockMethodCallHandler(method,(call) async {
+      calls.add(call);
+      final id=(call.arguments as Map)['captureId'] as String;
+      if(call.method=='start') {
+        captureId=id;
+        messenger.handlePlatformMessage(event,const StandardMethodCodec().encodeSuccessEnvelope({
+          'captureId':id,'data':Uint8List.fromList([1,0,2,0])}),(_){});
+        return reply.future;
+      }
+      if(call.method=='stop')scheduleMicrotask(()=>messenger.handlePlatformMessage(event,
+        const StandardMethodCodec().encodeSuccessEnvelope({'captureId':id,'stopped':true}),(_){}));
+      return null;
+    });
+    final start=input.start(const AudioCaptureConfig(sampleRate:16000),frames.add,(_){});
+    await pumpEventQueue();expect(frames,isEmpty);
+    reply.complete({'captureId':captureId,'sampleRate':16000,'voiceProcessingEnabled':true,
+      'sharedPlaybackReference':true,'firstPcmReady':true});
+    await start;await pumpEventQueue();
+    expect(frames.map((x)=>x.toList()),[[1,0,2,0]]);
   });
   test(
       'ordinary RecordAudioCapture forwards native PCM and drains its tail through unchanged VAD before stop',

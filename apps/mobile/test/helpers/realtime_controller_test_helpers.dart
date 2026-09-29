@@ -142,6 +142,7 @@ class FakeAudioCapture implements AudioCapture {
   final bool failStop;
   int stopCalls = 0;
   int startCalls = 0;
+  int resumeCalls = 0;
   final startedConfigs = <AudioCaptureConfig>[];
 
   @override
@@ -161,7 +162,7 @@ class FakeAudioCapture implements AudioCapture {
   Future<void> pause() async {}
 
   @override
-  Future<void> resume() async {}
+  Future<void> resume() async { resumeCalls += 1; }
 
   @override
   Future<void> stop() async {

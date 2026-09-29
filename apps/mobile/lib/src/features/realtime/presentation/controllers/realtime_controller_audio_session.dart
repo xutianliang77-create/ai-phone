@@ -49,6 +49,14 @@ extension RealtimeControllerAudioSession on RealtimeController {
           await _startMobileAsrProvider();
         }
       } else {
+        if (rebuildOnly && defaultTargetPlatform == TargetPlatform.iOS &&
+            _session?.syncBinding != null && _publicPlaybackReference) {
+          await _stopSpeaking();
+          // Native configuration recovery keeps VP, its output reference and
+          // the PCM/VAD clock. Destroying them restarts hardware negotiation.
+          await _audioCapture.resume();
+          return;
+        }
         // A spoken public iOS route rebuild replaces the shared input/output
         // graph. Retire its playback generation before native teardown.
         if (defaultTargetPlatform == TargetPlatform.iOS &&

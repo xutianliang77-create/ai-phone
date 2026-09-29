@@ -100,6 +100,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   setPartialListener(sessionId: string, listener: (result: TranscriptResult) => void) {
     return this.asr.setPartialListener?.(sessionId, listener) ?? (() => {});
   }
+  setFailureListener(sessionId:string,listener:Parameters<NonNullable<AsrProvider["setFailureListener"]>>[1]) {
+    return this.asr.setFailureListener?.(sessionId,listener)??(()=>{});
+  }
   takeLanguageNotices(sessionId:string){return this.asr.takeLanguageNotices?.(sessionId)??[];}
   async transcribe(frame: AudioFrame) {
     if (!this.enabledSessions.has(frame.sessionId)) {

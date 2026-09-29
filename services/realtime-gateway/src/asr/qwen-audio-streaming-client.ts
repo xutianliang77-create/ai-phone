@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import {randomUUID} from 'node:crypto';
 import type {PublicModelAttemptEvent,TranscriptEvent} from '@translation/contracts';
-import type {AsrSession,TranscriptResult,AsrLanguageNotice} from './asr-provider.js';
+import type {AsrSession,TranscriptResult,AsrLanguageNotice,AsrFailureNotice} from './asr-provider.js';
 import type {HttpAsrRequest,HttpAsrFlushRequest,HttpAsrBoundaryRequest} from './http-asr-client.js';
 import type {StreamingAsrOptions} from './openai-streaming-asr-client.js';
 import type {DeviceTextLanguageBroker} from '../connection/device-text-language.js';
@@ -31,6 +31,9 @@ export class QwenAudioStreamingClient {
   private finished=deferred<void>();
   private taskId=randomUUID();
   private initialized=false;
+  private connectPromise?:Promise<void>;
+  private runTask?:ReturnType<typeof qwenAudioRunTask>;
+  private failureListener?: (failure:AsrFailureNotice)=>void;
   private finishing=false;
   private providerFinished=false;
   private failure?:PublicAsrError;
@@ -56,13 +59,18 @@ export class QwenAudioStreamingClient {
     if(this.initialized||session.sessionId!==this.options.sessionId||session.sourceLanguage!==this.options.language||session.asrCorrections?.length||
       session.sourceLanguage==='auto'&&!this.options.textLanguage)throw new PublicAsrError('qwen_audio_scope_invalid','not_sent');
     const vocabulary=session.asrHotwords?.length?Object.fromEntries(session.asrHotwords.map(t=>[t,4])):undefined;
-    const request=qwenAudioRunTask({taskId:this.taskId,model:this.options.model,sampleRate:this.rate,
+    this.runTask=qwenAudioRunTask({taskId:this.taskId,model:this.options.model,sampleRate:this.rate,
       ...this.options.streaming,...(session.sourceLanguage==='auto'?{}:{languageHints:[session.sourceLanguage]}),...(vocabulary?{vocabulary}:{})});
     this.initialized=true;
     const cancel=()=>{if(!this.providerFinished)this.fail('qwen_audio_cancelled',streamingAsrCancellationContext(signal));};
     signal.addEventListener('abort',cancel,{once:true});this.removeAbort=()=>signal.removeEventListener('abort',cancel);
     if(signal.aborted)cancel();
-    await this.bounded('qwen_audio_setup_timeout',async()=>{
+    this.assert();
+  }
+  /** Open one task only after the first accepted PCM prefix has durable intent.
+   * A phone capture failure with no PCM cannot create an idle supplier task. */
+  private connect() {
+    this.connectPromise??=this.bounded('qwen_audio_setup_timeout',async()=>{
       await abortable(this.options.authorizeConnection(),this.stop.signal);this.assert();
       const credentials=await abortable(Promise.resolve(this.options.resolveCredentials(this.stop.signal)),this.stop.signal);this.assert();
       if(!credentials.apiKey||credentials.apiKey.trim()!==credentials.apiKey||/[\r\n]/.test(credentials.apiKey))throw Error();
@@ -76,14 +84,15 @@ export class QwenAudioStreamingClient {
           if(binary||Buffer.byteLength(data.toString())>262144)throw Error();
           const event=JSON.parse(data.toString());
           if(event?.header?.event==='task-failed'&&event.header.task_id===this.taskId){
-            this.fail('qwen_audio_task_failed',streamingAsrProviderContext({error:{code:event.header.error_code}}));return;
+            this.fail('qwen_audio_task_failed',{...streamingAsrProviderContext({error:{code:event.header.error_code,message:event.header.error_message}}),providerTaskId:this.taskId});return;
           }
-          if(this.busy){if(this.queued.length>=512)throw Error();this.queued.push(event);}else this.receive(event);
+          if(this.busy&&event?.header?.event!=='task-started'){if(this.queued.length>=512)throw Error();this.queued.push(event);}else this.receive(event);
         }catch(error){this.fail(error instanceof Error&&/^qwen_audio_[a-z_]+$/.test(error.message)?error.message:'qwen_audio_protocol_error');}
       });
-      this.ws.once('open',()=>{void this.send(JSON.stringify(request)).catch(()=>this.fail('qwen_audio_setup_send_failed'));});
+      this.ws.once('open',()=>{void this.send(JSON.stringify(this.runTask!)).catch(()=>this.fail('qwen_audio_setup_send_failed'));});
       await abortable(this.started.promise,this.stop.signal);this.assert();
     });
+    return this.connectPromise;
   }
   async transcribe(request:HttpAsrRequest,signal?:AbortSignal){
     this.scope(request.sessionId);this.assert();
@@ -101,6 +110,7 @@ export class QwenAudioStreamingClient {
         segmentId:this.taskId,revision:1,component:'asr',providerId:'qwen',modelId:this.options.model,state:'dispatching',audioStartSample:0,audioSampleRate:this.rate}),audioEndSample:end};
       // Save the exact growing prefix BEFORE any corresponding bytes leave.
       await abortable(this.options.record(next),this.stop.signal);this.attempt=next;this.assert();
+      await this.connect();this.assert();
       if(signal?.aborted)throw Error();
       for(let offset=0;offset<pcm.length;offset+=this.rate/5){this.sent=true;await this.send(pcm.subarray(offset,offset+this.rate/5));this.assert();}
       this.cursor=end;this.sequence=request.sequence;
@@ -108,7 +118,12 @@ export class QwenAudioStreamingClient {
     });}finally{this.busy=false;}
   }
   async flush(request:HttpAsrFlushRequest,signal?:AbortSignal){
-    this.scope(request.sessionId);this.assert();this.drain();
+    this.scope(request.sessionId);
+    if(request.finishSession&&!this.sent&&this.cursor===0&&this.lastFinal===0&&this.languagePending===0){
+      if(this.failure?.outcome==='not_sent'){await this.recordTerminal('not_sent');return [];}
+      if(!this.connectPromise){this.providerFinished=true;return [];}
+    }
+    this.assert();this.drain();
     if(!request.finishSession)return this.completed.splice(0);
     return this.bounded('qwen_audio_finish_failed',async()=>{
       if(signal?.aborted)throw Error();
@@ -215,13 +230,22 @@ export class QwenAudioStreamingClient {
     realtimeLogger.warn({sessionId:this.options.sessionId,protocol:'qwen_audio_streaming',
       ...streamingAsrFailureDiagnostic(code,undefined,this.cursor,this.options.language,context)},'Public streaming ASR failure');
     this.stop.abort();this.options.textLanguage?.close();this.ws?.terminate();
+    const listener=this.failureListener;
+    if(listener&&context?.origin!=='explicit_close')queueMicrotask(()=>{
+      if(this.failureListener===listener)listener({code:this.failure!.code,outcome:this.failure!.outcome});
+    });
   }
   private assert(){if(this.failure)throw this.failure;}
   private scope(sessionId:string){if(sessionId!==this.options.sessionId)throw new PublicAsrError('qwen_audio_scope_invalid','not_sent');}
   takeLanguageNotices(sessionId:string){this.scope(sessionId);return this.notices.splice(0);}
+  setFailureListener(sessionId:string,listener:(failure:AsrFailureNotice)=>void){
+    this.scope(sessionId);this.failureListener=listener;
+    if(this.failure)queueMicrotask(()=>{if(this.failureListener===listener)listener({code:this.failure!.code,outcome:this.failure!.outcome});});
+    return ()=>{if(this.failureListener===listener)this.failureListener=undefined;};
+  }
   async closeSession(sessionId:string){
     this.scope(sessionId);this.removeAbort();this.options.textLanguage?.close();
-    if(!this.providerFinished)this.fail('qwen_audio_closed');
+    if(!this.providerFinished)this.fail('qwen_audio_closed',{origin:'explicit_close'});
     this.stop.abort();this.ws?.terminate();await this.recordTerminal(this.providerFinished?'confirmed':this.sent?'uncertain':'not_sent');
   }
   async diagnostics():Promise<never>{throw Error('qwen_audio_vad_diagnostics_not_reported');}

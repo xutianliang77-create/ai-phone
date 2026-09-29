@@ -96,7 +96,9 @@ void main() {
       expect(await controller.setAutoSpeakTranslation(false),isTrue);
       audio.emit(const AudioSessionEvent(type:AudioSessionEventType.captureInvalidated));
       await pumpEventQueue();
-      expect(capture.startedConfigs.length,2);
+      expect(capture.startedConfigs.length,1);
+      expect(capture.resumeCalls,1);
+      expect(capture.stopCalls,0);
       expect(capture.startedConfigs.last.publicPlaybackReference,isTrue);
       expect(audio.publicPlaybackReferenceValues.last,isTrue);
       expect(await controller.setAutoSpeakTranslation(true),isTrue);
@@ -142,7 +144,9 @@ void main() {
       expect(player.played.length,1);
       audio.emit(const AudioSessionEvent(type:AudioSessionEventType.captureInvalidated));
       await pumpEventQueue();
-      expect(capture.startCalls,2);
+      expect(capture.startCalls,1);
+      expect(capture.resumeCalls,1);
+      expect(capture.stopCalls,0);
       expect(player.stopCount,greaterThan(0));
       capture.emit(2); await pumpEventQueue();
       expect(repo.order,contains('frame:2'));

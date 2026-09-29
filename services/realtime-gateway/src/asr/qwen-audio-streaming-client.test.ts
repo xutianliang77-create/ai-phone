@@ -22,9 +22,11 @@ function setup(auto=false){
     start:()=>client.createSession({sessionId:'s',sourceLanguage:source,targetLanguage:'en',asrHotwords:['Qwen3 ASR']},new AbortController().signal)};
 }
 it('sends new task vocabulary/settings and binary PCM; phone VAD never finishes the supplier task',async()=>{
-  const t=setup();try{await t.start();expect(t.socket.sent[0].payload.parameters).toMatchObject({vocabulary:{'Qwen3 ASR':4},semantic_punctuation_enabled:true,heartbeat:true,language_hints:['fr']});
+  const t=setup();try{await t.start();expect(t.factory).not.toHaveBeenCalled();
+    await t.client.transcribe(t.frame());
+    expect(t.socket.sent[0].payload.parameters).toMatchObject({vocabulary:{'Qwen3 ASR':4},semantic_punctuation_enabled:true,heartbeat:true,language_hints:['fr']});
     t.socket.onAudio=()=>expect(t.records.at(-1)?.state).toBe('dispatching');
-    await t.client.transcribe(t.frame());await t.client.commitBoundary({...t.flush,boundaryMs:100});
+    await t.client.commitBoundary({...t.flush,boundaryMs:100});
     expect(t.socket.sent.some(e=>e.header?.action==='finish-task')).toBe(false);
     await t.client.transcribe(t.frame(1));t.socket.sentence(1,'Bonjour tout le monde.');await tick();
     const finals=await t.client.flush({...t.flush,finishSession:true});expect(finals[0]).toMatchObject({language:'fr',text:'Bonjour tout le monde.'});
@@ -34,8 +36,9 @@ it('sends new task vocabulary/settings and binary PCM; phone VAD never finishes 
   }finally{await t.client.closeSession('s');}
 });
 it('continues PCM during phone LID and accepts the final reply during end without guessing',async()=>{
-  const t=setup(true);try{await t.start();expect(t.socket.sent[0].payload.parameters).not.toHaveProperty('language_hints');
-    await t.client.transcribe(t.frame());t.socket.sentence(1,'Bonjour tout le monde.',false);t.socket.sentence(1,'Bonjour tout le monde.');
+  const t=setup(true);try{await t.start();expect(t.factory).not.toHaveBeenCalled();
+    await t.client.transcribe(t.frame());expect(t.socket.sent[0].payload.parameters).not.toHaveProperty('language_hints');
+    t.socket.sentence(1,'Bonjour tout le monde.',false);t.socket.sentence(1,'Bonjour tout le monde.');
     await t.client.transcribe(t.frame(1));expect(t.socket.bytes).toBe(6400);expect(t.preview).toHaveBeenCalledWith(expect.objectContaining({language:'auto',revision:0}));
     const ending=t.client.flush({...t.flush,finishSession:true});await tick();const {text,...r}=t.requests[0];
     expect(t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'fr',hypotheses:{fr:0.99}})).toBe(true);

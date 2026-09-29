@@ -16,6 +16,7 @@ import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
+import { bindRealtimeProviderEvents } from "./realtime-provider-events.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
@@ -85,9 +86,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     });
     const sendRealtime = eventDispatcher.send;
     if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = new DeviceSpeakerTimeline(session.id,sendRealtime,()=>provider.deviceSpeakerBoundaryGuards?.(session.id)??[]);
-    const unsubscribeProvider=provider.setEventListener?.(session.id,event=>{
-      if(ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active")sendRealtime(event);
-    })??(()=>{});
+    let unsubscribeProvider=()=>{};
     const confirmAudio=()=>sessionEventSink.confirmAudio?.()??Promise.reject(Error("public_audio_confirmation_required"));
     const startedEvent = { type: "session.started", sessionId: session.id } as const;
     if (resumed) sendRealtimeEvent(ws, startedEvent);
@@ -345,6 +344,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       void cleanupConnection();
     });
     ws.on("close", () => { void cleanupConnection(); });
+    unsubscribeProvider=bindRealtimeProviderEvents(provider,session.id,{
+      isCurrent:()=>ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active",
+      publicConnection:!!configured.publicConnection,send:sendRealtime,
+      beginFinalization:()=>flushTracker.beginFinalization(),end:endRealtimeSession,
+      onError:error=>realtimeLogger.warn({error:loggableError(error),sessionId:session.id},"Public ASR failure finalization unconfirmed"),
+    });
   })()));
   return listenRealtimeServerRuntime(runtime);
 }

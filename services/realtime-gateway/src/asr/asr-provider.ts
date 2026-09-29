@@ -110,10 +110,13 @@ export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
 export interface AsrLanguageNotice {segmentId:string;revision:number;language:string;previewLanguage?:TranslationLanguageCode;
   unconfirmedText?:string;timing?:SegmentTimingDto;discarded?:boolean;}
 
+export interface AsrFailureNotice {code:string;outcome:"not_sent"|"rejected"|"uncertain";}
+
 export interface AsrProvider {
   deviceSpeakerBoundaryGuards?(sessionId:string):AsrSpeakerBoundaryEvidence["boundaries"];
   takeLanguageNotices?(sessionId:string):AsrLanguageNotice[];
   setPartialListener?(sessionId:string,listener:(result:TranscriptResult)=>void):()=>void;
+  setFailureListener?(sessionId:string,listener:(failure:AsrFailureNotice)=>void):()=>void;
   createSession(session: AsrSession): Promise<void>;
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string, options?: { finishSession?: boolean }): Promise<AsrProviderResult>;

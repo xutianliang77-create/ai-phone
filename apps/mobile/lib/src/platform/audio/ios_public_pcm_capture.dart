@@ -29,10 +29,18 @@ class IosPublicPcmCapture {
     _captureId = id;
     _streamEnded = false;
     final listening = Completer<void>();
+    final pendingFrames = <Uint8List>[];
+    var pendingBytes = 0, deliveryOpen = false;
+    void deliverPending() {
+      deliveryOpen = true;
+      for (final bytes in pendingFrames) { onData(bytes); }
+      pendingFrames.clear();pendingBytes = 0;
+    }
     _subscription =
         _events.receiveBroadcastStream({'captureId': id}).listen((event) {
       if (_captureId != id || event is! Map || event['captureId'] != id) return;
       if (event['stopped'] == true) {
+        if (!deliveryOpen) deliverPending();
         _streamEnded = true;
         if (_stopped case final stopped? when !stopped.isCompleted) {
           stopped.complete();
@@ -46,7 +54,10 @@ class IosPublicPcmCapture {
       }
       final data = event['data'];
       if (data is Uint8List && data.isNotEmpty && data.length.isEven) {
-        onData(data);
+        if (deliveryOpen) { onData(data); }
+        else if (pendingBytes + data.length <= config.sampleRate * 4) {
+          pendingFrames.add(Uint8List.fromList(data));pendingBytes += data.length;
+        } else { onError(StateError('Native public PCM startup queue overflow')); }
       } else {
         onError(StateError('Invalid native public PCM frame'));
       }
@@ -72,12 +83,15 @@ class IosPublicPcmCapture {
       if (ready?['captureId'] != id ||
           ready?['sampleRate'] != config.sampleRate ||
           ready?['voiceProcessingEnabled'] != true ||
-          ready?['sharedPlaybackReference'] != true) {
+          ready?['sharedPlaybackReference'] != true || ready?['firstPcmReady'] != true) {
         final detail = ready?['readiness'];
         final reason = detail is Map ? detail['reason'] : null;
         throw StateError('Public PCM echo reference unavailable'
             '${reason is String ? ': $reason' : ''}');
       }
+      // Let the original controller finish its start microtasks before the
+      // first captured frames enter its active-session input path.
+      Timer.run(() { if (_captureId == id && !_streamEnded) deliverPending(); });
     } catch (_) {
       if (_captureId == id) await stop();
       rethrow;

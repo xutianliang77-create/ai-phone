@@ -6,7 +6,7 @@ import {explicitAsrCloseReason} from "./streaming-asr-diagnostics.js";
 
 export interface HttpAsrProviderOptions {
   client?:Omit<Pick<HttpAsrClient,"transcribe"|"flush"|"commitBoundary"|"closeSession"|"diagnostics"|"healthCheck">,
-    "transcribe"|"flush"|"commitBoundary">&Pick<AsrProvider,"setPartialListener"|"takeLanguageNotices">&{
+    "transcribe"|"flush"|"commitBoundary">&Pick<AsrProvider,"setPartialListener"|"setFailureListener"|"takeLanguageNotices">&{
       transcribe:(...args:Parameters<HttpAsrClient["transcribe"]>)=>Promise<AsrProviderResult>;
       flush:(...args:Parameters<HttpAsrClient["flush"]>)=>Promise<AsrProviderResult>;
       commitBoundary:(...args:Parameters<HttpAsrClient["commitBoundary"]>)=>Promise<AsrProviderResult>;
@@ -38,6 +38,9 @@ export class HttpAsrProvider implements AsrProvider {
     }
   }
   setPartialListener(sessionId:string,listener:(result:TranscriptResult)=>void){return this.client.setPartialListener?.(sessionId,listener)??(()=>{});}
+  setFailureListener(sessionId:string,listener:Parameters<NonNullable<AsrProvider["setFailureListener"]>>[1]) {
+    return this.client.setFailureListener?.(sessionId,listener)??(()=>{});
+  }
   takeLanguageNotices(sessionId:string){return this.client.takeLanguageNotices?.(sessionId)??[];}
 
   async transcribe(frame: AudioFrame): Promise<AsrProviderResult> {
