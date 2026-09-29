@@ -65,7 +65,8 @@ void main() {
           'captureId': captureId,
           'sampleRate': args['sampleRate'],
           'voiceProcessingEnabled': ready,
-          'sharedPlaybackReference': ready
+          'sharedPlaybackReference': ready,
+          if (!ready) 'readiness': {'ready': false, 'reason': 'engine_not_running'},
         };
       }
       if (call.method == 'stop') {
@@ -161,7 +162,7 @@ void main() {
       () async {
     ready = false;
     await expectLater(input.start(const AudioCaptureConfig(), (_) {}, (_) {}),
-        throwsStateError);
+        throwsA(isA<StateError>().having((e) => e.message, 'reason', contains('engine_not_running'))));
     expect(calls.map((x) => x.method), ['start', 'stop']);
   });
   test(

@@ -13,6 +13,18 @@ final class FakePcmNode: VoiceProcessingPcmNode {
 }
 @main struct VoiceProcessingPcmPlayerTest {
   static func main() throws {
+    for mask in 0..<64 {
+      let s = PcmCaptureReadiness(inputStarted:mask & 1 != 0,engineRunning:mask & 2 != 0,
+        referenceBound:mask & 4 != 0,inputProcessing:mask & 8 != 0,outputProcessing:mask & 16 != 0,
+        bypassed:mask & 32 != 0)
+      precondition(s.ready == (mask == 31))
+      precondition((s.payload["ready"] as? Bool) == s.ready)
+      precondition((s.reason == nil) == s.ready)
+    }
+    precondition(PcmCaptureReadiness(inputStarted:true,engineRunning:false,referenceBound:true,
+      inputProcessing:true,outputProcessing:true,bypassed:false).reason == "engine_not_running")
+    precondition(PcmCaptureReadiness(inputStarted:true,engineRunning:true,referenceBound:true,
+      inputProcessing:true,outputProcessing:true,bypassed:true).reason == "voice_processing_bypassed")
     let output = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
     let encoded = VoiceProcessingPcmPlayer.encode([-2,-1,-0.5,0,0.5,1,2,.infinity,.nan,.greatestFiniteMagnitude])
     precondition([UInt8](encoded) == [0,128,0,128,0,192,0,0,0,64,255,127,255,127,0,0,0,0,255,127])

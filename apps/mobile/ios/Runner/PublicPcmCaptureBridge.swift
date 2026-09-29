@@ -65,10 +65,13 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           }
         })
         let audio = AVAudioSession.sharedInstance()
-        record("capture.ready", ["input":input.payload(),"mode":audio.mode.rawValue,
+        let readiness = input.pcmReadiness
+        record(readiness.ready ? "capture.ready" : "capture.not_ready",
+          ["input":input.payload(),"readiness":readiness.payload,"mode":audio.mode.rawValue,
           "inputs":audio.currentRoute.inputs.map { $0.portType.rawValue },
           "outputs":audio.currentRoute.outputs.map { $0.portType.rawValue }])
-        result(["captureId":id,"sampleRate":rate,"voiceProcessingEnabled":input.canPlayPcm,
+        result(["captureId":id,"sampleRate":rate,"voiceProcessingEnabled":readiness.ready,
+          "readiness":readiness.payload,
           "sharedPlaybackReference":input.pcmPlayback != nil])
         return
       }

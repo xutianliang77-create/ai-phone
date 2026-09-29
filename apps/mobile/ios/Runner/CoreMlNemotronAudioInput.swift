@@ -14,6 +14,7 @@ final class CoreMlNemotronAudioInput {
   private var lastVoiceProcessingEnabled = false
   private var lastVoiceProcessingAgcEnabled = false
   private var voiceProcessingError: String?
+  private var bypassedBeforeConfiguration: Bool?
   private var lastChunkSamples = 0
   private var lastInputSampleRate = 0
   private var lastInputChannels = 0
@@ -151,11 +152,12 @@ final class CoreMlNemotronAudioInput {
 
   func pause() { pcmPlayback?.stop(); engine.pause(); running = false }
   func resume() throws { try engine.start(); running = true }
-  var canPlayPcm: Bool {
-    running && engine.isRunning && pcmPlayback != nil &&
-      engine.inputNode.isVoiceProcessingEnabled && engine.outputNode.isVoiceProcessingEnabled &&
-      !engine.inputNode.isVoiceProcessingBypassed
+  var pcmReadiness: PcmCaptureReadiness {
+    PcmCaptureReadiness(inputStarted:running,engineRunning:engine.isRunning,referenceBound:pcmPlayback != nil,
+      inputProcessing:engine.inputNode.isVoiceProcessingEnabled,outputProcessing:engine.outputNode.isVoiceProcessingEnabled,
+      bypassed:engine.inputNode.isVoiceProcessingBypassed)
   }
+  var canPlayPcm: Bool { pcmReadiness.ready }
 
   func payload() -> [String: Any] {
     let stats = queue.sync {
@@ -193,6 +195,10 @@ final class CoreMlNemotronAudioInput {
       "inputChannels": lastInputChannels
     ]
     payload.merge(stats) { _, value in value }
+    if sharedPlaybackReference {
+      payload["pcmReadiness"] = pcmReadiness.payload
+      payload["bypassedBeforeConfiguration"] = bypassedBeforeConfiguration
+    }
     if let audioSessionError {
       payload["sessionError"] = audioSessionError
     }
@@ -257,6 +263,10 @@ final class CoreMlNemotronAudioInput {
       let input = engine.inputNode
       try input.setVoiceProcessingEnabled(true)
       input.isVoiceProcessingAGCEnabled = false
+      if sharedPlaybackReference {
+        bypassedBeforeConfiguration = input.isVoiceProcessingBypassed
+        input.isVoiceProcessingBypassed = false
+      }
       guard input.isVoiceProcessingEnabled else {
         throw NSError(
           domain: "CoreMlNemotronAudioInput",

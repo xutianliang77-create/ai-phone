@@ -73,7 +73,10 @@ class IosPublicPcmCapture {
           ready?['sampleRate'] != config.sampleRate ||
           ready?['voiceProcessingEnabled'] != true ||
           ready?['sharedPlaybackReference'] != true) {
-        throw StateError('Public PCM echo reference unavailable');
+        final detail = ready?['readiness'];
+        final reason = detail is Map ? detail['reason'] : null;
+        throw StateError('Public PCM echo reference unavailable'
+            '${reason is String ? ': $reason' : ''}');
       }
     } catch (_) {
       if (_captureId == id) await stop();

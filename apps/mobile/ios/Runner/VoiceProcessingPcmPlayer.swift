@@ -1,6 +1,26 @@
 import AVFoundation
 import Foundation
 
+struct PcmCaptureReadiness {
+  let inputStarted: Bool, engineRunning: Bool, referenceBound: Bool
+  let inputProcessing: Bool, outputProcessing: Bool, bypassed: Bool
+  var reason: String? {
+    if !inputStarted { return "input_not_started" }
+    if !engineRunning { return "engine_not_running" }
+    if !referenceBound { return "playback_reference_missing" }
+    if !inputProcessing { return "input_voice_processing_disabled" }
+    if !outputProcessing { return "output_voice_processing_disabled" }
+    if bypassed { return "voice_processing_bypassed" }
+    return nil
+  }
+  var ready: Bool { reason == nil }
+  var payload: [String: Any] {
+    ["inputStarted":inputStarted,"engineRunning":engineRunning,"referenceBound":referenceBound,
+      "inputProcessing":inputProcessing,"outputProcessing":outputProcessing,"bypassed":bypassed,
+      "ready":ready,"reason":reason ?? "ready"]
+  }
+}
+
 protocol VoiceProcessingPcmNode: AnyObject {
   func schedule(_ buffer: AVAudioPCMBuffer, completion: @escaping () -> Void)
   func play()
