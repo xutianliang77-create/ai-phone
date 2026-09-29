@@ -42,7 +42,11 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           let duration = args["frameDurationMs"] as? Int, (10...100).contains(duration)
           else { throw failure("public_capture_not_ready") }
         let input = CoreMlNemotronAudioInput(audioSessionCoordinator: coordinator,
-          owner: "public_pcm_capture", sampleRate: Double(rate), sharedPlaybackReference: true)
+          owner: "public_pcm_capture", sampleRate: Double(rate), sharedPlaybackReference: true,
+          configurationChanged: { [weak self] state in
+            guard let self, self.captureId == id else { return }
+            self.record("capture.engine_configuration_change", state)
+          })
         let mailbox = PublicPcmMailbox()
         self.input = input; captureId = id; starting = true; self.mailbox = mailbox
         if let session = args["diagnosticSessionId"] as? String, !session.isEmpty, session.count <= 240 {

@@ -31,14 +31,18 @@ final class CoreMlNemotronAudioInput {
   private var runtimeErrorEmitted = false
   private let targetSampleRate: Double
   private let sharedPlaybackReference: Bool
+  private let configurationChanged: (([String: Any]) -> Void)?
+  private var lastEngineConfigurationChange: [String: Any]?
   private(set) var pcmPlayback: VoiceProcessingPcmPlayer?
 
   init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr",
-       sampleRate: Double = 16_000, sharedPlaybackReference: Bool = false) {
+       sampleRate: Double = 16_000, sharedPlaybackReference: Bool = false,
+       configurationChanged: (([String: Any]) -> Void)? = nil) {
     self.audioSessionCoordinator = audioSessionCoordinator
     self.audioSessionOwner = owner
     self.targetSampleRate = sampleRate
     self.sharedPlaybackReference = sharedPlaybackReference
+    self.configurationChanged = configurationChanged
   }
 
   func start(
@@ -50,9 +54,7 @@ final class CoreMlNemotronAudioInput {
     try configureAudioSession()
     if sharedPlaybackReference {
       engineInvalidations = 0
-      audioSessionCoordinator.bindPublicCaptureEngine(engine) { [weak self] in
-        self?.engineInvalidations += 1
-      }
+      bindSharedEngine()
     }
     do {
       try configureVoiceProcessing()
@@ -161,7 +163,41 @@ final class CoreMlNemotronAudioInput {
   }
 
   func pause() { pcmPlayback?.stop(); engine.pause(); running = false }
-  func resume() throws { try engine.start(); running = true }
+  func resume() throws {
+    if sharedPlaybackReference { bindSharedEngine() }
+    try engine.start(); running = true
+  }
+
+  private func bindSharedEngine() {
+    audioSessionCoordinator.bindPublicCaptureEngine(engine) { [weak self] in
+      guard let self else { return }
+      self.engineInvalidations += 1
+      let state = self.configurationState()
+      self.lastEngineConfigurationChange = state
+      self.configurationChanged?(state)
+    }
+  }
+
+  /// Metadata only. Capture before teardown so the hardware format change is
+  /// not confused with this class disabling voice processing during stop.
+  func configurationState() -> [String: Any] {
+    let audio = AVAudioSession.sharedInstance()
+    func format(_ value: AVAudioFormat) -> [String: Any] {
+      ["rate":value.sampleRate,"channels":Int(value.channelCount),
+       "interleaved":value.isInterleaved,"commonFormat":value.commonFormat.rawValue]
+    }
+    return ["engineRunning":engine.isRunning,"sessionRate":audio.sampleRate,
+      "sessionInputChannels":audio.inputNumberOfChannels,"sessionOutputChannels":audio.outputNumberOfChannels,
+      "category":audio.category.rawValue,"mode":audio.mode.rawValue,
+      "inputTypes":audio.currentRoute.inputs.map { $0.portType.rawValue },
+      "outputTypes":audio.currentRoute.outputs.map { $0.portType.rawValue },
+      "inputNodeInput":format(engine.inputNode.inputFormat(forBus:0)),
+      "inputNodeOutput":format(engine.inputNode.outputFormat(forBus:0)),
+      "outputNodeInput":format(engine.outputNode.inputFormat(forBus:0)),
+      "outputNodeOutput":format(engine.outputNode.outputFormat(forBus:0)),
+      "tapRate":lastInputSampleRate,"tapChannels":lastInputChannels,
+      "readiness":pcmReadiness.payload]
+  }
   var pcmReadiness: PcmCaptureReadiness {
     PcmCaptureReadiness(inputStarted:running,engineRunning:engine.isRunning,referenceBound:pcmPlayback != nil,
       inputProcessing:engine.inputNode.isVoiceProcessingEnabled,outputProcessing:engine.outputNode.isVoiceProcessingEnabled,
@@ -209,6 +245,7 @@ final class CoreMlNemotronAudioInput {
       payload["pcmReadiness"] = pcmReadiness.payload
       payload["bypassedBeforeConfiguration"] = bypassedBeforeConfiguration
       payload["engineInvalidations"] = engineInvalidations
+      if let lastEngineConfigurationChange { payload["lastEngineConfigurationChange"] = lastEngineConfigurationChange }
     }
     if let audioSessionError {
       payload["sessionError"] = audioSessionError

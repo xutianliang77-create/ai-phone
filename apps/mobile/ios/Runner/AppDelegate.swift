@@ -79,5 +79,6 @@ import UIKit
     ) {
       storeKitBridge.register(messenger: registrar.messenger())
     }
+    PublicPcmCaptureProbe.startIfRequested(coordinator:audioSessionCoordinator)
   }
 }

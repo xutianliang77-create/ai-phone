@@ -18,6 +18,11 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
   private let captureEngineEvents = CaptureEngineInvalidationGate<AVAudioEngine>()
   private var publicEngineInvalidated: (() -> Void)?
 
+  var hasActiveAudio: Bool {
+    lock.lock(); defer { lock.unlock() }
+    return !captureOwners.isEmpty || !playbackOwners.isEmpty
+  }
+
   override init() {
     super.init()
     NotificationCenter.default.addObserver(
