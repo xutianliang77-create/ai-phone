@@ -131,6 +131,7 @@ final class AppleOnlineEndpointSession {
         "speechStarted": decision.speechStarted, "finalized": decision.shouldFinalize,
         "renderEchoMatched": echoDecision.matched, "renderEchoCarried": echoDecision.carried,
         "renderCorrelation": echo?.correlation ?? 0,
+        "renderReferenceCoverage": echo?.coverage ?? 0,
         "renderLagMs": echo?.lagMs ?? 0,
         "confirmedSpeechSamples": decision.confirmedSpeechSamples, "trailingSilenceSamples": decision.trailingSilenceSamples]) }
       analysisSamples += frame.count

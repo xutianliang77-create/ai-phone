@@ -59,6 +59,31 @@ final class FakePcmNode: VoiceProcessingPcmNode {
     precondition(residualMatch.matched && residualMatch.correlation >= 0.46 && residualMatch.correlation < 0.6)
     let independentNear = zip(residual,near).map { $0 + $1 * 1.5 }
     precondition(!reference.match(independentNear,analysisStart:4096,sessionId:"s").matched)
+    // The 3003 phone trace placed a 104.5 ms hole between two 800 ms TTS
+    // blocks. The false ASR onset crossed that hole; a whole-window match
+    // could not score it even though >55% of the frame has rendered reference.
+    let gapped = PcmRenderReference()
+    gapped.reset(sessionId:"gapped",sampleRate:16000)
+    gapped.record(VoiceProcessingPcmPlayer.encode(Array(render[0..<6400])),
+      sampleRate:16000,captureSample:0,sessionId:"gapped",acousticRoute:true)
+    gapped.record(VoiceProcessingPcmPlayer.encode(Array(render[6400..<12800])),
+      sampleRate:16000,captureSample:8072,sessionId:"gapped",acousticRoute:true)
+    let acrossGap: [Float] = (0..<4096).map { i in
+      let position=6384+i
+      if position < 6400 { return render[position]*0.3 }
+      if position >= 8072 { return render[6400+position-8072]*0.3 }
+      return Float(sin(Double(i)*0.37))*0.01
+    }
+    let partial=gapped.match(acrossGap,analysisStart:6384,sessionId:"gapped")
+    precondition(partial.matched && partial.coverage > 0.55 && partial.coverage < 0.65)
+    precondition(!gapped.match(near,analysisStart:6384,sessionId:"gapped").matched)
+    precondition(!gapped.match(zip(acrossGap,near).map { $0+$1*1.5 },
+      analysisStart:6384,sessionId:"gapped").matched)
+    let tooShort=PcmRenderReference()
+    tooShort.reset(sessionId:"short",sampleRate:16000)
+    tooShort.record(VoiceProcessingPcmPlayer.encode(Array(render[0..<1000])),
+      sampleRate:16000,captureSample:0,sessionId:"short",acousticRoute:true)
+    precondition(!tooShort.match(Array(render[0..<4096]),analysisStart:0,sessionId:"short").matched)
     // Physical 3002 case: a direct 0.468 match, one weaker intervening frame,
     // then an echo onset at 0.429 with the same lag. Carry cannot self-renew.
     var echoGate = PcmRenderEchoGate()
