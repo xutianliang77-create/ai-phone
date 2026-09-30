@@ -140,8 +140,11 @@ class RealtimeRepository {
 
   Future<void> setVoiceOutput(String sessionId, bool enabled,
       {String? presetId}) {
+    // Public creation binds the server-configured voice, not the saved private
+    // preset. Omit it on toggles to retain that sealed voice across providers;
+    // the Gateway still validates the session and its original TTS capability.
     return _gatewayClient.setVoiceOutput(sessionId, enabled,
-        presetId: presetId);
+        presetId: publicLifecycleConfigured ? null : presetId);
   }
 
   void configureVoiceOutput(String mode) => _apiClient.setVoiceOutputMode(mode);
