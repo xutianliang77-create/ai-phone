@@ -164,9 +164,10 @@ class RealtimeResourcePreparationPanel extends StatelessWidget {
           zh
               ? '系统声音信息未取得或不匹配，不能认定离线可用。'
               : 'System voice metadata is unavailable or mismatched; offline readiness is not established.',
-        'languageResourceMissing' ||
-        'language_resource_missing' ||
-        'language_pair_not_installed' =>
+        'language_pair_not_installed' => zh
+            ? '所选翻译资源尚未就绪。语音识别/语音控制资源不等于翻译资源；请准备所选翻译资源后重新检查。'
+            : 'Translation resources are not ready. Speech recognition or Voice Control resources are not translation resources. Prepare the selected translation resources, then recheck.',
+        'languageResourceMissing' || 'language_resource_missing' =>
           zh
               ? '所选语言资源未安装；准备后会重新检查。'
               : 'Selected resources are missing; readiness will be checked again after preparation.',

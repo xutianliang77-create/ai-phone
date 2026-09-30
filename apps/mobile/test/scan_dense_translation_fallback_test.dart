@@ -23,7 +23,7 @@ void main() {
     );
   });
 
-  testWidgets('moves dense overlays into an expandable paired list',
+  testWidgets('keeps dense overlays with an expandable paired list',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -71,10 +71,10 @@ void main() {
       find.byKey(const ValueKey('scan-translation-list-fallback-notice')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('scan-translation-overlay-0')),
-      findsNothing,
-    );
+    for (var index = 0; index < blocks.length; index++) {
+      expect(find.byKey(ValueKey('scan-translation-overlay-$index')),
+          findsOneWidget);
+    }
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('scan-translation-list-item-0')),
       200,

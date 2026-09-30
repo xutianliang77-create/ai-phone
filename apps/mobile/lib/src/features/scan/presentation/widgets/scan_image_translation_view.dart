@@ -26,7 +26,8 @@ class ScanImageTranslationView extends StatefulWidget {
       _ScanImageTranslationViewState();
 }
 
-class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
+class _ScanImageTranslationViewState extends State<ScanImageTranslationView>
+    with AutomaticKeepAliveClientMixin<ScanImageTranslationView> {
   static const double _minScale = 1;
   static const double _maxScale = 5;
   static const double _zoomControlsInset = 8;
@@ -40,6 +41,16 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
   double _scale = _minScale;
 
   bool get _hasTranslation => widget.translatedText.trim().isNotEmpty;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    // A ListView may recreate this image after translation finished offscreen.
+    _showTranslation = _hasTranslation;
+  }
 
   @override
   void didUpdateWidget(covariant ScanImageTranslationView oldWidget) {
@@ -57,6 +68,7 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final l10n = context.l10n;
     final useListFallback =
         shouldUseScanTranslationListFallback(widget.translatedBlocks);
@@ -121,7 +133,7 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
                               fit: BoxFit.fill,
                               semanticLabel: l10n.scanImageSelected,
                             ),
-                            if (_showTranslation && !useListFallback)
+                            if (_showTranslation && _hasTranslation)
                               _translationLayer(context),
                           ],
                         ),
@@ -157,8 +169,8 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
             ),
             child: Text(
               l10n.isChinese
-                  ? '版面较密，译文已移到下方列表。点按条目可展开全文。'
-                  : 'Dense layout: translation is in the list below. Tap to expand.',
+                  ? '版面较密，图片保留译文覆盖；下方列表可展开查看完整译文。'
+                  : 'Dense layout: translations stay on the image; expand the list below for full text.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSecondaryContainer,
                   ),

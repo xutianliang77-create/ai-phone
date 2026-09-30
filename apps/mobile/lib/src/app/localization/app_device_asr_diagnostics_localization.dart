@@ -22,7 +22,8 @@ const zhDeviceAsrDiagnosticsValues = <String, String>{
 const zhDeviceAsrRuntimeMessages = <String, String>{
   'Checking on-device translation language packs': '正在检查端侧翻译语言包',
   'On-device translation ready': '端侧翻译已就绪',
-  'On-device translation language pack is not installed': '端侧翻译语言包未安装',
+  'On-device translation language pack is not installed':
+      '端侧翻译资源尚未就绪；语音识别和翻译资源需分别准备，可在同传设置中检查',
   'On-device translation only supports Chinese and English': '端侧模式当前仅支持中英互译',
   'On-device translation requires iOS 26 or newer': '端侧翻译需要 iOS 26 或更新系统',
 };

@@ -22,6 +22,32 @@ import 'package:translation_mobile/src/features/shell/presentation/pages/main_sh
 import 'helpers/realtime_resource_fakes.dart';
 
 void main() {
+  testWidgets('installed ASR does not claim missing translation resources ready',
+      (tester) async {
+    final fixture = ResourceFixture();
+    fixture.asr.ready = true;
+    final controller =
+        fixture.controller(config: resourceConfig(source: 'zh', target: 'es'));
+    await _mountPanel(tester, controller);
+    await tester.tap(find.byKey(const ValueKey('check-local-resources')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('resource-asr|zh|'))).data,
+        endsWith('资源已就绪'));
+    expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('resource-translation|zh|es')))
+            .data,
+        endsWith('未安装'));
+    expect(find.textContaining('语音识别/语音控制资源不等于翻译资源'), findsOneWidget);
+    expect(fixture.asr.starts, 0);
+    expect(fixture.asr.preparations, isEmpty);
+    expect(fixture.mt.preparations, isEmpty);
+    expect(fixture.mt.translations, 0);
+    expect(fixture.repo.starts, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+    await controller.disposeAsync();
+  });
   for (final baseLocal in [true, false]) {
     testWidgets(
         'saved local mode does not fetch a remote voice catalog; baseLocal=$baseLocal',
