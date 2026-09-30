@@ -230,7 +230,10 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
             return
         }
 
-        stop()
+        if PcmPlaybackBoundary.shouldStopBeforePlay(publicCapture:publicCapture?.hasCapture == true,
+            pendingResult:pendingResult != nil,privatePlayer:player != nil,playbackId:playbackId != nil) {
+            stop()
+        }
         do {
             try audioSessionCoordinator.beginPlayback(owner: audioSessionOwner)
             if let publicCapture, publicCapture.hasCapture {

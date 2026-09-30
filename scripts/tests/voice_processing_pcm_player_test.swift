@@ -34,6 +34,20 @@ final class FakePcmNode: VoiceProcessingPcmNode {
     try streamingPlayer.play(Data(repeating:0,count:3200),sampleRate:16000) { _ in }
     precondition(streamingNode.stops == 0)
     streamingPlayer.stop();precondition(streamingNode.stops == 1)
+    let bridgeNode = FakePcmNode(), bridgePlayer = VoiceProcessingPcmPlayer(node:bridgeNode,format:output)
+    var pendingBridgeResult = false, bridgeCompletions = 0
+    for n in 0..<6 {
+      if PcmPlaybackBoundary.shouldStopBeforePlay(publicCapture:true,pendingResult:pendingBridgeResult,
+        privatePlayer:false,playbackId:pendingBridgeResult) { bridgePlayer.stop() }
+      pendingBridgeResult = true
+      try bridgePlayer.play(Data(repeating:0,count:3200),sampleRate:16000) { error in
+        precondition(error == nil);pendingBridgeResult = false;bridgeCompletions += 1
+      }
+      bridgeNode.callbacks[n]()
+    }
+    precondition(bridgeCompletions == 6 && bridgeNode.stops == 0)
+    // Actual interruption remains an explicit node stop, not a silent ignore.
+    bridgePlayer.stop();precondition(bridgeNode.stops == 1)
     // Reference-only echo, independent speech, and mixed double-talk.
     let reference = PcmRenderReference()
     reference.reset(sessionId:"s",sampleRate:16000)

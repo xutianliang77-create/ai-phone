@@ -26,7 +26,13 @@ struct PcmCaptureReadiness {
 /// match with the same measured delay may protect the next two VAD windows;
 /// carried matches never extend the window. Independent or later speech wins.
 struct PcmRenderEchoGate {
-  struct Decision { let matched: Bool, carried: Bool }
+  struct Decision {
+    let matched: Bool, carried: Bool, speechStartAllowed: Bool
+    init(matched: Bool, carried: Bool, speechStartAllowed: Bool? = nil) {
+      self.matched = matched; self.carried = carried
+      self.speechStartAllowed = speechStartAllowed ?? !matched
+    }
+  }
   private var lastDirect: (start: Int, lagMs: Int)?
 
   mutating func evaluate(_ match: PcmRenderReference.Match,
@@ -41,7 +47,9 @@ struct PcmRenderEchoGate {
     else if let previous = lastDirect,
       frameSamples <= 0 || analysisStart <= previous.start ||
       analysisStart - previous.start > frameSamples * 2 { lastDirect = nil }
-    return Decision(matched: match.matched || carried, carried: carried)
+    let protected = match.matched || carried
+    return Decision(matched:protected,carried:carried,
+      speechStartAllowed:!protected && (!match.requiresEchoProof || match.referenceKnown))
   }
 
   mutating func reset() { lastDirect = nil }
@@ -152,110 +160,5 @@ final class VoiceProcessingPcmPlayer {
 
   private static func failure(_ code: String) -> NSError {
     NSError(domain: "VoiceProcessingPcmPlayer", code: 1, userInfo: [NSLocalizedDescriptionKey: code])
-  }
-}
-
-/// A bounded, ephemeral reference of what THIS capture actually rendered.
-/// High waveform agreement is echo evidence, not text matching or a language
-/// decision. Independent double-talk is retained; unmatched/partial evidence
-/// is never enough to reject input. No PCM is persisted or sent to the server.
-final class PcmRenderReference {
-  struct Match {
-    let matched: Bool, correlation: Double; let lagMs: Int, coverage: Double
-    init(matched: Bool, correlation: Double, lagMs: Int, coverage: Double = 0) {
-      self.matched = matched; self.correlation = correlation
-      self.lagMs = lagMs; self.coverage = coverage
-    }
-  }
-  private let lock = NSLock()
-  private let rate = 2000, capacity = 16000 // 8 seconds, 64 KB float reference
-  private var values = [Float](repeating: 0, count: 16000)
-  private var positions = [Int](repeating: -1, count: 16000)
-  private var owner: String?
-  private var captureRate = 16000
-  private var latestRecordedEnd = -1
-
-  func reset(sessionId: String?, sampleRate: Int) {
-    lock.lock(); defer { lock.unlock() }
-    owner = sessionId; captureRate = sampleRate
-    values = [Float](repeating:0,count:capacity)
-    positions = [Int](repeating: -1, count: capacity)
-    latestRecordedEnd = -1
-  }
-  func record(_ pcm: Data, sampleRate: Int, captureSample: Int, sessionId: String?, acousticRoute: Bool) {
-    guard acousticRoute, let sessionId, [16000,24000].contains(sampleRate), pcm.count.isMultiple(of:2), !pcm.isEmpty else { return }
-    lock.lock(); defer { lock.unlock() }
-    guard owner == sessionId, [16000,24000].contains(captureRate), captureSample >= 0 else { return }
-    let bytes = [UInt8](pcm), stride = sampleRate / rate, start = captureSample / (captureRate / rate)
-    let count = min(capacity, pcm.count / 2 / stride)
-    for i in 0..<count {
-      var sum: Float = 0
-      for j in 0..<stride {
-        let k = (i * stride + j) * 2
-        sum += Float(Int16(bitPattern:UInt16(bytes[k]) | UInt16(bytes[k+1]) << 8)) / 32768
-      }
-      let p = start + i, slot = p % capacity
-      values[slot] = sum / Float(stride); positions[slot] = p
-    }
-    latestRecordedEnd = max(latestRecordedEnd,start + count)
-  }
-  func match(_ samples: [Float], analysisStart: Int, sessionId: String?) -> Match {
-    guard let sessionId, samples.count >= 1024, analysisStart >= 0 else { return Match(matched:false,correlation:0,lagMs:0) }
-    let stride = 8, count = samples.count / 8
-    var input = [Double](repeating:0,count:count)
-    for i in 0..<count { for j in 0..<stride { input[i] += Double(samples[i*stride+j]) / Double(stride) } }
-    let mean = input.reduce(0,+) / Double(count)
-    for i in 0..<count { input[i] -= mean }
-    let energy = input.reduce(0) { $0+$1*$1 }
-    guard energy > 1e-9 else { return Match(matched:false,correlation:0,lagMs:0) }
-    lock.lock(); defer { lock.unlock() }
-    guard owner == sessionId else { return Match(matched:false,correlation:0,lagMs:0) }
-    let base = analysisStart / stride
-    // Reuse the 1.0 echo-tail bound for uncertain hardware/render alignment.
-    let maxLag = 350 * rate / 1000 // the unchanged 1.0 350 ms echo-tail bound
-    // Streaming TTS schedules the next PCM block after the preceding playback
-    // callback. A 90-105 ms reference gap may cross a 256 ms VAD frame. Score
-    // only a sufficiently long contiguous rendered portion of that frame;
-    // never fill the gap with invented samples or treat a short overlap as echo.
-    let minimumRun = count >= 512 ? (count * 55 + 99) / 100 : count
-    if latestRecordedEnd < base - maxLag + minimumRun {
-      return Match(matched:false,correlation:0,lagMs:0)
-    }
-    var best = 0.0, lag = 0, covered = 0
-    func score(_ n: Int, _ sumR: Double, _ sumI: Double,
-      _ squaresR: Double, _ squaresI: Double, _ product: Double) -> Double {
-      guard n >= minimumRun else { return 0 }
-      let length = Double(n)
-      let referenceEnergy = squaresR - sumR * sumR / length
-      let inputEnergy = squaresI - sumI * sumI / length
-      guard referenceEnergy > 1e-9, inputEnergy > 1e-9 else { return 0 }
-      return min(1, abs(product - sumR * sumI / length) /
-        sqrt(referenceEnergy * inputEnergy))
-    }
-    for offset in -maxLag...maxLag {
-      let start = base + offset
-      if start < 0 { continue }
-      var n = 0, sumR = 0.0, sumI = 0.0, squaresR = 0.0
-      var squaresI = 0.0, product = 0.0
-      func considerRun() {
-        let correlation = score(n,sumR,sumI,squaresR,squaresI,product)
-        if correlation > best { best = correlation; lag = offset * 1000 / rate; covered = n }
-      }
-      for i in 0..<count {
-        let p = start + i, slot = p % capacity
-        if positions[slot] != p {
-          considerRun();n = 0;sumR = 0;sumI = 0;squaresR = 0;squaresI = 0;product = 0
-          continue
-        }
-        let x = Double(values[slot]), y = input[i]
-        n += 1;sumR += x;sumI += y;squaresR += x*x;squaresI += y*y;product += x*y
-      }
-      considerRun()
-    }
-    // The same-phone false turn had 0.497 correlation after voice processing,
-    // while independent near speech in the bounded double-talk replay stayed
-    // below 0.46. This is direct waveform evidence, never text/locale matching.
-    return Match(matched:best >= 0.46,correlation:best,lagMs:lag,
-      coverage:Double(covered)/Double(count))
   }
 }

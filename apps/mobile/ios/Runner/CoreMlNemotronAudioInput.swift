@@ -33,6 +33,7 @@ final class CoreMlNemotronAudioInput {
   private let sharedPlaybackReference: Bool
   private let configurationChanged: (([String: Any]) -> Void)?
   private let recoverSharedConfiguration: Bool
+  private let renderTap: PcmRenderTap?
   private var lastEngineConfigurationChange: [String: Any]?
   private var configurationRecoveriesWithoutPcm = 0
   private var recoveryInputBuffers = 0
@@ -46,13 +47,14 @@ final class CoreMlNemotronAudioInput {
   init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr",
        sampleRate: Double = 16_000, sharedPlaybackReference: Bool = false,
        configurationChanged: (([String: Any]) -> Void)? = nil,
-       recoverSharedConfiguration: Bool = false) {
+       recoverSharedConfiguration: Bool = false, renderTap: PcmRenderTap? = nil) {
     self.audioSessionCoordinator = audioSessionCoordinator
     self.audioSessionOwner = owner
     self.targetSampleRate = sampleRate
     self.sharedPlaybackReference = sharedPlaybackReference
     self.configurationChanged = configurationChanged
     self.recoverSharedConfiguration = recoverSharedConfiguration
+    self.renderTap = renderTap
   }
 
   func start(
@@ -72,6 +74,7 @@ final class CoreMlNemotronAudioInput {
     do {
       try configureVoiceProcessing()
       if sharedPlaybackReference { pcmPlayback = try VoiceProcessingPcmPlayer(engine: engine) }
+      renderTap?.install(on:engine)
     } catch {
       if sharedPlaybackReference { audioSessionCoordinator.unbindPublicCaptureEngine(engine) }
       deactivateAudioSession()
@@ -112,12 +115,14 @@ final class CoreMlNemotronAudioInput {
       onBus: 0,
       bufferSize: 1024,
       format: inputFormat
-    ) { [weak self] buffer, _ in
+    ) { [weak self] buffer, when in
       guard let self else { return }
       let result = Self.convertPcm(buffer: buffer, converter: converter, format: targetFormat)
       let converted = result.buffer
       let samples = Self.floatSamples(from: converted)
       let inputSampleCount = Int(buffer.frameLength)
+      let hostEnd = when.isHostTimeValid ? AVAudioTime.seconds(forHostTime:when.hostTime)
+        + Double(inputSampleCount)/inputFormat.sampleRate : nil
       self.queue.async {
         self.totalInputBuffers += 1
         self.totalInputSamples += inputSampleCount
@@ -140,6 +145,7 @@ final class CoreMlNemotronAudioInput {
           )
         }
         self.totalConvertedSamples += samples.count
+        self.renderTap?.observeInput(endSample:self.totalConvertedSamples,endTime:hostEnd)
         self.pendingSamples.append(contentsOf: samples)
         while self.pendingSamples.count >= chunkSamples {
           let chunk = Array(self.pendingSamples.prefix(chunkSamples))
@@ -157,6 +163,7 @@ final class CoreMlNemotronAudioInput {
     suspended = true
     // Retire ownership before any graph teardown can post notifications.
     if sharedPlaybackReference { audioSessionCoordinator.unbindPublicCaptureEngine(engine) }
+    renderTap?.stop()
     pcmPlayback?.stop()
     if sharedPlaybackReference { engine.stop() }
     deactivateVoiceProcessing()
@@ -253,7 +260,8 @@ final class CoreMlNemotronAudioInput {
       "readiness":pcmReadiness.payload]
   }
   var pcmReadiness: PcmCaptureReadiness {
-    PcmCaptureReadiness(inputStarted:running,engineRunning:engine.isRunning,referenceBound:pcmPlayback != nil,
+    PcmCaptureReadiness(inputStarted:running,engineRunning:engine.isRunning,
+      referenceBound:pcmPlayback != nil && (renderTap?.ready ?? true),
       inputProcessing:engine.inputNode.isVoiceProcessingEnabled,outputProcessing:engine.outputNode.isVoiceProcessingEnabled,
       bypassed:engine.inputNode.isVoiceProcessingBypassed)
   }

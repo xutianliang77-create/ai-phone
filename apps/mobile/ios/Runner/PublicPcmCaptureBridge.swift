@@ -16,6 +16,7 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
   private var startTimeout: DispatchWorkItem?
   let renderReference = PcmRenderReference()
   private var productSessionId: String?
+  private var renderGeneration: UInt64 = 0
   private var waveformQaUsed = false
   private var waveformInput: CoreMlNemotronDiagnosticRecorder?
   private var waveformOutput: CoreMlNemotronDiagnosticRecorder?
@@ -48,16 +49,17 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           let rate = args["sampleRate"] as? Int, [16000,24000].contains(rate),
           let duration = args["frameDurationMs"] as? Int, (10...100).contains(duration)
           else { throw failure("public_capture_not_ready") }
+        productSessionId = args["productSessionId"] as? String
+        renderGeneration = renderReference.reset(sessionId:productSessionId,sampleRate:rate)
+        let renderTap = PcmRenderTap(reference:renderReference,generation:renderGeneration)
         let input = CoreMlNemotronAudioInput(audioSessionCoordinator: coordinator,
           owner: "public_pcm_capture", sampleRate: Double(rate), sharedPlaybackReference: true,
           configurationChanged: { [weak self] state in
             guard let self, self.captureId == id else { return }
             self.record("capture.engine_configuration_change", state)
-          },recoverSharedConfiguration:true)
+          },recoverSharedConfiguration:true,renderTap:renderTap)
         let mailbox = PublicPcmMailbox()
         self.input = input; captureId = id; starting = true; self.mailbox = mailbox
-        productSessionId = args["productSessionId"] as? String
-        renderReference.reset(sessionId:productSessionId,sampleRate:rate)
         startWaveformQaIfRequested(captureId:id,sampleRate:rate)
         let waveformInput = self.waveformInput
         if let session = args["diagnosticSessionId"] as? String, !session.isEmpty, session.count <= 240 {
@@ -113,7 +115,7 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
       switch call.method {
       case "stop":
         guard stop(drainTail:true) else { throw failure("public_capture_tail_unconfirmed") }
-      case "pause": input?.pause()
+      case "pause": stopPlayback(); input?.pause()
       case "resume": try input?.resume()
       default: result(FlutterMethodNotImplemented); return
       }
@@ -128,12 +130,20 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     let audio = AVAudioSession.sharedInstance()
     let acousticRoute = audio.currentRoute.outputs.contains { [.builtInSpeaker,.builtInReceiver].contains($0.portType) }
     let captureSample = input.payload()["convertedSamples"] as? Int ?? -1
-    try output.play(pcm, sampleRate:sampleRate) { [weak self] error in
-      self?.record("tts.end", ["completion":error == nil ? "finished" : "cancelled"])
+    let generation = renderGeneration, id = captureId
+    renderReference.beginPlayback(acousticRoute:acousticRoute,generation:generation)
+    do { try output.play(pcm, sampleRate:sampleRate) { [weak self] error in
+      if let self, self.captureId == id, self.renderGeneration == generation {
+        self.renderReference.endPlayback(generation:generation)
+        self.record("tts.end", ["completion":error == nil ? "finished" : "cancelled",
+          "renderReference":self.renderReference.metadata])
+      }
       completion(error)
+    } } catch {
+      renderReference.endPlayback(generation:generation)
+      record("tts.end",["completion":"failed","renderReference":renderReference.metadata])
+      throw error
     }
-    renderReference.record(pcm,sampleRate:sampleRate,captureSample:captureSample,
-      sessionId:productSessionId,acousticRoute:acousticRoute)
     let qaPcm = waveformOutput == nil ? Data() : PublicAudioWaveformQa.outputWithinWindow(pcm,
       captureSample:captureSample,sampleRate:sampleRate)
     if !qaPcm.isEmpty, let waveformOutput {
@@ -143,9 +153,12 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
         "sourceStartSample":offset,"sourceEndSample":offset+qaPcm.count/2,"sampleRate":sampleRate])
     }
     record("tts.begin", ["sampleRate":sampleRate,"bytes":pcm.count,"sharedPlaybackReference":true,
-      "captureSample":captureSample,"acousticRoute":acousticRoute])
+      "captureSample":captureSample,"acousticRoute":acousticRoute,"renderReference":renderReference.metadata])
   }
-  func stopPlayback() { input?.pcmPlayback?.stop() }
+  func stopPlayback() {
+    renderReference.endPlayback(generation:renderGeneration)
+    input?.pcmPlayback?.stop()
+  }
   @discardableResult private func drain(_ mailbox: PublicPcmMailbox, id: String) -> Bool {
     let batch = mailbox.take()
     if let code = batch.errorCode { sink?(error(code)); return false }

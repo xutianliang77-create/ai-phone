@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E93000010000000000000001 /* PcmRenderClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93000020000000000000001; };
+		E93000010000000000000002 /* PcmRenderReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93000020000000000000002; };
+		E93000010000000000000003 /* PcmRenderTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93000020000000000000003; };
 		E92900010000000000000003 /* PublicPcmMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92900020000000000000003; };
 		E92900010000000000000001 /* PublicPcmCaptureBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92900020000000000000001; };
 		E92900010000000000000002 /* VoiceProcessingPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92900020000000000000002; };
@@ -86,6 +89,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E93000020000000000000001 /* PcmRenderClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PcmRenderClock.swift; sourceTree = "<group>"; };
+		E93000020000000000000002 /* PcmRenderReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PcmRenderReference.swift; sourceTree = "<group>"; };
+		E93000020000000000000003 /* PcmRenderTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PcmRenderTap.swift; sourceTree = "<group>"; };
 		E92900020000000000000003 /* PublicPcmMailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicPcmMailbox.swift; sourceTree = "<group>"; };
 		E92900020000000000000001 /* PublicPcmCaptureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicPcmCaptureBridge.swift; sourceTree = "<group>"; };
 		E92900020000000000000002 /* VoiceProcessingPcmPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProcessingPcmPlayer.swift; sourceTree = "<group>"; };
@@ -288,6 +294,9 @@
 				E92900020000000000000001 /* PublicPcmCaptureBridge.swift */,
 				E92900020000000000000003 /* PublicPcmMailbox.swift */,
 				E92900020000000000000002 /* VoiceProcessingPcmPlayer.swift */,
+				E93000020000000000000001 /* PcmRenderClock.swift */,
+				E93000020000000000000002 /* PcmRenderReference.swift */,
+				E93000020000000000000003 /* PcmRenderTap.swift */,
 				E92900020000000000000004 /* CaptureEngineInvalidationGate.swift */,
 				E92900020000000000000005 /* PublicPcmCaptureProbe.swift */,
 				A1000017000000000000017 /* OcrBridge.swift */,
@@ -556,6 +565,9 @@
 				E92900010000000000000001 /* PublicPcmCaptureBridge.swift in Sources */,
 				E92900010000000000000003 /* PublicPcmMailbox.swift in Sources */,
 				E92900010000000000000002 /* VoiceProcessingPcmPlayer.swift in Sources */,
+				E93000010000000000000001 /* PcmRenderClock.swift in Sources */,
+				E93000010000000000000002 /* PcmRenderReference.swift in Sources */,
+				E93000010000000000000003 /* PcmRenderTap.swift in Sources */,
 				E92900010000000000000004 /* CaptureEngineInvalidationGate.swift in Sources */,
 				E92900010000000000000005 /* PublicPcmCaptureProbe.swift in Sources */,
 				A1000016000000000000016 /* OcrBridge.swift in Sources */,

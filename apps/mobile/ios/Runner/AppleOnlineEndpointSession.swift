@@ -118,7 +118,7 @@ final class AppleOnlineEndpointSession {
         analysisStart:analysisSamples,frameSamples:frame.count) } ??
         PcmRenderEchoGate.Decision(matched:false,carried:false)
       let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
-        provider: "fluidaudio_silero",speechStartAllowed:!echoDecision.matched)
+        provider: "fluidaudio_silero",speechStartAllowed:echoDecision.speechStartAllowed)
       let through = analysisSamples + frame.count
       activity.advance(through:through,speechEvent:decision.speechStarted ? (true,through) :
         decision.shouldFinalize ? (false,max(0,through-decision.trailingSilenceSamples)) : nil)
@@ -132,6 +132,9 @@ final class AppleOnlineEndpointSession {
         "renderEchoMatched": echoDecision.matched, "renderEchoCarried": echoDecision.carried,
         "renderCorrelation": echo?.correlation ?? 0,
         "renderReferenceCoverage": echo?.coverage ?? 0,
+        "renderReferenceKnown": echo?.referenceKnown ?? true,
+        "renderEchoProofRequired": echo?.requiresEchoProof ?? false,
+        "nearSpeechStartAllowed":echoDecision.speechStartAllowed,
         "renderLagMs": echo?.lagMs ?? 0,
         "confirmedSpeechSamples": decision.confirmedSpeechSamples, "trailingSilenceSamples": decision.trailingSilenceSamples]) }
       analysisSamples += frame.count
