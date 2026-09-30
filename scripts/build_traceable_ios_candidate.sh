@@ -111,6 +111,8 @@ if [[ -n "$(git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all)" ]];
   echo "Traceable iOS candidate requires a clean worktree" >&2
   exit 2
 fi
+node "$ROOT_DIR/scripts/check_ios_native_audio.mjs" \
+  --output "$OUTPUT_ROOT/native-audio-regression.json"
 if ! curl --noproxy '*' --fail --silent --show-error \
   --connect-timeout 3 --max-time 5 "$SERVER_BASE_URL/health" >/dev/null; then
   echo "Server health check failed: $SERVER_BASE_URL/health" >&2

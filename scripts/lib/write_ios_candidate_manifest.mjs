@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { verifyIosSymbolArchive } from "./archive_ios_candidate_symbols.mjs";
+import { verifyIosNativeAudioEvidence } from "./ios_native_audio_gate.mjs";
 
 const output = process.argv[2];
 if (!output) throw new Error("candidate manifest output path is required");
@@ -40,6 +42,11 @@ const manifest = {
   appAggregateSha256: required("APP_SHA256"),
   appAggregateHashAlgorithm: process.env.APP_HASH_ALGORITHM || "legacy-absolute-file-list",
   signingIdentity: required("SIGNING_IDENTITY"),
+  nativeAudioRegression: verifyIosNativeAudioEvidence(
+    path.join(path.dirname(output), "native-audio-regression.json"), {
+      root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
+      sourceCommit: required("SOURCE_COMMIT"), sourceTree: required("SOURCE_TREE"),
+    }),
   symbols: verifyIosSymbolArchive(
     path.join(path.dirname(output), "Runner.app"),
     path.join(path.dirname(output), "Symbols"),

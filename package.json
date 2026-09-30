@@ -24,6 +24,7 @@
     "lint": "npm run lint --workspaces --if-present && node tools/check-file-size.mjs",
     "test": "npm run test:scripts && npm run test --workspaces --if-present",
     "test:scripts": "vitest run scripts",
+    "check:ios-native-audio": "node scripts/check_ios_native_audio.mjs",
     "test:communication-contract-python": "python3 packages/contracts/python/test_communication_contract.py",
     "test:communication-contract-flutter": "cd apps/mobile && flutter test test/communication_contract_golden_test.dart",
     "check:domestic-release-ready": "node scripts/check_domestic_release_readiness.mjs && node scripts/check_livekit_compatibility_profile.mjs --release",

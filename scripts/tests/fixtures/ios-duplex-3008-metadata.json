@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "scope": "redacted_scalar_metadata_not_waveform_or_device_acceptance",
+  "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+  "build": "2026093008",
+  "quiet": {"probability": 0.255859375, "rms": 0.03, "correlation": 0.36722369804551064, "lagMs": 0, "referenceKnown": true, "matched": false},
+  "barge": {"probability": 0.99951171875, "rms": 0.046474461816541496, "correlation": 0.32802528128322367, "lagMs": -88, "referenceKnown": true, "matched": false},
+  "bargeSpeechStartedMs": 8667,
+  "bargePlaybackCancelledMs": 8669,
+  "note": "The 2 ms interval is event-to-cancel latency, not acoustic onset latency. Quiet rms is synthetic; no user recording is stored here."
+}

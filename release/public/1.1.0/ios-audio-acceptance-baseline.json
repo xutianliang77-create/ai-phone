@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "status": "SCOPED_DEVICE_ACCEPTANCE_FROZEN",
+  "acceptedOn": "2026-09-30",
+  "runtimeSource": {
+    "commit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+    "tree": "333464e16b1317a061867c2be934cc06841fe939"
+  },
+  "ios": {
+    "build": "2026093008",
+    "appSha256": "1aac277428ec0bbd68de59a7aa16225ce3c58acfeefc6c821795b8cc0edd79e9",
+    "manifestSha256": "3fb83f9331be2a9cc0986a58af725497e3376464abff14c8b590d6fe35f4fed2",
+    "bundleId": "cn.qkxy.wujieai.public",
+    "deviceFamily": "iPhone 14 Pro"
+  },
+  "server": {
+    "deploymentId": "wujie-co11-qa-54026e7",
+    "image": "sha256:9273bb7f192dcc985f91476424157df47e0549cfd881d6ce553204642b7225b2",
+    "runtimeConfigSha256": "6a9d758eefee6085002655a6b1d920198397aee61d2e6693d748ce01075a4881",
+    "voiceModes": [
+      {
+        "voiceOutput": false,
+        "status": "qualified",
+        "configurationHash": "9c546b4ee725386d9b6ed63f3a743ec6343fd9d000eb651cc1a9731c38a056fb"
+      },
+      {
+        "voiceOutput": true,
+        "status": "qualified",
+        "configurationHash": "dad910e378ca635c8cc63122bf7a8edbc11782834f2e71d2662544642cf3b06f"
+      }
+    ]
+  },
+  "scope": [
+    "built_in_microphone_and_speaker",
+    "capture_start_after_initial_configuration_change",
+    "quiet_full_tts_without_false_cancel",
+    "real_barge_in_then_new_utterance_playback",
+    "matching_phone_server_history_and_unique_settlement"
+  ],
+  "quiet": {
+    "chunks": 6,
+    "pcmBytes": 132160,
+    "referenceKnownWindows": 19,
+    "actualPostTtsQuietMs": 13511,
+    "fullTwentySecondTailVerified": false,
+    "historySegments": 1,
+    "ledgerCount": 1
+  },
+  "barge": {
+    "speechStartedMs": 8667,
+    "playbackCancelledMs": 8669,
+    "eventToCancelMs": 2,
+    "eventToCancelIsNotAcousticOnsetLatency": true,
+    "newPlaybackChunks": 2,
+    "historySegments": 2,
+    "ledgerCount": 1,
+    "userAccepted": true
+  },
+  "notClaimed": [
+    "all_acoustic_conditions",
+    "bluetooth_route_changes",
+    "background_and_call_interruptions",
+    "30_minute_or_quality_blind_review",
+    "complete_1_1_release"
+  ],
+  "evidence": [
+    {
+      "workspaceArtifact": "artifacts/closeout-regression/20260930-rc-25f3eb3/deployment-installation-verification.json",
+      "sha256": "3a5e59131e44e8f313fc8a701b248efa13e4e2dde4ec7429549101aa8a460130"
+    },
+    {
+      "workspaceArtifact": "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-quiet-1-assessment.json",
+      "sha256": "3f02c0b99276d3debaf63ac04ff5702c388d44c26d6536b55dc24f24e67335d4"
+    },
+    {
+      "workspaceArtifact": "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-barge-1-assessment.json",
+      "sha256": "8913ecd0a3c9df1e2d4c4c9d7b6982a4055ef4021ddfd768f9fa2192ba546ee6"
+    }
+  ],
+  "rawAudioInRepository": false
+}
