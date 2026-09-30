@@ -16,6 +16,9 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
   private var startTimeout: DispatchWorkItem?
   let renderReference = PcmRenderReference()
   private var productSessionId: String?
+  private var waveformQaUsed = false
+  private var waveformInput: CoreMlNemotronDiagnosticRecorder?
+  private var waveformOutput: CoreMlNemotronDiagnosticRecorder?
   var hasCapture: Bool { captureId != nil }
 
   init(coordinator: AudioSessionCoordinator) { self.coordinator = coordinator }
@@ -55,6 +58,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
         self.input = input; captureId = id; starting = true; self.mailbox = mailbox
         productSessionId = args["productSessionId"] as? String
         renderReference.reset(sessionId:productSessionId,sampleRate:rate)
+        startWaveformQaIfRequested(captureId:id,sampleRate:rate)
+        let waveformInput = self.waveformInput
         if let session = args["diagnosticSessionId"] as? String, !session.isEmpty, session.count <= 240 {
           tracing = true
           trace.start(enabled: true, sessionId: "public-pcm-" + id,
@@ -71,7 +76,9 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
             self.stop()
           }
         }, onChunk: { [weak self] samples in
-          mailbox.append(VoiceProcessingPcmPlayer.encode(samples))
+          let pcm = VoiceProcessingPcmPlayer.encode(samples)
+          mailbox.append(pcm)
+          waveformInput?.appendPcm16(pcm)
           DispatchQueue.main.async {
             guard let self, self.captureId == id else { return }
             if self.pendingStart != nil, let input = self.input, input.pcmReadiness.ready {
@@ -127,6 +134,14 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     }
     renderReference.record(pcm,sampleRate:sampleRate,captureSample:captureSample,
       sessionId:productSessionId,acousticRoute:acousticRoute)
+    let qaPcm = waveformOutput == nil ? Data() : PublicAudioWaveformQa.outputWithinWindow(pcm,
+      captureSample:captureSample,sampleRate:sampleRate)
+    if !qaPcm.isEmpty, let waveformOutput {
+      let offset = waveformOutput.payload()["currentAudioSamples"] as? Int ?? 0
+      waveformOutput.appendPcm16(qaPcm)
+      waveformOutput.record(type:"tts.source",payload:["captureSample":captureSample,
+        "sourceStartSample":offset,"sourceEndSample":offset+qaPcm.count/2,"sampleRate":sampleRate])
+    }
     record("tts.begin", ["sampleRate":sampleRate,"bytes":pcm.count,"sharedPlaybackReference":true,
       "captureSample":captureSample,"acousticRoute":acousticRoute])
   }
@@ -143,7 +158,8 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     var confirmed = true
     let tail = input?.stop(flushPending:drainTail) ?? []
     if drainTail, let id, let mailbox {
-      mailbox.append(VoiceProcessingPcmPlayer.encode(tail)); confirmed = drain(mailbox,id:id)
+      let pcm = VoiceProcessingPcmPlayer.encode(tail)
+      mailbox.append(pcm);waveformInput?.appendPcm16(pcm);confirmed = drain(mailbox,id:id)
       sink?(["captureId":id,"stopped":true])
     }
     captureId = nil; mailbox = nil
@@ -152,7 +168,25 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
     productSessionId = nil
     renderReference.reset(sessionId:nil,sampleRate:16000)
     if tracing { trace.finish(); tracing = false }
+    waveformInput?.finish();waveformOutput?.finish()
+    waveformInput = nil;waveformOutput = nil
     return confirmed
+  }
+
+  private func startWaveformQaIfRequested(captureId:String,sampleRate:Int) {
+    guard !waveformQaUsed, sampleRate == 16000,
+      let request = PublicAudioWaveformQa.requested(environment:ProcessInfo.processInfo.environment,
+        sourceCommit:Bundle.main.object(forInfoDictionaryKey:"WujieSourceCommit") as? String,
+        bundleId:Bundle.main.bundleIdentifier),let productSessionId else { return }
+    waveformQaUsed = true
+    let settings:[String:Any] = ["kind":"public_audio_waveform_qa","run":request.run,
+      "productSessionId":productSessionId,"captureId":captureId,"sampleRate":16000,
+      "maximumSeconds":30,"storage":"local_device_only","affectsLiveAudio":false]
+    let input = CoreMlNemotronDiagnosticRecorder(maximumTimelineEvents:100,maximumAudioSeconds:30)
+    let output = CoreMlNemotronDiagnosticRecorder(maximumTimelineEvents:100,maximumAudioSeconds:30)
+    input.start(enabled:true,sessionId:"qa-input-"+request.run,configuration:settings,modelDirectory:nil)
+    output.start(enabled:true,sessionId:"qa-tts-"+request.run,configuration:settings,modelDirectory:nil)
+    waveformInput = input;waveformOutput = output
   }
   private func finishStart(_ response:Any?) {
     let start = pendingStart;pendingStart = nil

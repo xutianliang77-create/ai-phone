@@ -1,20 +1,40 @@
 import CryptoKit
 import Foundation
 
+/// Only an exact-source QA launch can request a bounded local waveform file.
+struct PublicAudioWaveformQa {
+  let run:String
+  static func outputWithinWindow(_ data:Data,captureSample:Int,sampleRate:Int) -> Data {
+    guard sampleRate == 16000, captureSample >= 0, captureSample < 16000*30,
+      data.count.isMultiple(of:2) else { return Data() }
+    return Data(data.prefix((16000*30-captureSample)*2))
+  }
+  static func requested(environment:[String:String],sourceCommit:String?,bundleId:String?) -> Self? {
+    guard environment["WUJIE_PUBLIC_AUDIO_QA_CAPTURE"] == "30",
+      let sourceCommit, sourceCommit.range(of:"^[a-f0-9]{40}$",options:.regularExpression) != nil,
+      environment["WUJIE_PUBLIC_AUDIO_QA_SOURCE"] == sourceCommit,
+      bundleId == "cn.qkxy.wujieai.public",let run = environment["WUJIE_PUBLIC_AUDIO_QA_RUN"],
+      run.range(of:"^[a-z0-9-]{1,80}$",options:.regularExpression) != nil else { return nil }
+    return Self(run:run)
+  }
+}
+
 final class CoreMlNemotronDiagnosticRecorder {
   private let lock = NSLock()
   private let sampleRate = 16_000
-  private let maxAudioSamples = 16_000 * 60 * 20
+  private let maxAudioSamples: Int
   private let maxTimelineEvents: Int
   private let metadataOnly: Bool
   private let outputDirectory: URL?
 
-  // Existing 1.0 callers keep audio capture and the original bound. Online QA
-  // reuses this recorder for bounded local metadata only, never microphone PCM.
-  init(metadataOnly: Bool = false, maximumTimelineEvents: Int = 20_000, outputDirectory: URL? = nil) {
+  // Existing 1.0 callers retain the original 20-minute bound. Ordinary online
+  // traces remain metadata-only; a scoped QA launch may request a shorter file.
+  init(metadataOnly: Bool = false, maximumTimelineEvents: Int = 20_000,
+       outputDirectory: URL? = nil, maximumAudioSeconds: Int = 1200) {
     self.metadataOnly = metadataOnly
     maxTimelineEvents = max(2, min(20_000, maximumTimelineEvents))
     self.outputDirectory = outputDirectory
+    maxAudioSamples = 16_000 * max(1, min(1200, maximumAudioSeconds))
   }
 
   private var enabled = false
@@ -81,6 +101,18 @@ final class CoreMlNemotronDiagnosticRecorder {
     }
   }
 
+  /// Keep the exact PCM bytes sent by the existing capture, including its
+  /// saturation policy. This diagnostic copy never changes the live stream.
+  @discardableResult func appendPcm16(_ data: Data) -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    guard enabled, !metadataOnly, !data.isEmpty, data.count.isMultiple(of: 2) else { return false }
+    let remaining = max(0, maxAudioSamples * 2 - pcm16.count)
+    let accepted = min(remaining, data.count)
+    if accepted > 0 { pcm16.append(data.prefix(accepted)) }
+    if accepted < data.count { audioTruncated = true }
+    return true
+  }
+
   func record(type: String, payload: [String: Any] = [:]) {
     lock.lock()
     defer { lock.unlock() }
@@ -133,7 +165,8 @@ final class CoreMlNemotronDiagnosticRecorder {
         options: [.prettyPrinted, .sortedKeys]
       )
       try json.write(to: jsonURL, options: .atomic)
-      if metadataOnly { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: jsonURL.path) }
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: jsonURL.path)
+      if !metadataOnly { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: audioURL.path) }
       lock.lock()
       lastAudioPath = metadataOnly ? nil : audioURL.path
       lastJsonPath = jsonURL.path
