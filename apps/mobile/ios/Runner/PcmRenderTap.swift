@@ -23,6 +23,7 @@ final class PcmRenderTap {
     engine.mainMixerNode.installTap(onBus:0,bufferSize:size,format:nil) { [weak self] buffer,time in
       guard let self, time.isHostTimeValid, let samples = Self.mono(buffer) else { return }
       let host = AVAudioTime.seconds(forHostTime:time.hostTime), rate = buffer.format.sampleRate
+      let sampleTime: Int64? = time.isSampleTimeValid && time.sampleRate == rate ? time.sampleTime : nil
       self.queue.async {
         guard self.active else { return }
         #if os(iOS)
@@ -31,7 +32,7 @@ final class PcmRenderTap {
         }
         self.reference.updateRoute(acoustic:acoustic,generation:self.generation)
         #endif
-        self.reference.recordRendered(samples,sampleRate:rate,hostTime:host,generation:self.generation)
+        self.reference.recordRendered(samples,sampleRate:rate,hostTime:host,generation:self.generation,sampleTime:sampleTime)
       }
     }
     installed = true

@@ -24,6 +24,7 @@ final class PcmRenderReference {
   private var latestRecordedEnd = -1
   private var generation: UInt64 = 0
   private var clock = PcmRenderClock()
+  private var renderClock = PcmRenderSampleClock()
   private var acousticRoute = false, playbackActive = false
   private var physicalClock = false
   private var tailEndSample = 0, renderedBuffers = 0
@@ -38,6 +39,7 @@ final class PcmRenderReference {
     positions = [Int](repeating: -1, count: capacity)
     latestRecordedEnd = -1
     clock = PcmRenderClock(); acousticRoute = false; playbackActive = false
+    renderClock = PcmRenderSampleClock()
     physicalClock = false
     tailEndSample = 0; renderedBuffers = 0
     renderedThrough = -Double.infinity; partialBin = -1; partialSum = 0; partialCoverage = 0
@@ -49,6 +51,7 @@ final class PcmRenderReference {
     guard generation == expected, owner != nil else { return }
     physicalClock = true
     if clock.observeInput(endSample:endSample,endTime:endTime,sampleRate:captureRate) {
+      renderClock = PcmRenderSampleClock()
       values = [Float](repeating:0,count:capacity)
       positions = [Int](repeating:-1,count:capacity); latestRecordedEnd = -1
       renderedBuffers = 0
@@ -60,17 +63,24 @@ final class PcmRenderReference {
     lock.lock(); defer { lock.unlock() }
     guard generation == expected else { return }
     clock = PcmRenderClock(); renderedBuffers = 0
+    renderClock = PcmRenderSampleClock()
     values = [Float](repeating:0,count:capacity); positions = [Int](repeating:-1,count:capacity)
     latestRecordedEnd = -1; renderedThrough = -Double.infinity
     partialBin = -1; partialSum = 0; partialCoverage = 0
   }
 
   func recordRendered(_ samples: [Float], sampleRate: Double, hostTime: Double,
-    generation expected: UInt64) {
+    generation expected: UInt64, sampleTime: Int64? = nil) {
     guard sampleRate.isFinite, sampleRate >= Double(rate), !samples.isEmpty else { return }
     lock.lock(); defer { lock.unlock() }
-    guard generation == expected, owner != nil,
-      let captureStart = clock.position(at:hostTime,sampleRate:captureRate) else { return }
+    guard generation == expected, owner != nil, clock.ready,
+      let stamp = renderClock.stamp(sampleTime:sampleTime,sampleRate:sampleRate,frames:samples.count,hostTime:hostTime),
+      let captureStart = clock.position(at:stamp.hostTime,sampleRate:captureRate) else { return }
+    if stamp.discontinuity {
+      values = [Float](repeating:0,count:capacity); positions = [Int](repeating:-1,count:capacity)
+      latestRecordedEnd = -1; renderedBuffers = 0; renderedThrough = -Double.infinity
+      partialBin = -1; partialSum = 0; partialCoverage = 0
+    }
     let start = captureStart * Double(rate) / Double(captureRate)
     let end = start + Double(samples.count) * Double(rate) / sampleRate
     guard start >= 0, end < Double(Int.max), end > renderedThrough else { return }
@@ -125,7 +135,7 @@ final class PcmRenderReference {
     return ["source":"main_mixer_host_clock","clockReady":clock.ready && renderedBuffers > 0,
       "inputClockAnchored":clock.ready,
       "renderedBuffers":renderedBuffers,"latestReferenceSample":latestRecordedEnd,
-      "captureRate":captureRate,"acousticRoute":acousticRoute]
+      "captureRate":captureRate,"acousticRoute":acousticRoute,"renderClock":renderClock.metadata]
   }
 
   // Pure offline fixtures only. Production records the mixer tap instead.
