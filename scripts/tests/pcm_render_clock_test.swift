@@ -14,6 +14,39 @@ import Foundation
     precondition(clock.observeInput(endSample:6400,endTime:101.3,sampleRate:16000))
     precondition(clock.position(at:100.9,sampleRate:16000) == nil)
 
+    // QA 3006: an initial I/O configuration change arrived at 469 ms, before
+    // any input buffer. The installed reference was incorrectly labelled
+    // missing because its clock had not yet received the first PCM timestamp.
+    let startup = PcmRenderReference()
+    let startupEpoch = startup.reset(sessionId:"startup",sampleRate:16000)
+    func readiness(running:Bool, bound:Bool = true, bypassed:Bool = false) -> PcmCaptureReadiness {
+      PcmCaptureReadiness(inputStarted:true,engineRunning:running,referenceBound:bound,
+        inputProcessing:true,outputProcessing:true,bypassed:bypassed,inputClockReady:startup.inputClockReady)
+    }
+    let oldResume = PcmCaptureReadiness(inputStarted:true,engineRunning:true,
+      referenceBound:startup.inputClockReady,inputProcessing:true,outputProcessing:true,bypassed:false)
+    precondition(!oldResume.graphReadyForResume) // reproduces the old rejection
+    precondition(readiness(running:false).graphReadyForResume && !readiness(running:false).ready)
+    precondition(readiness(running:true).graphReadyForResume && !readiness(running:true).ready)
+    precondition(readiness(running:true).reason == "input_clock_pending")
+    precondition(!readiness(running:true,bound:false).graphReadyForResume)
+    precondition(!readiness(running:true,bypassed:true).graphReadyForResume)
+    // Invalid/stale input cannot publish readiness; the first valid input may
+    // do so without waiting for a TTS buffer that has not been scheduled yet.
+    startup.observeInput(endSample:640,endTime:.nan,generation:startupEpoch)
+    startup.observeInput(endSample:640,endTime:100.04,generation:startupEpoch &+ 1)
+    precondition(!readiness(running:true).ready)
+    startup.observeInput(endSample:640,endTime:100.04,generation:startupEpoch)
+    precondition(readiness(running:true).ready && !startup.clockReady)
+    startup.invalidateClock(generation:startupEpoch)
+    precondition(readiness(running:false).graphReadyForResume && !readiness(running:true).ready)
+    startup.observeInput(endSample:1280,endTime:101.04,generation:startupEpoch)
+    precondition(readiness(running:true).ready)
+    _ = startup.reset(sessionId:"next-startup",sampleRate:16000)
+    startup.observeInput(endSample:1920,endTime:101.08,generation:startupEpoch)
+    precondition(!readiness(running:true).ready)
+    print("PASS: initial route recovery before first PCM, invalid/stale clock, first-PCM readiness and recovery re-anchor")
+
     var seed: UInt64 = 19
     let render: [Float] = (0..<32000).map { _ in
       seed = seed &* 6364136223846793005 &+ 1

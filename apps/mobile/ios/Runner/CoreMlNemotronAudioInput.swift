@@ -210,7 +210,7 @@ final class CoreMlNemotronAudioInput {
       let state = pcmReadiness
       // Running may change while the I/O configuration notification settles;
       // the public start response still requires a real first PCM chunk.
-      guard state.referenceBound && state.inputProcessing && state.outputProcessing && !state.bypassed
+      guard state.graphReadyForResume
         else { throw inputError("audio_capture_resume_unconfirmed") }
     }
   }
@@ -261,9 +261,9 @@ final class CoreMlNemotronAudioInput {
   }
   var pcmReadiness: PcmCaptureReadiness {
     PcmCaptureReadiness(inputStarted:running,engineRunning:engine.isRunning,
-      referenceBound:pcmPlayback != nil && (renderTap?.ready ?? true),
+      referenceBound:pcmPlayback != nil && (renderTap?.installed ?? true),
       inputProcessing:engine.inputNode.isVoiceProcessingEnabled,outputProcessing:engine.outputNode.isVoiceProcessingEnabled,
-      bypassed:engine.inputNode.isVoiceProcessingBypassed)
+      bypassed:engine.inputNode.isVoiceProcessingBypassed,inputClockReady:renderTap?.ready ?? true)
   }
   var canPlayPcm: Bool { pcmReadiness.ready }
 

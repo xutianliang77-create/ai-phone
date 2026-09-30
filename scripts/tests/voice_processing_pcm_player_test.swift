@@ -13,11 +13,12 @@ final class FakePcmNode: VoiceProcessingPcmNode {
 }
 @main struct VoiceProcessingPcmPlayerTest {
   static func main() throws {
-    for mask in 0..<64 {
+    for mask in 0..<128 {
       let s = PcmCaptureReadiness(inputStarted:mask & 1 != 0,engineRunning:mask & 2 != 0,
         referenceBound:mask & 4 != 0,inputProcessing:mask & 8 != 0,outputProcessing:mask & 16 != 0,
-        bypassed:mask & 32 != 0)
-      precondition(s.ready == (mask == 31))
+        bypassed:mask & 32 != 0,inputClockReady:mask & 64 != 0)
+      precondition(s.ready == (mask == 95))
+      precondition(s.graphReadyForResume == (mask & 60 == 28))
       precondition((s.payload["ready"] as? Bool) == s.ready)
       precondition((s.reason == nil) == s.ready)
     }

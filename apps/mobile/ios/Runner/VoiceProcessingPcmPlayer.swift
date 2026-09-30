@@ -4,6 +4,20 @@ import Foundation
 struct PcmCaptureReadiness {
   let inputStarted: Bool, engineRunning: Bool, referenceBound: Bool
   let inputProcessing: Bool, outputProcessing: Bool, bypassed: Bool
+  let inputClockReady: Bool
+  init(inputStarted: Bool, engineRunning: Bool, referenceBound: Bool,
+       inputProcessing: Bool, outputProcessing: Bool, bypassed: Bool,
+       inputClockReady: Bool = true) {
+    self.inputStarted = inputStarted; self.engineRunning = engineRunning
+    self.referenceBound = referenceBound; self.inputProcessing = inputProcessing
+    self.outputProcessing = outputProcessing; self.bypassed = bypassed
+    self.inputClockReady = inputClockReady
+  }
+  // Configuration recovery precedes the first input callback. The graph must
+  // be valid to resume, but its sample clock cannot be required before I/O runs.
+  var graphReadyForResume: Bool {
+    referenceBound && inputProcessing && outputProcessing && !bypassed
+  }
   var reason: String? {
     if !inputStarted { return "input_not_started" }
     if !engineRunning { return "engine_not_running" }
@@ -11,12 +25,14 @@ struct PcmCaptureReadiness {
     if !inputProcessing { return "input_voice_processing_disabled" }
     if !outputProcessing { return "output_voice_processing_disabled" }
     if bypassed { return "voice_processing_bypassed" }
+    if !inputClockReady { return "input_clock_pending" }
     return nil
   }
   var ready: Bool { reason == nil }
   var payload: [String: Any] {
     ["inputStarted":inputStarted,"engineRunning":engineRunning,"referenceBound":referenceBound,
       "inputProcessing":inputProcessing,"outputProcessing":outputProcessing,"bypassed":bypassed,
+      "inputClockReady":inputClockReady,"graphReadyForResume":graphReadyForResume,
       "ready":ready,"reason":reason ?? "ready"]
   }
 }

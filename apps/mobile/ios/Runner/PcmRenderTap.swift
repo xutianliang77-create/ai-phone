@@ -9,7 +9,7 @@ final class PcmRenderTap {
   private let queue = DispatchQueue(label:"translation_mobile.public_render_reference")
   private weak var engine: AVAudioEngine?
   private var active = false
-  private var installed = false
+  private(set) var installed = false
 
   init(reference: PcmRenderReference, generation: UInt64) {
     self.reference = reference; self.generation = generation

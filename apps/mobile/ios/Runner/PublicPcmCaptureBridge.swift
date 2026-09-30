@@ -72,6 +72,7 @@ final class PublicPcmCaptureBridge: NSObject, FlutterStreamHandler {
           mailbox.fail(code)
           DispatchQueue.main.async {
             guard let self, self.captureId == id else { return }
+            self.record("capture.runtime_error",["code":code,"message":message,"input":self.input?.payload() ?? [:]])
             let error = FlutterError(code:code,message:message,details:nil)
             if self.pendingStart != nil { self.finishStart(error) }
             else { self.sink?(error) }

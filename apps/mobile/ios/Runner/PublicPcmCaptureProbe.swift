@@ -47,6 +47,9 @@ import UIKit
     let modes = productionOnly ? [(false,true)] : [(false,false),(true,false)]
     for (keepGraph,automatic) in modes {
       changes = []; restarts = 0; stats.reset()
+      let reference = PcmRenderReference()
+      let generation = reference.reset(sessionId:run,sampleRate:16000)
+      let renderTap = PcmRenderTap(reference:reference,generation:generation)
       var acquired = false
       var item: [String: Any] = ["mode":automatic ? "production_automatic_recovery" : keepGraph ? "resume_same_graph" : "observe_stop_without_rebuild"]
       do {
@@ -63,13 +66,14 @@ import UIKit
               self.restarts += 1
               do { try self.input?.resume() } catch { self.changes.append(["resumeError":error.localizedDescription]) }
             }
-          },recoverSharedConfiguration:automatic)
+          },recoverSharedConfiguration:automatic,renderTap:renderTap)
         input = capture
         try capture.start(chunkDurationMs:40,onRuntimeError:{[stats] code,_ in stats.fail(code)},onChunk:{[stats] samples in stats.accept(samples.count)})
         item["start"] = capture.configurationState()
         try await Task.sleep(nanoseconds:10_000_000_000)
         item["beforeStop"] = capture.configurationState()
         item["input"] = capture.payload();item["chunks"] = stats.payload()
+        item["renderReference"] = reference.metadata
       } catch { item["error"] = error.localizedDescription }
       item["configurationChanges"] = changes;item["sameGraphRestarts"] = restarts
       _ = input?.stop();input = nil
