@@ -1,5 +1,11 @@
 # CO11-12 Android 公有版交付准备
 
+## 2026-09-29 现行边界：已有HOST，身份/签名及当前auto兼容仍待
+
+当前汇总见 [交付入口](CLOSEOUT_HANDOFF.md) / [currentDelivery](closeout-snapshot.json)。本批没有新构建、签名、安装、测试或密钥操作。下方“未运行”为各准备时点的历史记录，不覆盖已有原生/Kotlin/候选合同HOST成果，也不冒充Android设备通过。
+
+除了独立public applicationId、已有签名材料/alias和可信证书指纹，当前r3 Qwen Audio3.1自动语种还有明确平台边界：[supportsDeviceTextLanguage](../../../apps/mobile/lib/src/platform/asr/device_text_language.dart)仅iOS为true；[创建前检查](../../../apps/mobile/lib/src/features/realtime/data/api/public_creation_contract.dart)会拒绝当前组合的Android自动源语言并提示固定源语言。固定源语言路径与auto不同，本批不证明它已真机可用。接线/首发能力边界归原CO11-12/16，不由文档擅自换模型或删减范围。Android端侧Sortformer仍未提供。
+
 ## 2026-09-26 集中验证追加结果
 
 当前工程候选16b4872：Android候选合同26项、原生Kotlin编译及显式rerun的3项Kotlin测试通过。离线缓存缺依赖的首轮失败保留，后续沿原版本补齐；未生成正式public签名APK，未安装/执行Android设备验收。正式applicationId、已有keystore/alias与可信证书指纹仍待提供。下文“未运行”为开发准备时的历史状态，不覆盖本段结果；完整同源iOS/服务端与来源对应见CLOSEOUT_HANDOFF.md及外层集中SUMMARY.json。

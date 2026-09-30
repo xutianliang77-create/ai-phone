@@ -1,5 +1,25 @@
 # 公有／私有模型配置页交付与操作说明
 
+## 2026-09-29 现行交付记录
+
+选定QA为a7e7532／iOS2026092902，已有同源部署与新静音/朗读双资格，不再是早期“仅配置、未部署、朗读资格缺失”的状态。以 [currentDelivery](closeout-snapshot.json) 和 [交付说明](CLOSEOUT_HANDOFF.md) 为准。本批只整理文档，未查询或更改服务/凭据/模型配置；已保存资格不等于此刻重新核验的实时可用状态。
+
+| r3组合 | 记录值 |
+| --- | --- |
+| ASR | Qwen `qwen-audio-3.1-asr-flash-streaming` / `qwen_audio_streaming`；16k，semanticPunctuation/heartbeat开启 |
+| MT | 腾讯 `tencent_tmt`，原中英方向词库保留，个人词库仍隔离 |
+| TTS | 腾讯 `tencent_tts_ws`，Volume `+4`；开启朗读时才纳入实际组件和资格 |
+| 静音hash | `9c546b4ee725386d9b6ed63f3a743ec6343fd9d000eb651cc1a9731c38a056fb` |
+| 朗读hash | `dad910e378ca635c8cc63122bf7a8edbc11782834f2e71d2662544642cf3b06f` |
+| 新源资格 | 两模式各4方向/4原译文/唯一29秒；静音TTS0、朗读TTS4，不代手机听音/蓝牙 |
+| 记录有效期 | 静音`2026-09-30T01:36:17.178Z`、朗读`2026-09-30T01:37:25.375Z`；不能仅改时间戳延续资格 |
+
+资格的文本语种生产者为同源Mac Native；iOS受影响静音用例另获用户签收。当前组合auto依赖iOS `apple_nl_text_v1`，Android尚无对应实现；配置页支持多供应商不等于所有平台/型号都已自动识别。旧Qwen3-ASR-Realtime的Manual/server_vad说明只适用于其原协议，不能套给本次Qwen Audio3.1。四家配置能力与选定组合真实资格分开，不为材料收尾购买或测试未选模型。
+
+最后部署回执记录在线入口开放，bootstrap及用户取消的一次性QA守卫关闭，本批没有改变。资格是配置/源码的证据窗口，不是永久许可或客户会话时长上限。
+
+## 下方历史能力记录和通用操作规则
+
 ## 2026-09-28 术语能力纠偏（当前源码，未部署）
 
 百炼[模型能力表](https://help.aliyun.com/zh/model-studio/asr-model)明确将`qwen3-asr-flash-realtime`及其快照的精度增强列为不支持；其[客户端事件参数](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-client-events)仅列`input_audio_transcription.language`，没有`corpus`。共享SDK能序列化字段、模拟服务回显字段或真实会话未报错，都不能据此声称该模型使用了热词。此前“Public ASR terminology prepared”只记录准备字节，不是效果证据。
@@ -39,7 +59,7 @@ Qwen实时ASR现行代码使用`turn_detection.type=server_vad`，阈值与静�
 6. 真实资格必须来自目标deployment、精确配置hash、语言/Voice和实际Adapter的对应证据；改变配置不能复用旧组合的资格。资格过期不是客户单会话时长规则，也不能仅延长时间戳假装重新验证。此步属于后置验证阶段。
 7. 仅在准入条件满足并具备对应操作范围时启用目标实例；同时核对API、严格TLS、Gateway及客户配置GET。进程健康200不等于sessionReady，更不等于releaseReady。
 
-### 同一活动会话跨资格有效期（收口源码，尚未部署）
+### 同一活动会话跨资格有效期（已纳入当前源码，实测范围按证据分层）
 
 原runtime确认写入口在普通无时长cap会话距准入到期不足120秒时，读取当前服务端权威凭证。只有旧授权仍有效、配置/语言/地区/采样率未变，且新凭证确实覆盖更晚时间，才在原session fence/CAS内更新当前证据集与准入hash。原grant、lease、JWT、capture、水位、Provider和客户hold/账本均不改变；续验链摘要与原PostgreSQL命令/outbox快照留痕，不无限累加会话内凭证数组。
 
@@ -49,9 +69,9 @@ live qualification的到期时间与运营策略取较早值。早期刷新未�
 
 普通产品按用户开始/结束、账户可用量与原300秒无新语音策略运行，无人为单会话时长上限。一次性QA资格、45秒诊断录音和准备窗口是测试工具约束，不是客户功能。
 
-当前隔离QA已按用户停止测试的要求保持`PUBLIC_RUNTIME_ENABLED=false`、`PLATFORM_ACCEPT_NEW_SESSIONS=false`；App配置GET会返回`503 public_creation_not_ready`并显示“在线服务暂未开放”。这不是ASR/MT/TTS或余额检查的失败证据。不让用户通过重复点击、清沙箱或换模型来解决服务开关问题。
+早期2026-09-26隔离QA曾因维护关闭上述开关，该历史状态已被后续部署取代。2026-09-29最后回执为入口开放，本批不重新探测。未来如出现`503 public_creation_not_ready`，应按实际错误区分维护准入、配置/资格与依赖，不能根据旧说明断言当前关闭，也不让用户重复点击、清沙箱或换模型来解决服务开关问题。
 
-以后恢复QA时应分别声明服务开放状态、一次会话许可与录音数据范围，避免短准备窗口误导客户；现有回退脚本尚会关闭整个测试入口，本文没有将其改成常开，更没有取消生产准入/余额校验。
+用户已取消一次性QA守卫和按测试时限杀App/关闭入口的做法，不得从历史脚本自动恢复。观察器只停止自身观察/测试音，不改变客户会话。生产鉴权、客户余额、唯一结算和模型资格校验仍保留；本批不运行回退脚本或修改这些规则。
 
 ## 历史实现记录（截至第90批；仅追溯，不作为现行配置操作）
 

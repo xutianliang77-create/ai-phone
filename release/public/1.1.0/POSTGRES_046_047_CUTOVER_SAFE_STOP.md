@@ -1,12 +1,12 @@
 # Public 1.1 PostgreSQL 046/047 cutover and safe-stop
 
-Status: development runbook only. The current public database has not been migrated by this work, and this is not a deployment authorization.
+Status (2026-09-29): documentation reconciled; no database, service, restore or rollback action was performed in this documentation batch. This is not deployment authorization.
 
-2026-09-26 clarification: "current public database" below means the original public RC database last evidenced at schema 045, **not** the separate `wujie-co11-qa-54026e7` QA database already running schema 047. The QA currently runs source `e951519` with public runtime and new-session admission disabled. This documentation batch does not restart, migrate, restore or test either database. See [the current handoff](CLOSEOUT_HANDOFF.md).
+The original public RC database was last evidenced at schema 045 and was not reprobed here. It is **not** the separate `wujie-co11-qa-54026e7` QA database with schema 047 evidence. The selected QA's last verified source is a7e7532; both current-source real model qualifications and the iOS 2026092902 affected-case signoff are in [the current handoff](CLOSEOUT_HANDOFF.md). Earlier e951519/disabled-entry statements are historical, not current instructions.
 
 ## Boundary
 
-The existing deployed image expects schema 045. The new source expects 047: migration 046 changes the usage-hold projection's monotonic renewal rule; 047 adds indexed public model-attempt records and their session-delete cleanup. The old image must not simply be restarted after 046/047 because its exact schema manifest and data contract differ. Frozen private 1.0 is not a public data rollback target.
+The original schema-045 public RC image and the selected schema-047 QA image must be distinguished. Migration 046 changes the usage-hold projection's monotonic renewal rule; 047 adds indexed public model-attempt records and their session-delete cleanup. A schema-045 image must not simply be restarted over 046/047 data. Frozen private 1.0 is not a public data rollback target.
 
 ## Before any live migration
 
@@ -25,6 +25,6 @@ The existing deployed image expects schema 045. The new source expects 047: migr
 
 ## Current evidence and missing proof
 
-Migrations 046/047, attempt/settlement UOW, 10,000-attempt pagination and API-process persistence/unique settlement have prior evidence on task-owned isolated databases. The selected QA has schema-047 images retained for an isolated rollback, and e951519 has a time-bounded real silent ASR+MT qualification receipt. These are no longer "missing source/qualification everywhere".
+Migrations 046/047, attempt/settlement UOW, 10,000-attempt pagination and API-process persistence/unique settlement have version-scoped isolated-database evidence. Controlled active Gateway graceful stop and subsequent persistence also have prior evidence; this is not lossless hard-crash Provider resume. The selected a7e7532 QA has both new real model qualifications and an accepted short iOS silent case. Retained rollback asset `wujie-co11-qa-54026e7-app-pre-a7e7532` belongs to prior 0118b8f/schema047, not frozen private 1.0. Retention alone does not certify a rollback.
 
-Still missing for formal cutover: an approved and demonstrated restore preserving newly written history/ledger, a precisely chosen compatible rollback target, the complete active Gateway/Provider restart path, exact spoken-combination qualification, and formal same-RC iOS/Android acceptance. The original public RC's latest migration evidence remains 045; it was not reprobed or changed by this documentation batch. Therefore live cutover and release remain blocked, without discarding the existing isolated evidence.
+Formal cutover still needs the exact target/channel decision, data-preserving backup/restore or safe-stop evidence, compatible image/configuration/qualification validation at the intended time, and remaining applicable iOS/Android/duplex release acceptance. Do not relist the selected QA's spoken qualification as absent, or invent cross-process lossless Provider migration as a new documentation prerequisite. Neither database was changed by this batch.

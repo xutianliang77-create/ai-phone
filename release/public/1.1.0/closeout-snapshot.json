@@ -1,4 +1,952 @@
 {
+  "historicalCheckpointPolicy": "currentDelivery and refreshed undated fields are authoritative. All dated 20260926-28 checkpoints, finalConcentratedCheckpoint and previousStaticDocumentValidation retain their original source/date; do not dispatch new work or claim current state from them.",
+  "currentDelivery": {
+    "reconciledAt": "2026-09-30T15:47:11Z",
+    "status": "current_qa_route_false_asr_confirmed_ui_fix_host_pass_not_packaged",
+    "authority": "Current scenario-scoped summary; dated historical checkpoints are retained, not current instructions.",
+    "evidencePathBase": "outer_workspace",
+    "documentationOnly": false,
+    "liveServicesReprobedThisBatch": false,
+    "actionsThisBatch": {
+      "runtimeEdits": true,
+      "runtimeEditScope": "Mobile scan overlay visibility/state and resource explanations only; native audio/model/provider unchanged",
+      "functionalTests": true,
+      "builds": false,
+      "hostDiagnosticCompile": true,
+      "deviceOperations": "Inspected existing data/UI; temporary target es restored to en; mirror exited",
+      "deployments": false,
+      "modelCalls": 0,
+      "databaseChanges": false,
+      "commit": true,
+      "push": false
+    },
+    "source": {
+      "testedCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+      "testedTree": "333464e16b1317a061867c2be934cc06841fe939",
+      "lastVerifiedPushedCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+      "branch": "wip/r6-s4-batch90-audio-bridge",
+      "pushedCommitRuntimeEqualsTestedCommit": false,
+      "documentationChangesThisBatch": "included_in_this_documentation_checkpoint",
+      "frozenPrivate10Commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
+      "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
+      "userWipPreserved": true,
+      "localCodeCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+      "codeCommitPushed": true,
+      "localCodeTree": "e211f3fdf0f498eedbb9d2e314898f78da59ecb9",
+      "hardeningRuntimeEqualsTestedCommit": true,
+      "hardeningScope": "Regression tests, source-bound build gate, CI and acceptance baseline; runtime directories unchanged",
+      "localCodeRuntimeEqualsTestedCommit": false,
+      "localCodeState": "UI_SOURCE_HOST_PASS_NOT_PACKAGED",
+      "hardeningCommit": "2cff2a9dc54ce44f27bd086b3734b1cf6160a9bc",
+      "pushVerification": "2026-10-01 git push succeeded and ls-remote matched c12ca45 before documentation checkpoint",
+      "lastVerifiedPushedCommitScope": "product and regression source; this documentation checkpoint is a descendant"
+    },
+    "ios": {
+      "candidateId": "wujie-co11-qa-25f3eb3-2026093008",
+      "build": "2026093008",
+      "version": "1.1.0",
+      "bundleId": "cn.qkxy.wujieai.public",
+      "buildMode": "profile",
+      "productProfile": "full",
+      "localProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
+      "appAggregateSha256": "1aac277428ec0bbd68de59a7aa16225ce3c58acfeefc6c821795b8cc0edd79e9",
+      "symbolManifestSha256": "5110dc6cad2f9e9508cc6a520642a9689161a6f6cf26d70edf2ea3cff9e64b99",
+      "signingClass": "Apple Development; registered-device QA, not store distribution",
+      "archive": "artifacts/releases/wujie-co11-qa-25f3eb3-2026093008",
+      "installedEvidence": true,
+      "fullIOSMatrixAccepted": false,
+      "launchedEvidence": true,
+      "uiAccepted": true,
+      "candidateManifestSha256": "3fb83f9331be2a9cc0986a58af725497e3376464abff14c8b590d6fe35f4fed2"
+    },
+    "deployment": {
+      "deploymentId": "wujie-co11-qa-54026e7",
+      "class": "isolated_lan_qa",
+      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+      "sourceTree": "333464e16b1317a061867c2be934cc06841fe939",
+      "imageId": "sha256:9273bb7f192dcc985f91476424157df47e0549cfd881d6ce553204642b7225b2",
+      "configSha256": "6a9d758eefee6085002655a6b1d920198397aee61d2e6693d748ce01075a4881",
+      "schema": 47,
+      "recordedAt": "2026-09-30T12:57:50.525Z",
+      "entryOpenAtRecordedCheck": true,
+      "qaOneShotGuardEnabled": false,
+      "bootstrapEnabled": false,
+      "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-25f3eb3",
+      "rollbackSourceCommit": "476537d515f243ddcb79a2b80693bdd667e2411f",
+      "rollbackIsRetainedAssetNotFormalAcceptance": true,
+      "lastReadOnlyHealthProbeAt": "2026-09-30T14:15:23.478Z",
+      "activeConnectionsAtLastProbe": 0
+    },
+    "models": {
+      "revision": 3,
+      "asr": {
+        "vendor": "qwen",
+        "model": "qwen-audio-3.1-asr-flash-streaming",
+        "protocol": "qwen_audio_streaming",
+        "semanticPunctuation": true,
+        "heartbeat": true
+      },
+      "translation": {
+        "vendor": "tencent",
+        "protocol": "tencent_tmt",
+        "directionalTermRepositoriesRetained": true
+      },
+      "tts": {
+        "vendor": "tencent",
+        "protocol": "tencent_tts_ws",
+        "volume": 4
+      },
+      "qualifications": [
+        {
+          "mode": "silent",
+          "sessionId": "public-1bd02e19ccc6b40ede3ee2e9d1a3501e9f13be60775ec8e45aa8c69a5e6d72ab",
+          "configurationHash": "9c546b4ee725386d9b6ed63f3a743ec6343fd9d000eb651cc1a9731c38a056fb",
+          "observedAt": "2026-09-30T12:44:46.693Z",
+          "expiresAt": "2026-10-01T12:43:46.693Z",
+          "attemptCounts": {
+            "asr": 1,
+            "translation": 4
+          },
+          "pcmBytes": 0,
+          "ledgerCount": 1,
+          "consumedSeconds": 29,
+          "deviceVerified": false,
+          "textLanguageProducer": "apple_nl_text_v1_mac_host",
+          "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+          "languagePairs": [
+            "zh:en",
+            "en:zh",
+            "ja:zh",
+            "fr:zh"
+          ]
+        },
+        {
+          "mode": "spoken",
+          "sessionId": "public-ef229cc31b05fd09d44dd6951cea692beacb432673ceb8bbf432204cef4ee2cb",
+          "configurationHash": "dad910e378ca635c8cc63122bf7a8edbc11782834f2e71d2662544642cf3b06f",
+          "observedAt": "2026-09-30T12:45:21.799Z",
+          "expiresAt": "2026-10-01T12:44:21.799Z",
+          "attemptCounts": {
+            "asr": 1,
+            "translation": 4,
+            "tts": 4
+          },
+          "pcmBytes": 545600,
+          "ledgerCount": 1,
+          "consumedSeconds": 29,
+          "deviceVerified": false,
+          "textLanguageProducer": "apple_nl_text_v1_mac_host",
+          "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+          "languagePairs": [
+            "zh:en",
+            "en:zh",
+            "ja:zh",
+            "fr:zh"
+          ]
+        }
+      ],
+      "allSupplierModelsLiveQualified": false,
+      "currentLiveReadiness": "GATEWAY_READY_AT_2026-09-30T14:15:23.478Z; exact source snapshots signed until 2026-10-01T12:43/44Z, not perpetual readiness",
+      "credentialsIncluded": false
+    },
+    "hostEvidence": {
+      "latestAffectedRegression": {
+        "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+        "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/ROOT_CAUSE_AND_STATUS.md",
+        "iosNativeTypecheck": true,
+        "redOldSourcePreserved": true
+      },
+      "hardening": {
+        "sourceCommit": "2cff2a9dc54ce44f27bd086b3734b1cf6160a9bc",
+        "nativeSuites": 6,
+        "productionWiringChecks": 10,
+        "scriptTests": 35,
+        "dualVersionPolicy": "40/40",
+        "oldReceiptRejected": true,
+        "remoteCiExecuted": false,
+        "sourceBoundGateInputHash": "7d0ac0d15a6902c7721dc85f49820c73c2b08b5a91c7cae88d26a70bbb3d2617"
+      },
+      "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/audio-freeze-verification.json",
+      "countsNotSummedAcrossBatches": true,
+      "priorPgRedisWorkerFlutterEvidenceRemainsVersionScoped": true,
+      "newTestsExecutedThisBatch": true,
+      "priorEvidenceSnapshot": "artifacts/closeout-regression/20260930-rc-25f3eb3/prior-delivery-before-ios-1-5.json",
+      "latestUiFeedbackFix": {
+        "commit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+        "tree": "e211f3fdf0f498eedbb9d2e314898f78da59ecb9",
+        "testFiles": 14,
+        "passedTests": 112,
+        "staticAnalysis": "No issues found",
+        "testedFilesMatchCommit": true,
+        "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
+        "fullRepoRegressionClaimed": false
+      }
+    },
+    "device": {
+      "status": "PRIOR_QUIET_BARGE_CASES_RETAINED_POST_BLUETOOTH_FALSE_ASR_CONFIRMED",
+      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+      "build": "2026093008",
+      "installed": true,
+      "launched": true,
+      "uiAccepted": true,
+      "externalSpeakerEchoAccepted": false,
+      "externalSpeakerEchoScope": "Prior exact quiet case retains scoped PASS; Bluetooth-to-speaker case has user-confirmed false content and is not acoustically accepted.",
+      "bargeInAccepted": true,
+      "voiceSwitchRouteRecoveryAccepted": false,
+      "historyAndUniqueEndAccepted": true,
+      "historyAndUniqueEndScope": "Exact quiet and real-barge cases, not all historical sessions",
+      "fullIOSMatrixAccepted": false,
+      "quietCase": {
+        "sessionId": "public-a2e89eb793a0a12f6e655fd14d5e2b899d2da9be5920dc8df98abde97e7ab4dd",
+        "ttsChunks": 6,
+        "ttsBytes": 132160,
+        "allFinished": true,
+        "actualPostTtsQuietMs": 13511,
+        "pending": 0,
+        "ledgerCount": 1,
+        "consumedSeconds": 27,
+        "hearingSeparatelyConfirmedInThisCase": false,
+        "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-quiet-1-assessment.json"
+      },
+      "bargeCase": {
+        "sessionId": "public-5cebf156f54f0e9e27006a06019f55b72280ab5a9ed7026c3e60601e188468ed",
+        "eventToCancelMs": 2,
+        "eventToCancelIsNotAcousticLatency": true,
+        "newPlaybackAllFinished": true,
+        "phoneServerMatch": true,
+        "pending": 0,
+        "ledgerCount": 1,
+        "consumedSeconds": 26,
+        "userAccepted": true,
+        "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-barge-1-assessment.json"
+      },
+      "supplementalCase": {
+        "sessionId": "public-b3297b0a44a554764519eb1fb25f3b37997e215110fd321404bb6f5c4f1c9fae",
+        "sourceAndTranslationCount": 4,
+        "ledgerCount": 1,
+        "consumedSeconds": 38,
+        "userIntentionalSupplement": true,
+        "notControlledQualitySample": true,
+        "phoneFieldComparisonClaimed": false
+      },
+      "priorCandidateFailure": {
+        "build": "2026092904",
+        "status": "CAPTURE_REBUILD_LOOP_NO_FIXTURE",
+        "evidence": "artifacts/closeout-regression/20260929-rc-98270aa/readiness-start-assessment.json",
+        "sessionId": "public-aec63f37a23e3ee0a8ee9afb072b1ebc0ba9d071f79118f5af4a4fade049aff8",
+        "meterStopped": true,
+        "providerUncertain": true,
+        "phonePending": 1,
+        "ledgerCount": 0,
+        "manualLedgerChange": false,
+        "notIncludedInAccepted14LegacyRecords": true
+      },
+      "rawRecordingEnabled": false,
+      "rawDiagnosticWaveformsCleaned": true,
+      "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/audio-freeze-verification.json",
+      "routeCounterexample": {
+        "sessionId": "public-3ee68ce8ee578d340bc43fc2a16971d4cecf8e579d9cd2bdfae57a0c0fa3a7f9",
+        "userReportedNoNewSpeech": true,
+        "persistedSource": "我要去星巴克。",
+        "status": "REPRODUCED_NOT_FIXED",
+        "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
+        "priorRouteTransportAndHistoryEvidenceRetained": true
+      },
+      "localColdStartAccepted": {
+        "build": "2026093008",
+        "languages": "zh-to-en",
+        "noDownloadPrompt": true,
+        "originalTranslationSpeechHistory": true,
+        "cloudCallsAndBillingUnchanged": true,
+        "userConfirmed": true,
+        "spanishNotAccepted": true,
+        "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json"
+      },
+      "auxiliaryStorageAndExport": {
+        "sourceKinds": [
+          "scan",
+          "type_to_speak"
+        ],
+        "saved": true,
+        "jsonContentsMatchPhone": true,
+        "overlayUiAccepted": false,
+        "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/auxiliary-storage-export.json"
+      }
+    },
+    "acceptedObservations": [
+      "semantic punctuation and technical-name/name-translation differences retained; user requested no further current optimization",
+      "20-second quiet tail not executed and not a new requirement to repeat this accepted case",
+      "two anonymous labels are not a blanket speaker-accuracy metric"
+    ],
+    "android": {
+      "publicApplicationIdApproved": false,
+      "signingMaterialSelected": false,
+      "signedPublicArtifact": false,
+      "deviceAccepted": false,
+      "autoLanguageForCurrentQwenCombination": "iOS-only apple_nl_text_v1; Android automatic-source selection is explicitly blocked; fixed-source path is separate and not device-accepted here",
+      "deviceSortformer": "not_provided",
+      "scopeDecisionNotMadeByDocumentation": true
+    },
+    "callLink": {
+      "sourceHostEvidenceRecorded": true,
+      "independentCompatibilityDeploymentAndDuplexAccepted": false,
+      "newPublicWorkerNotInScope": true,
+      "legacyOptionalTtsRecordProtection": 1024
+    },
+    "historicalDebt": {
+      "count": 14,
+      "disposition": "user_accepted_test_debt_no_ledger_changes",
+      "dispositionTaskClosed": true,
+      "recordsMarkedSettled": false
+    },
+    "release": {
+      "accepted": false,
+      "formalChannelDecided": false,
+      "mergedMain": false,
+      "grayReleaseExecuted": false,
+      "observation72hStarted": false,
+      "rollbackAcceptance": "pending_for_exact_formal_target_or_safe_stop",
+      "originalPublic045DatabaseReprobed": false,
+      "scopeNotSilentlyReduced": true
+    },
+    "ci": {
+      "pushedCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+      "remotePassClaimed": false,
+      "reason": "current wip branch is not included in push triggers; pull_request is an existing trigger",
+      "notQueriedThisDocumentationBatch": false,
+      "localHardeningCommit": "2cff2a9dc54ce44f27bd086b3734b1cf6160a9bc",
+      "githubRequiredChecksChanged": false,
+      "openPrCountAtSourcePush": 0,
+      "workflowRunCountAtSourcePush": 0,
+      "queryScope": "2026-10-01 gh pr list and gh run list for current branch after c12ca45 push"
+    },
+    "workGroups": [
+      {
+        "id": "documentation",
+        "title": "纯交付材料和任务状态收口",
+        "status": "complete",
+        "taskIds": [
+          "CO11-01",
+          "CO11-13",
+          "CO11-14",
+          "CO11-18"
+        ]
+      },
+      {
+        "id": "ios_remaining_acceptance",
+        "title": "iOS原计划剩余验收归档",
+        "status": "in_progress_ordered_steps_1_to_5",
+        "taskIds": [
+          "CO11-05",
+          "CO11-07",
+          "CO11-09",
+          "CO11-15"
+        ],
+        "policy": "先核可复用旧证据，不重开已签收当前效果优化或20秒安静尾段"
+      },
+      {
+        "id": "android_delivery",
+        "title": "Android交付与验收",
+        "status": "pending_external_inputs_and_platform_compatibility",
+        "taskIds": [
+          "CO11-12",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "call_link_duplex",
+        "title": "原Call Link白名单真实双端闭环",
+        "status": "pending",
+        "taskIds": [
+          "CO11-11",
+          "CO11-16"
+        ],
+        "policy": "原独立1.1兼容Worker，不扩展隐藏或延期业务"
+      },
+      {
+        "id": "formal_release",
+        "title": "正式发行、回退、灰度和72小时观察",
+        "status": "pending",
+        "taskIds": [
+          "CO11-18"
+        ]
+      }
+    ],
+    "remainingWorkGroupCount": 4,
+    "taskSummary": [
+      {
+        "id": "CO11-01",
+        "status": "source_mapping_complete",
+        "conclusion": "原29功能/34OPT映射保留；当前交付分层已归一，不将源码映射冒充全部设备通过。",
+        "remainingIn": []
+      },
+      {
+        "id": "CO11-02",
+        "status": "source_host_and_selected_combination_qualified",
+        "conclusion": "配置实现和集中HOST已有记录；当前r3静音/朗读分别获得同源真实资格，不再标为从未验证。未对所有供应商型号作真实资格声明。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16",
+          "CO11-18"
+        ]
+      },
+      {
+        "id": "CO11-03",
+        "status": "affected_ios_scope_user_accepted_other_platform_scope_pending",
+        "conclusion": "协议/路由HOST与2902受影响静音用例已签收；Android当前组合的自动语种接线缺口归CO11-12/16，不重开当前iOS优化。",
+        "remainingIn": [
+          "CO11-12",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-04",
+        "status": "affected_ios_case_user_accepted_no_further_optimization",
+        "conclusion": "用户接受2902当前效果并停止优化；未完成20秒安静尾段保持未执行，不再要求追加本轮复测。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-05",
+        "status": "scoped_spoken_audio_pass_route_false_asr_open",
+        "conclusion": "保留3008原静听/真实插话通过；用户确认HFP切回外放后未发声却出现星巴克，标量重放复现误起点；ASR/VAD阈值未盲改，路由声学不签收。",
+        "remainingIn": [
+          "CO11-15"
+        ]
+      },
+      {
+        "id": "CO11-06",
+        "status": "affected_ios_case_user_accepted_other_platform_scope_pending",
+        "conclusion": "130ms关联修复的HOST和当前双标签/一致历史记录已归档；用户停止进一步当前优化，不虚构全部分人指标或Android接线。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-07",
+        "status": "local_zh_en_and_aux_storage_pass_scan_overlay_fix_host_pass",
+        "conclusion": "用户签收本地中英冷启动；输入/扫描保存及JSON逐字段一致。扫描密集策略/滚动覆盖已在c12ca45修复，112定向通过，尚未安装。西语缺的是苹果翻译资源，语音控制包不代替；未下载。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-08",
+        "status": "source_host_pg_and_scoped_device_evidence_recorded",
+        "conclusion": "原hold/账户锁及余额修复的HOST/PG证据保留；当前77秒唯一结算不扩展为所有边界/显示场景的设备通过。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-09",
+        "status": "source_host_capacity_verified_device_long_gate_pending",
+        "conclusion": "10000条合成容量及有界持久化已有证据；当前短会话不替代原长会话门禁，也不扩展旧Call Link可选TTS的1024保护。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-10",
+        "status": "source_host_pg_and_current_unique_end_verified",
+        "conclusion": "结束/唯一结算HOST、相关PG及2902手动结束一笔账本已有证据；不宣称跨进程Provider无损续接。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16",
+          "CO11-18"
+        ]
+      },
+      {
+        "id": "CO11-11",
+        "status": "source_host_evidence_recorded_real_duplex_pending",
+        "conclusion": "原兼容Worker源码和集中HOST已执行，旧准备期未运行说明归历史；独立兼容部署/真实双端媒体仍未整体签收，不建设新公共Worker。",
+        "remainingIn": [
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-12",
+        "status": "android_host_preparation_complete_identity_signing_and_auto_language_pending",
+        "conclusion": "原Kotlin/候选合同已有HOST证据；尚缺正式public身份/签名/设备验收。当前Qwen组合auto依赖仅iOS的文本语种方法；Android固定源语言路径不能冒充auto完成，端侧Sortformer仍未提供。",
+        "remainingIn": [
+          "CO11-12",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-13",
+        "status": "concentrated_engineering_evidence_recorded_ui_feedback_host_pass",
+        "conclusion": "c12ca45六文件与最终14文件/112项及静态检查输入SHA一致；Native元数据重放只是复现现存误起点，不当作修复通过或全仓回归。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-16",
+          "CO11-18"
+        ]
+      },
+      {
+        "id": "CO11-14",
+        "status": "current_same_source_qa_retained_new_ui_fix_not_candidate",
+        "conclusion": "运行25f3eb3/3008及原双资格保留；本地c12ca45仅SOURCE/HOST通过，无新候选、部署、安装或push，不沿旧设备结果代签。",
+        "remainingIn": [
+          "CO11-15",
+          "CO11-18"
+        ]
+      },
+      {
+        "id": "CO11-15",
+        "status": "ios_acceptance_in_progress_route_false_asr_and_overlay_retest_pending",
+        "conclusion": "1→5按原范围继续：第1项有已确认安静误识别，第2项中英/辅助保存已验、覆盖修复待新包；后续系统/双模式长测/300句双人盲评不晋级。",
+        "remainingIn": [
+          "CO11-15"
+        ]
+      },
+      {
+        "id": "CO11-16",
+        "status": "android_and_call_link_delivery_acceptance_pending",
+        "conclusion": "Android身份/签名/当前auto适配及目标真机、Call Link真实双端仍待交付；不由iOS/HOST代证，维持先iOS后Android。",
+        "remainingIn": [
+          "CO11-12",
+          "CO11-16"
+        ]
+      },
+      {
+        "id": "CO11-17",
+        "status": "closed_user_accepted_test_debt_no_ledger_changes",
+        "conclusion": "14笔测试遗留已按用户决定关闭处置任务；没有改账、扣费、退款、释放或把记录伪记settled。",
+        "remainingIn": []
+      },
+      {
+        "id": "CO11-18",
+        "status": "documentation_group_complete_formal_release_pending",
+        "conclusion": "第1组纯交付材料/任务状态归一完成；正式渠道/最终CI与合并/回退演练/灰度/72小时观察仍独立保留。",
+        "remainingIn": [
+          "CO11-18"
+        ]
+      }
+    ],
+    "evidence": [
+      "artifacts/closeout-regression/20260929-speaker-edge-fix/verification.json",
+      "artifacts/closeout-regression/20260929-speaker-edge-fix/qualification-result.json",
+      "artifacts/closeout-regression/20260929-speaker-edge-fix/deployed-audit.json",
+      "artifacts/closeout-regression/20260929-speaker-edge-fix/device-acceptance.json",
+      "artifacts/closeout-regression/20260926-concentrated-b367d89/rca7-push-verify.result.json",
+      "artifacts/closeout-regression/20260929-ios-echo-repair/verification.json",
+      "artifacts/closeout-regression/20260929-rc-3384767/delivery-verification.json",
+      "artifacts/closeout-regression/20260929-rc-98270aa/readiness-start-assessment.json",
+      "artifacts/closeout-regression/20260929-engine-owner/verification.json",
+      "artifacts/closeout-regression/20260929-rc-b2e6d2f/delivery-verification.json",
+      "artifacts/closeout-regression/20260929-capture-recovery-d54a2ae/verification.json",
+      "artifacts/closeout-regression/20260929-rc-d54a2ae/delivery-verification.json",
+      "artifacts/closeout-regression/20260929-rc-d54a2ae/native-production-progress-2.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/audio-freeze-verification.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/deployment-installation-verification.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/qualification-result.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-quiet-1-assessment.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/passive-3008-barge-1-assessment.json",
+      "artifacts/closeout-regression/20260930-rc-25f3eb3/temporary-waveform-cleanup.json",
+      "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
+      "artifacts/closeout-regression/20260930-ios15-feedback/auxiliary-storage-export.json",
+      "artifacts/closeout-regression/20260930-ios15-feedback/route-terms.json"
+    ],
+    "lastAcceptedSilentDevice": {
+      "status": "USER_ACCEPTED_AFFECTED_SILENT_DEVICE_CASE",
+      "sourceCommit": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+      "build": "2026092902",
+      "sourceSegments": 11,
+      "translatedSegments": 11,
+      "phonePending": 0,
+      "consumedSeconds": 77,
+      "ledgerCount": 1,
+      "confirmedAttempts": {
+        "asr": 1,
+        "translation": 11,
+        "tts": 0
+      },
+      "historyMatchUnderContractDefaults": true,
+      "userConfirmedManualEnd": true,
+      "userAcceptedCurrentExperience": true,
+      "furtherCurrentOptimizationRequested": false,
+      "quietTail20SecondsExecuted": false,
+      "spokenDeviceTestExecuted": false,
+      "longTestExecuted": false,
+      "fullIOSMatrixAccepted": false,
+      "evidence": "artifacts/closeout-regression/20260929-speaker-edge-fix/device-acceptance.json",
+      "publicSignoff": "release/public/1.1.0/A7E7532_IOS_AFFECTED_ACCEPTANCE_20260929.md"
+    },
+    "previousDeliverySnapshot": "artifacts/closeout-regression/20260930-rc-25f3eb3/prior-delivery-before-ios-1-5.json",
+    "iosRemainingExecution": {
+      "authorizedAt": "2026-09-30T14:18:52Z",
+      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+      "build": "2026093008",
+      "ordered": true,
+      "steps": [
+        {
+          "id": 1,
+          "title": "朗读开关与输出路由切换恢复",
+          "taskIds": [
+            "CO11-05",
+            "CO11-15"
+          ],
+          "status": "confirmed_post_route_false_asr_requires_fix",
+          "evidence": [
+            "artifacts/closeout-regression/20260930-rc-25f3eb3/voice-toggle-interim.json",
+            "artifacts/closeout-regression/20260930-rc-25f3eb3/bluetooth-route-assessment.json",
+            "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json"
+          ],
+          "sessionId": "public-2085713a5d9c307f7c7a9b750ffbaded2a5451bb9168b9b5724b61c878cc1b55",
+          "successCriteria": [
+            "关闭时ASR/MT继续且新TTS调用为0",
+            "重新开启后新句正常朗读、无旧句重播",
+            "路由变化后采音/输出恢复，结束保存并唯一结算"
+          ],
+          "sameActiveSessionToggleExercised": false
+        },
+        {
+          "id": 2,
+          "title": "公有沙箱本地离线冷启动及OCR/输入/导出/历史/纯同步",
+          "taskIds": [
+            "CO11-07",
+            "CO11-15"
+          ],
+          "status": "local_zh_en_and_aux_storage_verified_overlay_fix_host_pass_device_retest_pending",
+          "localSessionId": "local_1790779183535540_1",
+          "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
+          "successCriteria": [
+            "只用已装资源、离线不调用云、不下载",
+            "原辅助入口与账号/部署/来源正确",
+            "纯同步不触发模型或重复计费"
+          ],
+          "spanishTranslationResource": "not_installed_no_download_in_this_scope",
+          "coldStartUserConfirmed": true
+        },
+        {
+          "id": 3,
+          "title": "蓝牙、后台/锁屏、来电和网络/模式恢复",
+          "taskIds": [
+            "CO11-05",
+            "CO11-15"
+          ],
+          "status": "pending",
+          "successCriteria": [
+            "实物中断确实发生",
+            "按原合同恢复或安全结束、保留历史与用户模式",
+            "不自动新建收费会话或恢复已结束会话"
+          ]
+        },
+        {
+          "id": 4,
+          "title": "本地与在线各30分钟且至少100有效片段",
+          "taskIds": [
+            "CO11-09",
+            "CO11-15"
+          ],
+          "status": "pending",
+          "successCriteria": [
+            "持续采音与适用朗读覆盖",
+            "尾句/保存/唯一结算或纯本地零云调用",
+            "重复输入只用于稳定性，记录首尾延迟及可观测设备状态"
+          ]
+        },
+        {
+          "id": 5,
+          "title": "300独立质量句、冻结指标、两位人工盲评",
+          "taskIds": [
+            "CO11-15"
+          ],
+          "status": "pending_original_gate_retained",
+          "successCriteria": [
+            "冻结分组/非劣容差/置信方法/关键错误",
+            "适用1.0配对基准",
+            "两位真实人工独立盲评与分歧复核"
+          ],
+          "externalInputs": [
+            "两位人工评审及冻结质量资料，不能由HOST或LLM代签"
+          ]
+        }
+      ],
+      "noAutomaticAppKillOrAdmissionClosure": true,
+      "noRawRecordingOutsideExplicitScope": true,
+      "qualityGateNotWaived": true,
+      "fullIOSMatrixAccepted": false
+    },
+    "latestFeedback": {
+      "at": "2026-09-30T15:47:11Z",
+      "scope": "CO11-05/07/15",
+      "spanish": {
+        "status": "VOICE_CONTROL_RESOURCE_PRESENT_TRANSLATION_RESOURCE_ABSENT",
+        "observation": "Fresh iPhone Mirroring UI; public App zh-to-es check and Apple Translate Languages list",
+        "publicAppAsrZhReady": true,
+        "publicAppTranslationZhEsReady": false,
+        "voiceControlSpanishPresent": true,
+        "appleTranslateAvailableOffline": [
+          "Chinese (Mandarin, Simplified)",
+          "English (UK)",
+          "English (US)"
+        ],
+        "appleTranslateSpanishOfflineReady": false,
+        "downloadStarted": false,
+        "languageRestored": "zh-to-en",
+        "mirrorExited": true
+      },
+      "scanFix": {
+        "commit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+        "hostPass": 112,
+        "targetBuilt": false,
+        "installed": false
+      },
+      "audioIssue": "confirmed_not_fixed",
+      "nativeThresholdsOrModelsChanged": false,
+      "previousRawRecordingAuthorizationExhausted": true,
+      "newRawRecordingAuthorized": true,
+      "newRawRecordingScope": {"maximumCases":2,"maximumInputSecondsPerCase":30,"maximumTotalInputSeconds":60,"armedCases":2,"recordedSeconds":60,"status":"analysis_completed_raw_files_cleaned_user_accepts_current_headset_routing","authorization":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/raw-capture-authorization.json","remainingCases":0,"firstCaseSessionId":"public-139d033a2db238fde899edcc0d11152861054e8690173201e172be9069f20578","firstCaseEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/passive-waveform-route-quiet-1-assessment.json","secondCaseSessionId":"public-d72e05b8f6bacd34cab6606bb7c8db1f186abfc611517be9d6f818dc01cc8ead","rawCaptureDisabledEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/capture-disabled.json","orderedReplay":"ended_metadata_only_no_second_fixture","rawFilesDeletedPhoneAndMac":true,"cleanupEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/temporary-waveform-cleanup.json"},
+      "earphoneRoutingDecision": {"date":"2026-10-01","userDecision":"我觉得这样就很好，不用改了","scope":"Existing headset microphone and headset reading behavior","status":"user_accepted_keep_existing_route_no_change_or_further_test_this_item","sourceCommit":"25f3eb315461b8aaa6d6af22e96fc95020ce10c9","appBuild":"2026093008","frozen10RoutingActivationMatches":true,"modelOrProductCodeChanged":false,"latestSessionId":"public-b686d0da6b75bdaf94f77c9ae7986d8c3553c93d2aaea021c4212f219bce153b","ttsChunksFinished":21,"phoneServerSegments":4,"pending":0,"ledgerCount":1,"otherAcceptanceGatesUnchanged":true,"previousSpeakerphoneFalseAsrEvidenceRetained":true,"evidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/RESULT.md"},
+      "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/RESULT.md"
+    }
+  },
+  "historicalUndatedBeforeDeliveryClosure20260929": {
+    "latestDevelopmentDirective": {
+      "mode": "unified_validation_in_original_gate_order",
+      "unifiedEvidence": {
+        "directory": "outer artifacts/closeout-regression/20260926-concentrated-b367d89",
+        "apiHostPassed": 1270,
+        "apiHostConditionalSkippedAtRun": 5,
+        "gatewayPassed": 1054,
+        "workerPassed": 255,
+        "contractsPassed": 176,
+        "speechQualityPassed": 30,
+        "platformSecurityHostPassed": 12,
+        "flutterPassed": 879,
+        "scriptsPassed": 43,
+        "dualVersionPassed": 40,
+        "realPostgresPassed": 6,
+        "realRedisPassed": 1,
+        "dartAnalysis": "zero_issues_after_two_style_fixes",
+        "androidNative": "dependency_resolution_in_progress_not_target_build_pass",
+        "formalRcAccepted": false,
+        "deviceAccepted": false,
+        "providerCalls": 0,
+        "historicalDebtChanged": false
+      },
+      "baseCommit": "b367d8937912ddce795068f4fb7fd35032e3039c",
+      "workingTreeUpdates": [
+        "token-bound per-session qualification readiness",
+        "short-final duplicate speech context",
+        "opt-in numeric PCM levels and semantic assembly traces",
+        "diagnostic exception isolation",
+        "failed PCM revision queue barrier and attributed playback failure",
+        "stale absorbed-caption and speaker metadata guards",
+        "historical segment revision and pipeline isolation",
+        "public usage requires session-specific reservation",
+        "indexed ledger unavailable fails closed and consistent legacy pagination",
+        "optional provider diagnostics cannot skip confirmed finalization",
+        "Call Link exact terminal receipt retry and unconditional cleanup"
+      ],
+      "sourceTasks": [
+        "CO11-02",
+        "CO11-03",
+        "CO11-04",
+        "CO11-05",
+        "CO11-06",
+        "CO11-07",
+        "CO11-08",
+        "CO11-09",
+        "CO11-10",
+        "CO11-11"
+      ],
+      "sourceTaskStatus": "development_complete_pending_unified_validation",
+      "co12Preparation": {
+        "status": "development_preparation_complete_identity_signing_and_validation_pending",
+        "updates": [
+          "isolated public signing configuration",
+          "explicit Android local profile",
+          "native identity bound to actual Dart defines",
+          "traceable release APK workflow authored",
+          "deferred candidate contract cases"
+        ],
+        "applicationIdApproved": false,
+        "signingMaterialSelected": false,
+        "newKeyGenerated": false,
+        "testsExecuted": false,
+        "apkBuilt": false,
+        "installed": false,
+        "deviceVerified": false,
+        "handoff": "ANDROID_DELIVERY.md"
+      },
+      "co13Status": "concentrated_host_and_storage_pass_remaining_gates_in_progress",
+      "co14Status": "development_preparation_complete_qualification_and_rc_deferred",
+      "newRegressionCasesAuthoredWithoutExecution": true,
+      "callLinkLegacyTtsLimit": "1024 retained, not covered by realtime v2 capacity evidence",
+      "testsExecutedForTheseUpdates": true,
+      "staticChecksExecutedForTheseUpdates": true,
+      "built": false,
+      "deployed": false,
+      "qualificationIssued": false,
+      "historicalAcousticRootCauseEstablished": false,
+      "priorResultsBelowDoNotCoverTheseUpdates": true
+    },
+    "kind": "closeout_evidence_snapshot",
+    "observedAt": "2026-09-26T02:43:31Z",
+    "status": "independent_delivery_ready_device_and_release_pending",
+    "nextCandidatePreparation": {
+      "status": "same_source_qa_built_not_deployed_not_formal_rc",
+      "proposedSourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+      "proposedSourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+      "finalRcSourceFrozen": false,
+      "newIosBuildNumber": "2026092601",
+      "newAppAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
+      "newServerImageDigest": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
+      "regressionFilesPlanned": 24,
+      "regressionsExecuted": true,
+      "plans": [
+        "CO11_13_CONCENTRATED_HOST_GATE_20260925.md",
+        "CO11_14_RC_PREFLIGHT_20260925.md"
+      ],
+      "planLocation": "outer workspace plans/wujie-1.0-1.1; not part of the source push"
+    },
+    "testing": {
+      "execution": "concentrated_host_complete_external_gates_pending",
+      "newTestsExecuted": true,
+      "newModelCalls": 0,
+      "newInstallations": 0,
+      "acceptanceWaived": false
+    },
+    "source": {
+      "functionalBaselineCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+      "functionalBaselineTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+      "worktreeIsClean": false,
+      "userChangesPreserved": true,
+      "thisBatchRuntimeCodeChanged": true,
+      "frozenPrivate10Commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
+      "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
+      "buildWorktreeWasClean": true
+    },
+    "modelConfiguration": {
+      "revisionFromPriorEvidence": 1,
+      "silentHash": "c2e409775f697f862f7931e211092418bf779d3fb9a6fae922787f6871c08335",
+      "spokenHash": "fb93c85476d7e6281d993c60b14771d21074e59de8fb7022b4d4c61dd428fba6",
+      "silentComponents": [
+        "qwen_asr_realtime",
+        "tencent_tmt"
+      ],
+      "spokenAdditionalComponent": "tencent_tts_ws",
+      "silentQualificationEvidence": "prior_live_qualified_sample",
+      "silentQualificationExpiresAt": "2026-09-26T15:21:17.794Z",
+      "silentQualifiedPairsFromReceipt": [
+        "zh:en",
+        "en:zh",
+        "ja:zh",
+        "fr:zh"
+      ],
+      "spokenQualificationEvidence": "pending_for_exact_qa_configuration",
+      "qualificationRenewedThisBatch": false,
+      "credentialValuesIncluded": false
+    },
+    "release": {
+      "decision": "blocked",
+      "grayPercent": 0,
+      "observation72hStarted": false,
+      "historicalHoldsDisposition": "14_test_debt_records_explicitly_accepted_without_ledger_changes",
+      "historicalHoldsResolved": false,
+      "historicalHoldsReferenceListSha256": "9af3714db17981eac54ed6e3deb5bd74b9994a92fa169f059c4b4acc1937b723",
+      "androidIdentityAndSigning": "pending",
+      "formalDistributionChannel": "pending",
+      "testPauseIsAcceptanceWaiver": false,
+      "pushPerformedThisBatch": false,
+      "rollbackPolicy": "schema_compatible_verified_candidate_or_safe_stop_no_private10_fallback"
+    },
+    "updatedAt": "2026-09-26T05:28:08.840Z",
+    "builtIosQa": {
+      "candidateId": "wujie-co11-qa-9bdee68-2026092601",
+      "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+      "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+      "bundleId": "cn.qkxy.wujieai.public",
+      "version": "1.1.0",
+      "buildNumber": "2026092601",
+      "buildMode": "profile",
+      "productProfile": "full",
+      "publicDeploymentId": "wujie-co11-qa-54026e7",
+      "iosLocalProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
+      "deviceSpeaker": {
+        "enabledInCandidate": true,
+        "requiresServerRollout": true,
+        "anonymousOnly": true,
+        "maxSpeakers": 4,
+        "profile": "sortformer_v2_1_fastest",
+        "revision": "ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1"
+      },
+      "serverBaseUrl": "https://192.168.1.146:13522",
+      "language": {
+        "source": "auto",
+        "target": "zh",
+        "autoReverse": true,
+        "automaticPair": "zh,en"
+      },
+      "appAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
+      "appAggregateHashAlgorithm": "sha256-relative-regular-files-v1",
+      "signingClass": "apple_development",
+      "signatureVerified": true,
+      "actualSevenLocalDefinesMatched": true,
+      "matchingRunnerAndAppSymbolsArchived": true,
+      "stableArtifactArchive": "artifacts/releases/wujie-co11-qa-9bdee68-2026092601",
+      "installed": false
+    },
+    "builtServerQa": {
+      "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+      "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+      "image": "ai-phone-server:wujie-co11-qa-9bdee68",
+      "imageId": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
+      "keyCompiledFilesMatchHost": 6,
+      "deployed": false
+    },
+    "previouslyInstalledIosQa": {
+      "candidateId": "wujie-co11-qa-e951519-2026092510",
+      "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
+      "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
+      "bundleId": "cn.qkxy.wujieai.public",
+      "version": "1.1.0",
+      "buildNumber": "2026092510",
+      "buildMode": "profile",
+      "productProfile": "full",
+      "signingClass": "apple_development",
+      "publicDeploymentId": "wujie-co11-qa-54026e7",
+      "iosLocalProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
+      "appAggregateSha256": "df819f28da2d5e998d823ff7fe602ed78d9e2a99d8cc21a24eac1225a727be44",
+      "manifestReadThisBatch": true,
+      "appRehashedThisBatch": false,
+      "installEvidence": "prior_device_install_and_visible_launch_pass",
+      "formalDeviceAcceptance": "pending",
+      "stableArtifactArchive": "pending_selected_candidate_currently_in_temporary_worktree"
+    },
+    "previouslyRunningServerQa": {
+      "deploymentId": "wujie-co11-qa-54026e7",
+      "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
+      "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
+      "imageId": "sha256:89578d94e065828a6bb8c510d9e426758ffc86c7eff4efabf26fec19db350213",
+      "idleEnvironmentHash": "e5f9c13d3b9a28580205b9b07005c110908ff98b0f15566f524620b74c9ebcd4",
+      "identityReadThisBatch": true,
+      "schemaFromPriorStartupEvidence": 47,
+      "publicRuntimeEnabled": false,
+      "acceptNewSessions": false,
+      "deviceSpeakerEnabled": false,
+      "deploymentClass": "isolated_lan_qa",
+      "productionDeploymentPerformedThisBatch": false
+    },
+    "remainingAcceptanceGates": [
+      "uncontaminated acoustic sentence/silence evidence",
+      "two-speaker device quality",
+      "active Gateway/Provider restart and safe-stop evidence",
+      "exact same-candidate silent/spoken qualification",
+      "iOS then Android full device acceptance",
+      "Android public identity/signing input",
+      "formal release/gray scope and 72-hour observation"
+    ]
+  },
   "schemaVersion": 1,
   "latestContentTermsRepair20260928": {
     "status": "source_host_wire_pass_asr_acoustic_quality_open",
@@ -485,59 +1433,17 @@
     "externalReport": "outer artifacts/closeout-regression/20260926-concentrated-b367d89/SUMMARY.json"
   },
   "latestDevelopmentDirective": {
-    "mode": "unified_validation_in_original_gate_order",
-    "unifiedEvidence": {
-      "directory": "outer artifacts/closeout-regression/20260926-concentrated-b367d89",
-      "apiHostPassed": 1270,
-      "apiHostConditionalSkippedAtRun": 5,
-      "gatewayPassed": 1054,
-      "workerPassed": 255,
-      "contractsPassed": 176,
-      "speechQualityPassed": 30,
-      "platformSecurityHostPassed": 12,
-      "flutterPassed": 879,
-      "scriptsPassed": 43,
-      "dualVersionPassed": 40,
-      "realPostgresPassed": 6,
-      "realRedisPassed": 1,
-      "dartAnalysis": "zero_issues_after_two_style_fixes",
-      "androidNative": "dependency_resolution_in_progress_not_target_build_pass",
-      "formalRcAccepted": false,
-      "deviceAccepted": false,
-      "providerCalls": 0,
-      "historicalDebtChanged": false
-    },
-    "baseCommit": "b367d8937912ddce795068f4fb7fd35032e3039c",
-    "workingTreeUpdates": ["token-bound per-session qualification readiness", "short-final duplicate speech context", "opt-in numeric PCM levels and semantic assembly traces", "diagnostic exception isolation", "failed PCM revision queue barrier and attributed playback failure", "stale absorbed-caption and speaker metadata guards", "historical segment revision and pipeline isolation", "public usage requires session-specific reservation", "indexed ledger unavailable fails closed and consistent legacy pagination", "optional provider diagnostics cannot skip confirmed finalization", "Call Link exact terminal receipt retry and unconditional cleanup"],
-    "sourceTasks": ["CO11-02", "CO11-03", "CO11-04", "CO11-05", "CO11-06", "CO11-07", "CO11-08", "CO11-09", "CO11-10", "CO11-11"],
-    "sourceTaskStatus": "development_complete_pending_unified_validation",
-    "co12Preparation": {
-      "status": "development_preparation_complete_identity_signing_and_validation_pending",
-      "updates": ["isolated public signing configuration", "explicit Android local profile", "native identity bound to actual Dart defines", "traceable release APK workflow authored", "deferred candidate contract cases"],
-      "applicationIdApproved": false,
-      "signingMaterialSelected": false,
-      "newKeyGenerated": false,
-      "testsExecuted": false,
-      "apkBuilt": false,
-      "installed": false,
-      "deviceVerified": false,
-      "handoff": "ANDROID_DELIVERY.md"
-    },
-    "co13Status": "concentrated_host_and_storage_pass_remaining_gates_in_progress",
-    "co14Status": "development_preparation_complete_qualification_and_rc_deferred",
-    "newRegressionCasesAuthoredWithoutExecution": true,
-    "callLinkLegacyTtsLimit": "1024 retained, not covered by realtime v2 capacity evidence",
-    "testsExecutedForTheseUpdates": true,
-    "staticChecksExecutedForTheseUpdates": true,
-    "built": false,
-    "deployed": false,
-    "qualificationIssued": false,
-    "historicalAcousticRootCauseEstablished": false,
-    "priorResultsBelowDoNotCoverTheseUpdates": true
+    "recordedAt": "2026-09-29T07:27:10.042Z",
+    "userInstruction": "完成第1组：纯交付材料和任务状态收口",
+    "mode": "documentation_only",
+    "noAdditionalCurrentOptimization": true,
+    "noFunctionalTests": true,
+    "noNewPush": true,
+    "historicalDirectivesDoNotAuthorizeExecution": true
   },
-  "kind": "closeout_evidence_snapshot",
-  "observedAt": "2026-09-26T02:43:31Z",
-  "status": "independent_delivery_ready_device_and_release_pending",
+  "kind": "reconciled_delivery_evidence_snapshot",
+  "observedAt": "2026-09-29T01:39:28.015Z",
+  "status": "documentation_reconciled_affected_ios_accepted_release_pending",
   "remainingWork20260926": {
     "order": "non_test_source_and_handoff_then_concentrated_validation",
     "baseCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
@@ -574,59 +1480,102 @@
     "currentDeviceDecision": "temporarily_unavailable_continue_independent_deliverables"
   },
   "nextCandidatePreparation": {
-    "status": "same_source_qa_built_not_deployed_not_formal_rc",
-    "proposedSourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
-    "proposedSourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
-    "finalRcSourceFrozen": false,
-    "newIosBuildNumber": "2026092601",
-    "newAppAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
-    "newServerImageDigest": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
-    "regressionFilesPlanned": 24,
-    "regressionsExecuted": true,
-    "plans": [
-      "CO11_13_CONCENTRATED_HOST_GATE_20260925.md",
-      "CO11_14_RC_PREFLIGHT_20260925.md"
-    ],
-    "planLocation": "outer workspace plans/wujie-1.0-1.1; not part of the source push"
+    "status": "no_new_candidate_requested",
+    "selectedCandidate": "wujie-co11-qa-a7e7532-2026092902",
+    "selectedSource": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+    "newBuildRequested": false
   },
   "isReleaseManifest": false,
   "testing": {
-    "execution": "concentrated_host_complete_external_gates_pending",
-    "newTestsExecuted": true,
+    "execution": "affected_silent_case_user_accepted_other_original_gates_pending",
+    "newTestsExecuted": false,
     "newModelCalls": 0,
     "newInstallations": 0,
-    "acceptanceWaived": false
+    "fullAcceptanceWaived": false
   },
   "source": {
-    "functionalBaselineCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
-    "functionalBaselineTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
-    "worktreeIsClean": false,
-    "userChangesPreserved": true,
-    "thisBatchRuntimeCodeChanged": true,
+    "testedCommit": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+    "testedTree": "802eb432049cd147c40206fec8b917bcf49b1645",
+    "lastVerifiedPushedCommit": "cc2b0a4203ef73175faf4a747abfa869c687204f",
+    "branch": "wip/r6-s4-batch90-audio-bridge",
+    "pushedCommitRuntimeEqualsTestedCommit": true,
+    "documentationChangesThisBatch": "local_uncommitted_not_pushed",
     "frozenPrivate10Commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
     "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
-    "buildWorktreeWasClean": true
+    "userWipPreserved": true,
+    "worktreeIsClean": false,
+    "buildWorktreeWasClean": true,
+    "thisBatchRuntimeCodeChanged": false
   },
   "modelConfiguration": {
-    "revisionFromPriorEvidence": 1,
-    "silentHash": "c2e409775f697f862f7931e211092418bf779d3fb9a6fae922787f6871c08335",
-    "spokenHash": "fb93c85476d7e6281d993c60b14771d21074e59de8fb7022b4d4c61dd428fba6",
-    "silentComponents": [
-      "qwen_asr_realtime",
-      "tencent_tmt"
+    "revision": 3,
+    "asr": {
+      "vendor": "qwen",
+      "model": "qwen-audio-3.1-asr-flash-streaming",
+      "protocol": "qwen_audio_streaming",
+      "semanticPunctuation": true,
+      "heartbeat": true
+    },
+    "translation": {
+      "vendor": "tencent",
+      "protocol": "tencent_tmt",
+      "directionalTermRepositoriesRetained": true
+    },
+    "tts": {
+      "vendor": "tencent",
+      "protocol": "tencent_tts_ws",
+      "volume": 4
+    },
+    "qualifications": [
+      {
+        "mode": "silent",
+        "configurationHash": "9c546b4ee725386d9b6ed63f3a743ec6343fd9d000eb651cc1a9731c38a056fb",
+        "observedAt": "2026-09-29T01:37:17.178Z",
+        "expiresAt": "2026-09-30T01:36:17.178Z",
+        "languagePairs": [
+          "zh:en",
+          "en:zh",
+          "ja:zh",
+          "fr:zh"
+        ],
+        "sourceCommit": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+        "textLanguageProducer": "apple_nl_text_v1_mac_host",
+        "deviceVerified": false,
+        "consumedSeconds": 29,
+        "ledgerCount": 1,
+        "attemptCounts": {
+          "asr": 1,
+          "translation": 4
+        },
+        "pcmBytes": 0
+      },
+      {
+        "mode": "spoken",
+        "configurationHash": "dad910e378ca635c8cc63122bf7a8edbc11782834f2e71d2662544642cf3b06f",
+        "observedAt": "2026-09-29T01:38:25.375Z",
+        "expiresAt": "2026-09-30T01:37:25.375Z",
+        "languagePairs": [
+          "zh:en",
+          "en:zh",
+          "ja:zh",
+          "fr:zh"
+        ],
+        "sourceCommit": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+        "textLanguageProducer": "apple_nl_text_v1_mac_host",
+        "deviceVerified": false,
+        "consumedSeconds": 29,
+        "ledgerCount": 1,
+        "attemptCounts": {
+          "asr": 1,
+          "translation": 4,
+          "tts": 4
+        },
+        "pcmBytes": 545600
+      }
     ],
-    "spokenAdditionalComponent": "tencent_tts_ws",
-    "silentQualificationEvidence": "prior_live_qualified_sample",
-    "silentQualificationExpiresAt": "2026-09-26T15:21:17.794Z",
-    "silentQualifiedPairsFromReceipt": [
-      "zh:en",
-      "en:zh",
-      "ja:zh",
-      "fr:zh"
-    ],
-    "spokenQualificationEvidence": "pending_for_exact_qa_configuration",
-    "qualificationRenewedThisBatch": false,
-    "credentialValuesIncluded": false
+    "allSupplierModelsLiveQualified": false,
+    "currentLiveReadiness": "NOT_REPROBED_IN_DOCUMENTATION_BATCH",
+    "credentialsIncluded": false
   },
   "diagnosticCandidate": {
     "sourceCommit": "32828a5124158a042aed87ed002bc83ae3ba735b",
@@ -635,19 +1584,19 @@
     "includedInFormalRc": false
   },
   "release": {
-    "decision": "blocked",
-    "grayPercent": 0,
+    "accepted": false,
+    "formalChannelDecided": false,
+    "mergedMain": false,
+    "grayReleaseExecuted": false,
     "observation72hStarted": false,
-    "historicalHoldsDisposition": "14_test_debt_records_explicitly_accepted_without_ledger_changes",
-    "historicalHoldsResolved": false,
-    "historicalHoldsReferenceListSha256": "9af3714db17981eac54ed6e3deb5bd74b9994a92fa169f059c4b4acc1937b723",
-    "androidIdentityAndSigning": "pending",
-    "formalDistributionChannel": "pending",
-    "testPauseIsAcceptanceWaiver": false,
+    "rollbackAcceptance": "pending_for_exact_formal_target_or_safe_stop",
+    "originalPublic045DatabaseReprobed": false,
+    "scopeNotSilentlyReduced": true,
+    "historicalHoldsDisposition": "user_accepted_test_debt_no_ledger_changes",
     "pushPerformedThisBatch": false,
     "rollbackPolicy": "schema_compatible_verified_candidate_or_safe_stop_no_private10_fallback"
   },
-  "updatedAt": "2026-09-26T05:28:08.840Z",
+  "updatedAt": "2026-09-29T07:27:10.042Z",
   "completedCallLinkSource": {
     "date": "2026-09-26",
     "taskId": "CO11-11",
@@ -668,80 +1617,46 @@
     "handoff": "CALL_LINK_COMPATIBILITY.md"
   },
   "previouslyInstalledIosQa": {
-    "candidateId": "wujie-co11-qa-e951519-2026092510",
-    "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
-    "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
-    "bundleId": "cn.qkxy.wujieai.public",
-    "version": "1.1.0",
-    "buildNumber": "2026092510",
-    "buildMode": "profile",
-    "productProfile": "full",
-    "signingClass": "apple_development",
-    "publicDeploymentId": "wujie-co11-qa-54026e7",
-    "iosLocalProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
-    "appAggregateSha256": "df819f28da2d5e998d823ff7fe602ed78d9e2a99d8cc21a24eac1225a727be44",
-    "manifestReadThisBatch": true,
-    "appRehashedThisBatch": false,
-    "installEvidence": "prior_device_install_and_visible_launch_pass",
-    "formalDeviceAcceptance": "pending",
-    "stableArtifactArchive": "pending_selected_candidate_currently_in_temporary_worktree"
+    "sourceCommit": "0118b8fd439b329dd11bca5838e7e9631353091b",
+    "build": "2026092901",
+    "classification": "retained_previous_candidate_not_current"
   },
   "previouslyRunningServerQa": {
-    "deploymentId": "wujie-co11-qa-54026e7",
-    "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
-    "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
-    "imageId": "sha256:89578d94e065828a6bb8c510d9e426758ffc86c7eff4efabf26fec19db350213",
-    "idleEnvironmentHash": "e5f9c13d3b9a28580205b9b07005c110908ff98b0f15566f524620b74c9ebcd4",
-    "identityReadThisBatch": true,
-    "schemaFromPriorStartupEvidence": 47,
-    "publicRuntimeEnabled": false,
-    "acceptNewSessions": false,
-    "deviceSpeakerEnabled": false,
-    "deploymentClass": "isolated_lan_qa",
-    "productionDeploymentPerformedThisBatch": false
+    "sourceCommit": "0118b8fd439b329dd11bca5838e7e9631353091b",
+    "imageId": "sha256:6b3af20ee6129490c0be4a16b271907a8b33b246ddb88ccd195a5643eade9521",
+    "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-a7e7532",
+    "classification": "retained_previous_candidate_not_current"
   },
   "builtIosQa": {
-    "candidateId": "wujie-co11-qa-9bdee68-2026092601",
-    "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
-    "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
-    "bundleId": "cn.qkxy.wujieai.public",
+    "candidateId": "wujie-co11-qa-a7e7532-2026092902",
+    "build": "2026092902",
     "version": "1.1.0",
-    "buildNumber": "2026092601",
+    "bundleId": "cn.qkxy.wujieai.public",
     "buildMode": "profile",
     "productProfile": "full",
-    "publicDeploymentId": "wujie-co11-qa-54026e7",
-    "iosLocalProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
-    "deviceSpeaker": {
-      "enabledInCandidate": true,
-      "requiresServerRollout": true,
-      "anonymousOnly": true,
-      "maxSpeakers": 4,
-      "profile": "sortformer_v2_1_fastest",
-      "revision": "ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1"
-    },
-    "serverBaseUrl": "https://192.168.1.146:13522",
-    "language": {
-      "source": "auto",
-      "target": "zh",
-      "autoReverse": true,
-      "automaticPair": "zh,en"
-    },
-    "appAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
-    "appAggregateHashAlgorithm": "sha256-relative-regular-files-v1",
-    "signingClass": "apple_development",
-    "signatureVerified": true,
-    "actualSevenLocalDefinesMatched": true,
-    "matchingRunnerAndAppSymbolsArchived": true,
-    "stableArtifactArchive": "artifacts/releases/wujie-co11-qa-9bdee68-2026092601",
-    "installed": false
+    "localProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
+    "appAggregateSha256": "6e66c6777071683b0669e5e8b0a270c81b2c2b9b505aecef46422cf6637c2e98",
+    "symbolManifestSha256": "e472f23d678e62cbe5319e075f5fb8de4715868b001b660660c3789099d345f7",
+    "signingClass": "Apple Development; registered-device QA, not store distribution",
+    "archive": "artifacts/releases/wujie-co11-qa-a7e7532-2026092902",
+    "installedEvidence": true,
+    "fullIOSMatrixAccepted": false
   },
   "builtServerQa": {
-    "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
-    "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
-    "image": "ai-phone-server:wujie-co11-qa-9bdee68",
-    "imageId": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
-    "keyCompiledFilesMatchHost": 6,
-    "deployed": false
+    "deploymentId": "wujie-co11-qa-54026e7",
+    "class": "isolated_lan_qa",
+    "sourceCommit": "a7e7532751f96292a29ff0f9fbc6584e95f754a5",
+    "sourceTree": "802eb432049cd147c40206fec8b917bcf49b1645",
+    "imageId": "sha256:69cf64575e46eed8900f93893e9a26c1a9d96a35b421133ff8e6ab60f9f98a2d",
+    "configSha256": "907e0d2ccce11f24eb389de45d20f51258492e6637e3463883721ed57df66c7a",
+    "schema": 47,
+    "recordedAt": "2026-09-29T01:39:28.015Z",
+    "entryOpenAtRecordedCheck": true,
+    "qaOneShotGuardEnabled": false,
+    "bootstrapEnabled": false,
+    "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-a7e7532",
+    "rollbackSourceCommit": "0118b8fd439b329dd11bca5838e7e9631353091b",
+    "rollbackIsRetainedAssetNotFormalAcceptance": true
   },
   "previousStaticDocumentValidation": {
     "co11TaskCount": 18,
@@ -756,12 +1671,44 @@
     "newTestsRun": 0
   },
   "remainingAcceptanceGates": [
-    "uncontaminated acoustic sentence/silence evidence",
-    "two-speaker device quality",
-    "active Gateway/Provider restart and safe-stop evidence",
-    "exact same-candidate silent/spoken qualification",
-    "iOS then Android full device acceptance",
-    "Android public identity/signing input",
-    "formal release/gray scope and 72-hour observation"
+    {
+      "id": "ios_remaining_acceptance",
+      "title": "iOS原计划剩余验收归档",
+      "status": "pending",
+      "taskIds": [
+        "CO11-05",
+        "CO11-07",
+        "CO11-09",
+        "CO11-15"
+      ],
+      "policy": "先核可复用旧证据，不重开已签收当前效果优化或20秒安静尾段"
+    },
+    {
+      "id": "android_delivery",
+      "title": "Android交付与验收",
+      "status": "pending_external_inputs_and_platform_compatibility",
+      "taskIds": [
+        "CO11-12",
+        "CO11-16"
+      ]
+    },
+    {
+      "id": "call_link_duplex",
+      "title": "原Call Link白名单真实双端闭环",
+      "status": "pending",
+      "taskIds": [
+        "CO11-11",
+        "CO11-16"
+      ],
+      "policy": "原独立1.1兼容Worker，不扩展隐藏或延期业务"
+    },
+    {
+      "id": "formal_release",
+      "title": "正式发行、回退、灰度和72小时观察",
+      "status": "pending",
+      "taskIds": [
+        "CO11-18"
+      ]
+    }
   ]
 }
