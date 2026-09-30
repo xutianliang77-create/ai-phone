@@ -4,12 +4,13 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { nativeAudioSnapshot, nativeAudioSuites, validateNativeAudioReport } from './ios_native_audio_gate.mjs';
+import { nativeAudioSnapshot, nativeAudioSuites, nativeAudioWiringChecks, checkNativeAudioWiring, validateNativeAudioReport } from './ios_native_audio_gate.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const read=p=>readFileSync(path.join(root,p),'utf8'),compact=p=>read(p).replace(/\s+/g,'');
 const expected={...nativeAudioSnapshot(root),sourceState:'clean'};
 function valid(){return {schemaVersion:1,status:'HOST_PASS',platform:'darwin',usesMicrophone:false,modelCalls:0,
+ wiring:nativeAudioWiringChecks.map(([id])=>id),
  before:structuredClone(expected),after:structuredClone(expected),
  suites:nativeAudioSuites.map(s=>({id:s.id,compile:{exitCode:0,signal:null,error:null},run:{exitCode:0,signal:null,error:null}}))};}
 
@@ -23,6 +24,7 @@ describe('iOS native audio mandatory gate',()=>{
    dirty:r=>{r.before.sourceState='dirty';},oldCommit:r=>{r.before.sourceCommit='0'.repeat(40);},oldTree:r=>{r.after.sourceTree='0'.repeat(40);},
    changed:r=>{r.after.inputHash='0'.repeat(64);},wrongFiles:r=>{r.before.files=[];},skipped:r=>{r.suites.pop();},
    duplicate:r=>{r.suites[1]=r.suites[0];},compile:r=>{r.suites[0].compile.exitCode=1;},
+   missingWiring:r=>{r.wiring=[];},
    run:r=>{r.suites[0].run.exitCode=1;},signal:r=>{r.suites[0].run.signal='SIGTERM';},spawn:r=>{r.suites[0].compile.error='ENOENT';},
  };
  for(const[name,mutate]of Object.entries(mutations))it('rejects '+name+' evidence',()=>{
@@ -58,6 +60,7 @@ describe('iOS native audio mandatory gate',()=>{
    expect(JSON.parse(read('package.json')).scripts['check:ios-native-audio']).toBe('node scripts/check_ios_native_audio.mjs');
  });
  it('retains the production call sites that previously regressed',()=>{
+   expect(checkNativeAudioWiring(read)).toHaveLength(10);
    const input=compact('apps/mobile/ios/Runner/CoreMlNemotronAudioInput.swift');
    expect(input).toContain('guardstate.graphReadyForResume');
    expect(input).toContain('referenceBound:pcmPlayback!=nil&&(renderTap?.installed??true)');
@@ -73,5 +76,14 @@ describe('iOS native audio mandatory gate',()=>{
    expect(playback.split('if PcmPlaybackBoundary.shouldStopBeforePlay')[0]).not.toContain('stop()');
    expect(read('apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_audio_input.dart'))
      .toMatch(/if \(frame\.startsSegment[\s\S]{0,160}_stopSpeaking\(\)/);
+ });
+ it('rejects call-site regressions even when the standalone helpers still pass',()=>{
+   const cases=[
+     ['CoreMlNemotronAudioInput.swift','guard state.graphReadyForResume','guard state.ready'],
+     ['PcmRenderTap.swift','sampleTime:sampleTime','sampleTime:nil'],
+     ['PcmRenderReference.swift','at:stamp.hostTime','at:hostTime'],
+     ['SpeechOutputBridge.swift','if PcmPlaybackBoundary.shouldStopBeforePlay','stop()\n        if PcmPlaybackBoundary.shouldStopBeforePlay'],
+   ];
+   for(const[file,from,to]of cases)expect(()=>checkNativeAudioWiring(p=>p.endsWith(file)?read(p).replace(from,to):read(p))).toThrow();
  });
 });

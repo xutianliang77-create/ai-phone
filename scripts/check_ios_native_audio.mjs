@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { mkdtempSync, mkdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { nativeAudioSnapshot, nativeAudioSuites } from './lib/ios_native_audio_gate.mjs';
+import { nativeAudioSnapshot, nativeAudioSuites, checkNativeAudioWiring } from './lib/ios_native_audio_gate.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const args=process.argv.slice(2);
@@ -22,6 +22,7 @@ function succeeded(r){return r.exitCode===0&&!r.signal&&!r.error;}
 try {
   if(process.platform!=='darwin')throw Error('macOS with Xcode is required; unsupported hosts do not count as PASS');
   report.before=nativeAudioSnapshot(root);
+  report.wiring=checkNativeAudioWiring(p=>readFileSync(path.join(root,p),'utf8'));
   const sdk=run('xcrun',['--sdk','macosx','--show-sdk-path']);
   if(!succeeded(sdk))throw Error('macOS SDK unavailable');
   report.sdk=sdk.stdout.trim();

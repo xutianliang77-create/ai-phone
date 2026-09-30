@@ -22,6 +22,26 @@ export const nativeAudioInputs = [...new Set([
   'scripts/check_ios_native_audio.mjs','scripts/lib/ios_native_audio_gate.mjs',
 ])].sort();
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
+export const nativeAudioWiringChecks = [
+  ['resume-graph',ios+'CoreMlNemotronAudioInput.swift','guardstate.graphReadyForResume'],
+  ['reference-installed',ios+'CoreMlNemotronAudioInput.swift','referenceBound:pcmPlayback!=nil&&(renderTap?.installed??true)'],
+  ['input-clock-separate',ios+'CoreMlNemotronAudioInput.swift','inputClockReady:renderTap?.ready??true'],
+  ['first-real-pcm',ios+'PublicPcmCaptureBridge.swift','ifself.pendingStart!=nil,letinput=self.input,input.pcmReadiness.ready'],
+  ['valid-render-time',ios+'PcmRenderTap.swift','time.isSampleTimeValid&&time.sampleRate==rate?time.sampleTime:nil'],
+  ['render-time-forwarded',ios+'PcmRenderTap.swift','generation:self.generation,sampleTime:sampleTime'],
+  ['render-time-consumed',ios+'PcmRenderReference.swift','clock.position(at:stamp.hostTime,sampleRate:captureRate)'],
+  ['echo-aware-onset',ios+'AppleOnlineEndpointSession.swift','speechStartAllowed:echoDecision.speechStartAllowed'],
+  ['no-normal-chunk-stop',ios+'SpeechOutputBridge.swift','ifPcmPlaybackBoundary.shouldStopBeforePlay'],
+  ['dart-barge-stop','apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_audio_input.dart',
+    'if(frame.startsSegment&&(_speechCaptureGate.isPlaying||_publicAudioRevisionBySegment.isNotEmpty))unawaited(_stopSpeaking());'],
+];
+export function checkNativeAudioWiring(readSource) {
+  const source=p=>readSource(p).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g,'').replace(/\s+/g,'');
+  for(const[id,file,token]of nativeAudioWiringChecks)if(!source(file).includes(token))throw Error('native audio wiring changed: '+id);
+  const play=source(ios+'SpeechOutputBridge.swift').split('privatefuncplayPcm(')[1];
+  if(!play||play.split('ifPcmPlaybackBoundary.shouldStopBeforePlay')[0].includes('stop()'))throw Error('unconditional playback reset');
+  return nativeAudioWiringChecks.map(([id])=>id);
+}
 export function nativeAudioSnapshot(root) {
   const git = (...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
   const files = nativeAudioInputs.map(p=>[p,sha256(readFileSync(path.join(root,p)))]);
@@ -32,6 +52,7 @@ export function nativeAudioSnapshot(root) {
 export function validateNativeAudioReport(report, expected) {
   const fail = why=>{throw Error('iOS native audio gate: '+why);};
   if(report.schemaVersion!==1||report.status!=='HOST_PASS'||report.platform!=='darwin'||report.usesMicrophone!==false||report.modelCalls!==0)fail('successful offline macOS receipt required');
+  if(JSON.stringify(report.wiring)!==JSON.stringify(nativeAudioWiringChecks.map(([id])=>id)))fail('production wiring checks required');
   if(!/^[a-f0-9]{40}$/.test(expected.sourceCommit??'')||!/^[a-f0-9]{40}$/.test(expected.sourceTree??''))fail('source identity required');
   for(const snapshot of [report.before,report.after]) {
     if(!snapshot||snapshot.sourceCommit!==expected.sourceCommit||snapshot.sourceTree!==expected.sourceTree||snapshot.sourceState!=='clean'||
