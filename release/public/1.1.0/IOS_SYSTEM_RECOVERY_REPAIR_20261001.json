@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "status": "SOURCE_HOST_REPAIR_PUSHED_DEVICE_ACCEPTANCE_PAUSED",
+  "sourceCommit": "c75159b10839099919d48b1fbd8e03aca4bffeab",
+  "sourceTree": "d14c13d8de1ab15a974c2813e0ca5e70587865c9",
+  "testedFromBaseCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+  "sourceBinding": "Every committed repair file SHA256 matches the recorded tested input; no rebuild for push",
+  "repairFiles": [
+    {
+      "path": "apps/mobile/ios/Runner/AppleOnlineEndpointSession.swift",
+      "sha256": "3b2b7382298fd1f940e4ca0454dd5fd5215b1b9fdc343215405143f7afa2c91e"
+    },
+    {
+      "path": "apps/mobile/ios/Runner/AppleSpeechAsrBridge.swift",
+      "sha256": "b6c16de24e54bd8d37852efc57bd275899c18ef8f406017ddc0dc0c3268f19b4"
+    },
+    {
+      "path": "apps/mobile/ios/Runner/AppleSpeechInputQueue.swift",
+      "sha256": "f13743bf486f2acbbf2cc6e1b30fae81dfee3fb0a9795eaeab9dd409e048cf0a"
+    },
+    {
+      "path": "apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller.dart",
+      "sha256": "a10f05343e84ec676bad8bf5cccd3f2f5da4d421a31217a48841dc2f330673ef"
+    },
+    {
+      "path": "apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_lifecycle.dart",
+      "sha256": "9d3d0af7be6385ba6bf69e1c9e7197df020670b48c86cc6f18a8730140038d26"
+    },
+    {
+      "path": "apps/mobile/lib/src/features/realtime/presentation/pages/realtime_page.dart",
+      "sha256": "33a497325c6a9c15dbf6068d52f7e2e2b61e07f88c009bf52a5ef3cd3dbc0fc6"
+    },
+    {
+      "path": "apps/mobile/test/realtime_controller_lifecycle_failure_test.dart",
+      "sha256": "994947fc5f3f9f4d61e64bac0dcb769e4cf1d91d8716df85544022010a6f5342"
+    },
+    {
+      "path": "scripts/lib/ios_native_audio_gate.mjs",
+      "sha256": "fda7e357936ba4b63b35c51d239767082b87afbb2cb3f51c076fea1412697435"
+    },
+    {
+      "path": "scripts/lib/ios_native_audio_gate.test.mjs",
+      "sha256": "1af0f09815777da622acc1cb4f1fe64686204b5afbde96c90f0fbd98cc4a171d"
+    },
+    {
+      "path": "scripts/tests/apple_speech_input_queue_test.swift",
+      "sha256": "76abd5f6c7be9133201fb33236987b1ba3277c6224f6ef38730b9ec825c30406"
+    },
+    {
+      "path": "services/realtime-gateway/src/asr/qwen-audio-streaming-client.test.ts",
+      "sha256": "d8a2cf2c1579b5839433ea182f6aa39f8905e158a2b741b72cc2de48bb583f17"
+    },
+    {
+      "path": "services/realtime-gateway/src/asr/qwen-audio-streaming-client.ts",
+      "sha256": "dc77efb5cc50d61d446d8eed4426ce865aa2e1ec2297f46412b4b301994cde1a"
+    },
+    {
+      "path": "services/realtime-gateway/src/connection/device-text-language.test.ts",
+      "sha256": "db9ba21e3878616bf3566ffa5375a73f0f189f69bf920849c9e1f332aba0fd3e"
+    },
+    {
+      "path": "services/realtime-gateway/src/connection/device-text-language.ts",
+      "sha256": "366add3ee5d103121cc5c7d90aaa2360e96224bd881e21e650f839d66e340da6"
+    }
+  ],
+  "passed": {
+    "flutter": 81,
+    "gateway": 69,
+    "script": 22,
+    "nativeSuites": 8,
+    "nativeWiring": 15,
+    "iosArm64Typecheck": true,
+    "typescriptTypecheck": true
+  },
+  "red": [
+    {
+      "label": "system-lifecycle-red",
+      "exitCode": 1,
+      "logSha256": "1f7d8fb6764f32340f3af1ea127dddb533c8a24433ab23ca54477931007bc0be"
+    },
+    {
+      "label": "system-late-resume-red",
+      "exitCode": 1,
+      "logSha256": "17a1c8a1f5b582c721edb98fec787b17ac400591533747efca42e59c2731263e"
+    },
+    {
+      "label": "system-preview-red",
+      "exitCode": 1,
+      "logSha256": "f32152712a5dc3136a72484c54138c56f091c6002b932686242add66341df43e"
+    }
+  ],
+  "checks": [
+    {
+      "label": "system-controller-expanded-final",
+      "exitCode": 0,
+      "logSha256": "cc05ca325bba5029d56e9067dc9f222a38b8366c2c82774ec1a56113388505d4"
+    },
+    {
+      "label": "system-final-regression-ts",
+      "exitCode": 0,
+      "logSha256": "a59f6ab0708f39b83c10da78e2c360ca142035074092cc7e515121060765f7a4"
+    },
+    {
+      "label": "system-final-script-gate",
+      "exitCode": 0,
+      "logSha256": "eeef81e08bc74f156a054a2d6ac61eed4da383f358f45a897833440c13cb0f73"
+    },
+    {
+      "label": "system-final-ts-typecheck",
+      "exitCode": 0,
+      "logSha256": "059d59ff1d13b72e88206e8610cf257a2593dba272aac477956f18364a8741db"
+    },
+    {
+      "label": "system-controller-analyze-final",
+      "exitCode": 0,
+      "logSha256": "849b215ee0a5f14b6bb5910f280984b245028e114fd44ee55801c69576519236"
+    },
+    {
+      "label": "system-dart-page-direct",
+      "exitCode": 0,
+      "logSha256": "c9c3e1b0ca98f9813a2ade4415e0ec9141b516b365829aa037ce102e37cc5060"
+    },
+    {
+      "label": "system-native-exact-replay",
+      "exitCode": 0,
+      "logSha256": "9b51317da8027a3fa6105ff071af4e9ac08135f54e0ce06df45951c8577fc7d4"
+    },
+    {
+      "label": "system-ios-typecheck",
+      "exitCode": 0,
+      "logSha256": "7cf7fefcfac24889ec012c3ffc952201df7fe9acdc87ac95da96cdd0e94082f6"
+    }
+  ],
+  "fullCiPassed": false,
+  "knownGlobalGate": {
+    "exitCode": 1,
+    "unchangedFiles": [
+      "services/realtime-gateway/src/connection/websocket-server.ts",
+      "services/realtime-gateway/src/providers/lmstudio/lmstudio-realtime-provider.ts"
+    ]
+  },
+  "staticAnalysis": {
+    "flutterLspInitialExit": 255,
+    "directDartExit": 0,
+    "preexistingStyleInfos": 2
+  },
+  "installedCandidate": {
+    "commit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+    "build": "2026100103",
+    "repairInstalled": false
+  },
+  "newLiveQualification": false,
+  "deployed": false,
+  "deviceVerified": false,
+  "deviceAcceptancePausedByUser": true,
+  "modelConfigurationChanged": false,
+  "vadThresholdsChanged": false,
+  "rawAudioIncluded": false,
+  "credentialsIncluded": false,
+  "localEvidenceReference": "artifacts/closeout-regression/20261001-ios-system-0103/VERIFICATION.json"
+}

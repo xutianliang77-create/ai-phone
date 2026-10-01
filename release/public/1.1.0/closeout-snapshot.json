@@ -1,80 +1,122 @@
 {
   "historicalCheckpointPolicy": "currentDelivery and refreshed undated fields are authoritative. All dated 20260926-28 checkpoints, finalConcentratedCheckpoint and previousStaticDocumentValidation retain their original source/date; do not dispatch new work or claim current state from them.",
   "currentDelivery": {
-    "reconciledAt": "2026-09-30T15:47:11Z",
-    "status": "current_qa_route_false_asr_confirmed_ui_fix_host_pass_not_packaged",
+    "reconciledAt": "2026-10-01T05:00:15.855Z",
+    "status": "system_repair_source_pushed_device_acceptance_paused",
+    "latestSystemRepair20261001": {
+      "status": "SOURCE_HOST_REPAIRED_DEVICE_RETEST_PAUSED_BY_USER",
+      "at": "2026-10-01T04:49:54.393Z",
+      "baseCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+      "installedBuild": "2026100103",
+      "evidence": "artifacts/closeout-regression/20261001-ios-system-0103/VERIFICATION.json",
+      "userPausedDeviceAcceptance": true,
+      "defects": [
+        "pause/resume concurrency and late old-session failure",
+        "missing cumulative audio offset after capture restart",
+        "raw ASR preview bypassed speech evidence"
+      ],
+      "affectedTasks": [
+        "CO11-04",
+        "CO11-05",
+        "CO11-07",
+        "CO11-15"
+      ],
+      "host": {
+        "flutter": 81,
+        "gateway": 69,
+        "script": 22,
+        "nativeSuites": 8,
+        "nativeWiring": 15,
+        "iosTargetTypecheck": true
+      },
+      "newCandidateBuilt": false,
+      "deployed": false,
+      "deviceVerified": false,
+      "priorScopedAcceptancesPreserved": true,
+      "protectedCommit": "c75159b10839099919d48b1fbd8e03aca4bffeab",
+      "protectedTree": "d14c13d8de1ab15a974c2813e0ca5e70587865c9",
+      "sourcePushed": true,
+      "portableEvidence": "release/public/1.1.0/IOS_SYSTEM_RECOVERY_REPAIR_20261001.json"
+    },
     "authority": "Current scenario-scoped summary; dated historical checkpoints are retained, not current instructions.",
     "evidencePathBase": "outer_workspace",
     "documentationOnly": false,
-    "liveServicesReprobedThisBatch": false,
+    "liveServicesReprobedThisBatch": true,
     "actionsThisBatch": {
-      "runtimeEdits": true,
-      "runtimeEditScope": "Mobile scan overlay visibility/state and resource explanations only; native audio/model/provider unchanged",
-      "functionalTests": true,
+      "runtimeEdits": false,
+      "runtimeEditScope": "Freeze and push already-tested repair; installed candidate and frozen private 1.0 unchanged",
+      "functionalTests": false,
       "builds": false,
-      "hostDiagnosticCompile": true,
-      "deviceOperations": "Inspected existing data/UI; temporary target es restored to en; mirror exited",
+      "hostDiagnosticCompile": false,
+      "deviceOperations": "None; device acceptance remains paused by user",
       "deployments": false,
       "modelCalls": 0,
+      "modelCallCountBasis": "No model call during source push",
       "databaseChanges": false,
+      "databaseChangeScope": "No database operation",
       "commit": true,
-      "push": false
+      "push": true
     },
     "source": {
-      "testedCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
-      "testedTree": "333464e16b1317a061867c2be934cc06841fe939",
-      "lastVerifiedPushedCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+      "testedCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+      "testedTree": "983eba64dad1ab6ffea0ff7abb9eaeda359e87ac",
+      "lastVerifiedPushedCommit": "c75159b10839099919d48b1fbd8e03aca4bffeab",
       "branch": "wip/r6-s4-batch90-audio-bridge",
       "pushedCommitRuntimeEqualsTestedCommit": false,
-      "documentationChangesThisBatch": "included_in_this_documentation_checkpoint",
+      "documentationChangesThisBatch": "source-bound repair handoff; no runtime or device changes",
       "frozenPrivate10Commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
       "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
       "userWipPreserved": true,
-      "localCodeCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+      "localCodeCommit": "c75159b10839099919d48b1fbd8e03aca4bffeab",
       "codeCommitPushed": true,
-      "localCodeTree": "e211f3fdf0f498eedbb9d2e314898f78da59ecb9",
-      "hardeningRuntimeEqualsTestedCommit": true,
+      "localCodeTree": "d14c13d8de1ab15a974c2813e0ca5e70587865c9",
+      "hardeningRuntimeEqualsTestedCommit": false,
       "hardeningScope": "Regression tests, source-bound build gate, CI and acceptance baseline; runtime directories unchanged",
       "localCodeRuntimeEqualsTestedCommit": false,
-      "localCodeState": "UI_SOURCE_HOST_PASS_NOT_PACKAGED",
+      "localCodeState": "SOURCE_HOST_REPAIR_PUSHED_DEVICE_TESTS_PAUSED",
       "hardeningCommit": "2cff2a9dc54ce44f27bd086b3734b1cf6160a9bc",
-      "pushVerification": "2026-10-01 git push succeeded and ls-remote matched c12ca45 before documentation checkpoint",
-      "lastVerifiedPushedCommitScope": "product and regression source; this documentation checkpoint is a descendant"
+      "pushVerification": "2026-10-01 git push succeeded and ls-remote matched c75159b; installed candidate remains cc55707/0103",
+      "lastVerifiedPushedCommitScope": "runtime and regression source commit; delivery documentation is a descendant",
+      "hardeningComparisonNote": "Hardening commit itself keeps 25f runtime; current candidate additionally includes the c12 UI changes.",
+      "workingTreeHasUncommittedRuntimeRepair": false
     },
     "ios": {
-      "candidateId": "wujie-co11-qa-25f3eb3-2026093008",
-      "build": "2026093008",
+      "candidateId": "wujie-co11-qa-cc55707-2026100103",
+      "build": "2026100103",
       "version": "1.1.0",
       "bundleId": "cn.qkxy.wujieai.public",
       "buildMode": "profile",
       "productProfile": "full",
       "localProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
-      "appAggregateSha256": "1aac277428ec0bbd68de59a7aa16225ce3c58acfeefc6c821795b8cc0edd79e9",
-      "symbolManifestSha256": "5110dc6cad2f9e9508cc6a520642a9689161a6f6cf26d70edf2ea3cff9e64b99",
+      "appAggregateSha256": "6b4e61b2eb881b6b82a6711ae1a81bae1d0c4d044ba75f4b549cf8fa9d26b39a",
+      "symbolManifestSha256": "54058e415c213bf7fdcb104b8fccccf3da3dec71017309ebf36a648690cad585",
       "signingClass": "Apple Development; registered-device QA, not store distribution",
-      "archive": "artifacts/releases/wujie-co11-qa-25f3eb3-2026093008",
+      "archive": "artifacts/releases/wujie-co11-qa-cc55707-2026100103",
       "installedEvidence": true,
       "fullIOSMatrixAccepted": false,
       "launchedEvidence": true,
-      "uiAccepted": true,
-      "candidateManifestSha256": "3fb83f9331be2a9cc0986a58af725497e3376464abff14c8b590d6fe35f4fed2"
+      "uiAccepted": false,
+      "candidateManifestSha256": "2279f387f9c43a8dc9edbffe68d96ad93e9b9642a848a1289157087546d7936f",
+      "affectedUiScope": "Prior0101 scan/resource UI retained; current audio effect accepted by user self-test",
+      "deviceSelfTestAccepted": true,
+      "deviceAcceptanceEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json"
     },
     "deployment": {
       "deploymentId": "wujie-co11-qa-54026e7",
       "class": "isolated_lan_qa",
-      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
-      "sourceTree": "333464e16b1317a061867c2be934cc06841fe939",
-      "imageId": "sha256:9273bb7f192dcc985f91476424157df47e0549cfd881d6ce553204642b7225b2",
-      "configSha256": "6a9d758eefee6085002655a6b1d920198397aee61d2e6693d748ce01075a4881",
+      "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+      "sourceTree": "983eba64dad1ab6ffea0ff7abb9eaeda359e87ac",
+      "imageId": "sha256:fe3502fd3296dd6b369130a39c91a06faed4b0355d2f1f32cb56df14a19cc007",
+      "configSha256": "17870b8bbfc809708bca07f738f1b019a064069073c7fc0e369a865c31ede22e",
       "schema": 47,
-      "recordedAt": "2026-09-30T12:57:50.525Z",
+      "recordedAt": "2026-10-01T03:32:24.433Z",
       "entryOpenAtRecordedCheck": true,
       "qaOneShotGuardEnabled": false,
       "bootstrapEnabled": false,
-      "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-25f3eb3",
-      "rollbackSourceCommit": "476537d515f243ddcb79a2b80693bdd667e2411f",
+      "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-cc55707",
+      "rollbackSourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
       "rollbackIsRetainedAssetNotFormalAcceptance": true,
-      "lastReadOnlyHealthProbeAt": "2026-09-30T14:15:23.478Z",
+      "lastReadOnlyHealthProbeAt": "2026-10-01T03:55:31.295Z",
       "activeConnectionsAtLastProbe": 0
     },
     "models": {
@@ -99,10 +141,10 @@
       "qualifications": [
         {
           "mode": "silent",
-          "sessionId": "public-1bd02e19ccc6b40ede3ee2e9d1a3501e9f13be60775ec8e45aa8c69a5e6d72ab",
+          "sessionId": "public-d561a87c121751234244ecbea3b40661a89cc1cac83e9a79a10c84d3e5eec5e6",
           "configurationHash": "9c546b4ee725386d9b6ed63f3a743ec6343fd9d000eb651cc1a9731c38a056fb",
-          "observedAt": "2026-09-30T12:44:46.693Z",
-          "expiresAt": "2026-10-01T12:43:46.693Z",
+          "observedAt": "2026-10-01T03:26:22.691Z",
+          "expiresAt": "2026-10-02T03:25:22.691Z",
           "attemptCounts": {
             "asr": 1,
             "translation": 4
@@ -112,7 +154,7 @@
           "consumedSeconds": 29,
           "deviceVerified": false,
           "textLanguageProducer": "apple_nl_text_v1_mac_host",
-          "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+          "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
           "languagePairs": [
             "zh:en",
             "en:zh",
@@ -122,10 +164,10 @@
         },
         {
           "mode": "spoken",
-          "sessionId": "public-ef229cc31b05fd09d44dd6951cea692beacb432673ceb8bbf432204cef4ee2cb",
+          "sessionId": "public-aff02a873196bbf09f61a7d9364abb6229305bce22d783176eee60cf8bf8965b",
           "configurationHash": "dad910e378ca635c8cc63122bf7a8edbc11782834f2e71d2662544642cf3b06f",
-          "observedAt": "2026-09-30T12:45:21.799Z",
-          "expiresAt": "2026-10-01T12:44:21.799Z",
+          "observedAt": "2026-10-01T03:27:38.643Z",
+          "expiresAt": "2026-10-02T03:26:38.643Z",
           "attemptCounts": {
             "asr": 1,
             "translation": 4,
@@ -136,7 +178,7 @@
           "consumedSeconds": 29,
           "deviceVerified": false,
           "textLanguageProducer": "apple_nl_text_v1_mac_host",
-          "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+          "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
           "languagePairs": [
             "zh:en",
             "en:zh",
@@ -146,15 +188,16 @@
         }
       ],
       "allSupplierModelsLiveQualified": false,
-      "currentLiveReadiness": "GATEWAY_READY_AT_2026-09-30T14:15:23.478Z; exact source snapshots signed until 2026-10-01T12:43/44Z, not perpetual readiness",
+      "currentLiveReadiness": "Both new source-bound modes qualified at 2026-10-01T03:32:24.433Z; expiry remains mode-scoped",
       "credentialsIncluded": false
     },
     "hostEvidence": {
       "latestAffectedRegression": {
-        "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
-        "evidence": "artifacts/closeout-regression/20260930-rc-25f3eb3/ROOT_CAUSE_AND_STATUS.md",
-        "iosNativeTypecheck": true,
-        "redOldSourcePreserved": true
+        "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+        "evidence": "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+        "scope": "Public residual echo onset and prior true-barge/quiet cases",
+        "redOldSourcePreserved": true,
+        "iosNativeTypecheck": true
       },
       "hardening": {
         "sourceCommit": "2cff2a9dc54ce44f27bd086b3734b1cf6160a9bc",
@@ -180,21 +223,80 @@
         "testedFilesMatchCommit": true,
         "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
         "fullRepoRegressionClaimed": false
+      },
+      "currentUiReuse": {
+        "sourceCommit": "b990c1a646e765dac20f521946d07cc38cad5c73",
+        "repairCommit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
+        "exactRepairFilesVerified": 6,
+        "passedTests": 112,
+        "testFiles": 14,
+        "newFullRegressionRun": false,
+        "nativeBuildGate": "HOST_PASS",
+        "evidence": "artifacts/closeout-regression/20261001-rc-b990c1a/delivery-verification.json"
+      },
+      "currentVoiceCandidate": {
+        "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+        "build": "2026100102",
+        "fixFilesVerified": 2,
+        "sourceFilesVerified": 3205,
+        "serverFilesVerified": 2157,
+        "nativeSuites": 6,
+        "nativeSourceGate": "HOST_PASS",
+        "fullRegressionRerun": false,
+        "evidence": "artifacts/closeout-regression/20261001-rc-66f57fd/delivery-verification.json",
+        "baselineLineGatePassed": false
+      },
+      "latestEchoResidualRepair": {
+        "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+        "sourceTree": "983eba64dad1ab6ffea0ff7abb9eaeda359e87ac",
+        "status": "DEVICE_USER_ACCEPTED_AFFECTED_SELF_TEST",
+        "evidence": "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+        "nativeSuites": 7,
+        "wiringChecks": 12,
+        "recordedScalarFrames": 528,
+        "flutterPassed": 86,
+        "scriptContractPassed": 41,
+        "gatewayContractPassed": 39,
+        "iosTargetTypecheck": true,
+        "maximumExtraAmbiguousOnsetWindowMs": 256,
+        "realModelCalls": 0,
+        "deployed": true,
+        "installed": true,
+        "deviceVerified": true,
+        "pushed": false,
+        "deviceVerificationKind": "User self-test acceptance with native/history/unique settlement evidence; not independent fixed-case proof",
+        "candidateBuild": "2026100103",
+        "candidateEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/delivery-verification.json",
+        "deviceEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+        "controlledCounterexampleRerun": false,
+        "noFurtherOptimizationThisScope": true
+      },
+      "currentEchoCandidate": {
+        "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+        "build": "2026100103",
+        "testedFixFilesVerified": 8,
+        "sourceFilesVerified": 3209,
+        "serverFilesVerified": 2157,
+        "cleanNativeSuites": 7,
+        "wiringChecks": 12,
+        "inputHash": "94d82afc663b70297a001c070b802e1f9d7d097abe896e3b20244ece7de55ddc",
+        "existingConcentratedEvidenceReused": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-cc55707/delivery-verification.json"
       }
     },
     "device": {
-      "status": "PRIOR_QUIET_BARGE_CASES_RETAINED_POST_BLUETOOTH_FALSE_ASR_CONFIRMED",
-      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
-      "build": "2026093008",
+      "status": "0103_USER_SELF_TEST_ACCEPTED_HISTORY_SETTLEMENT_VERIFIED",
+      "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+      "build": "2026100103",
       "installed": true,
       "launched": true,
-      "uiAccepted": true,
-      "externalSpeakerEchoAccepted": false,
-      "externalSpeakerEchoScope": "Prior exact quiet case retains scoped PASS; Bluetooth-to-speaker case has user-confirmed false content and is not acoustically accepted.",
+      "uiAccepted": false,
+      "externalSpeakerEchoAccepted": true,
+      "externalSpeakerEchoScope": "Current0103 user self-test accepted, not a controlled quiet fixture or universal no-echo proof",
       "bargeInAccepted": true,
       "voiceSwitchRouteRecoveryAccepted": false,
       "historyAndUniqueEndAccepted": true,
-      "historyAndUniqueEndScope": "Exact quiet and real-barge cases, not all historical sessions",
+      "historyAndUniqueEndScope": "Two exact0103 self-test cases; each ended pending0 and unique settlement",
       "fullIOSMatrixAccepted": false,
       "quietCase": {
         "sessionId": "public-a2e89eb793a0a12f6e655fd14d5e2b899d2da9be5920dc8df98abde97e7ab4dd",
@@ -271,6 +373,56 @@
         "jsonContentsMatchPhone": true,
         "overlayUiAccepted": false,
         "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/auxiliary-storage-export.json"
+      },
+      "unchangedAudioEvidenceSource": {
+        "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+        "build": "2026093008",
+        "sourceContentUnchanged": false,
+        "scope": "Historical3008 cases remain historical; cc changes two native paths. Current self-test has separate evidence."
+      },
+      "affectedUi": {
+        "resourcePanel": "DEVICE_PASS",
+        "scanOverlay": "DEVICE_PASS",
+        "scanHistory": "DEVICE_PASS",
+        "userScanAccepted": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-b990c1a/ui-acceptance.json",
+        "sourceCommit": "b990c1a646e765dac20f521946d07cc38cad5c73",
+        "build": "2026100101"
+      },
+      "upgradePreservation": {
+        "realtimeRecords": 111,
+        "auxiliaryRecords": 3,
+        "allFiveFilesByteIdentical": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-cc55707/history-upgrade-verification.json"
+      },
+      "sameSessionVoiceControl": {
+        "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+        "build": "2026100102",
+        "sessionId": "public-f8ec37a0274afdd3c2d375108bffdba32f1c0fa23a92d4e83b93d2c6481b8bb2",
+        "status": "VOICE_CONTROL_PASS_ECHO_FAIL",
+        "sameSession": true,
+        "ttsAttemptsWhileDisabled": 0,
+        "reopenedPlaybackChunks": 7,
+        "reopenedPlaybackAllFinished": true,
+        "phoneServerSegments": 5,
+        "pending": 0,
+        "ledgerCount": 1,
+        "consumedSeconds": 89,
+        "initialPlaybackCancelledByFalseSpeechStart": true,
+        "rawWaveformAvailable": false,
+        "evidence": "artifacts/closeout-regression/20261001-0102-echo-review/ASSESSMENT.json"
+      },
+      "currentSelfTest": {
+        "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+        "build": "2026100103",
+        "userAccepted": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+        "controlledFixturePlayed": false,
+        "originalQuietCounterexampleRerun": false,
+        "sameSessionToggleSeparatelyObserved": false,
+        "prior0102VoiceControlEvidenceRetained": true,
+        "noFurtherTestingThisScope": true,
+        "fullIOSMatrixAccepted": false
       }
     },
     "acceptedObservations": [
@@ -335,7 +487,7 @@
       {
         "id": "ios_remaining_acceptance",
         "title": "iOS原计划剩余验收归档",
-        "status": "in_progress_ordered_steps_1_to_5",
+        "status": "paused_by_user_system_regression_local_repair_complete",
         "taskIds": [
           "CO11-05",
           "CO11-07",
@@ -410,8 +562,8 @@
       },
       {
         "id": "CO11-05",
-        "status": "scoped_spoken_audio_pass_route_false_asr_open",
-        "conclusion": "保留3008原静听/真实插话通过；用户确认HFP切回外放后未发声却出现星巴克，标量重放复现误起点；ASR/VAD阈值未盲改，路由声学不签收。",
+        "status": "source_host_system_repair_pass_device_retest_paused",
+        "conclusion": "0103原自测签收保留；后续系统场景出现回声，确认采音重建后证据时钟偏移遗漏及实时草稿旁路。本地修复回归通过，未新候选/部署，真机复验按用户要求暂停。",
         "remainingIn": [
           "CO11-15"
         ]
@@ -427,8 +579,8 @@
       },
       {
         "id": "CO11-07",
-        "status": "local_zh_en_and_aux_storage_pass_scan_overlay_fix_host_pass",
-        "conclusion": "用户签收本地中英冷启动；输入/扫描保存及JSON逐字段一致。扫描密集策略/滚动覆盖已在c12ca45修复，112定向通过，尚未安装。西语缺的是苹果翻译资源，语音控制包不代替；未下载。",
+        "status": "local_zh_en_aux_storage_scan_and_resource_ui_device_pass_other_scope_pending",
+        "conclusion": "0101同源已安装；扫描覆盖/原图切换/离屏保持/保存与语言资源提示定向DEVICE通过，用户签收。西语缺翻译资源，未下载；其他原继承范围不由本项代签。",
         "remainingIn": [
           "CO11-15",
           "CO11-16"
@@ -481,8 +633,8 @@
       },
       {
         "id": "CO11-13",
-        "status": "concentrated_engineering_evidence_recorded_ui_feedback_host_pass",
-        "conclusion": "c12ca45六文件与最终14文件/112项及静态检查输入SHA一致；Native元数据重放只是复现现存误起点，不当作修复通过或全仓回归。",
+        "status": "echo_residual_concentrated_host_pass_existing_ci_issues_open",
+        "conclusion": "cc55707最终同一输入7组Native/12接线、528标量窗、86 Flutter、41脚本与39证据合同通过，iOS实际FluidAudio分支类型检查通过；旧弃用警告及2处既有行数超限保留，不声明全仓/远端CI通过。",
         "remainingIn": [
           "CO11-15",
           "CO11-16",
@@ -491,8 +643,8 @@
       },
       {
         "id": "CO11-14",
-        "status": "current_same_source_qa_retained_new_ui_fix_not_candidate",
-        "conclusion": "运行25f3eb3/3008及原双资格保留；本地c12ca45仅SOURCE/HOST通过，无新候选、部署、安装或push，不沿旧设备结果代签。",
+        "status": "same_source_0103_built_qualified_deployed_installed_user_accepted",
+        "conclusion": "cc/0103完整profile/3209源文件、新7组12接线、同源镜像、新双资格、隔离部署和保历史升级完成；候选本次效果按用户自测签收，非正式发行。",
         "remainingIn": [
           "CO11-15",
           "CO11-18"
@@ -500,8 +652,8 @@
       },
       {
         "id": "CO11-15",
-        "status": "ios_acceptance_in_progress_route_false_asr_and_overlay_retest_pending",
-        "conclusion": "1→5按原范围继续：第1项有已确认安静误识别，第2项中英/辅助保存已验、覆盖修复待新包；后续系统/双模式长测/300句双人盲评不晋级。",
+        "status": "source_host_system_repair_pass_device_retest_paused",
+        "conclusion": "锁屏/恢复场景失败已保留；本地复现并修复异步暂停/恢复竞态与旧恢复错误误终结新会话。系统矩阵、双模式长测和300句两人盲评均未关闭，暂停后不追加设备测试。",
         "remainingIn": [
           "CO11-15"
         ]
@@ -552,7 +704,15 @@
       "artifacts/closeout-regression/20260930-rc-25f3eb3/temporary-waveform-cleanup.json",
       "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
       "artifacts/closeout-regression/20260930-ios15-feedback/auxiliary-storage-export.json",
-      "artifacts/closeout-regression/20260930-ios15-feedback/route-terms.json"
+      "artifacts/closeout-regression/20260930-ios15-feedback/route-terms.json",
+      "artifacts/closeout-regression/20261001-rc-66f57fd/delivery-verification.json",
+      "artifacts/closeout-regression/20261001-rc-66f57fd/qualification-result.json",
+      "artifacts/closeout-regression/20261001-rc-66f57fd/history-upgrade-verification.json",
+      "artifacts/closeout-regression/20261001-0102-echo-review/ASSESSMENT.json",
+      "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+      "artifacts/closeout-regression/20261001-rc-cc55707/delivery-verification.json",
+      "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+      "artifacts/closeout-regression/20261001-rc-cc55707/self-test-history-verification.json"
     ],
     "lastAcceptedSilentDevice": {
       "status": "USER_ACCEPTED_AFFECTED_SILENT_DEVICE_CASE",
@@ -579,11 +739,11 @@
       "evidence": "artifacts/closeout-regression/20260929-speaker-edge-fix/device-acceptance.json",
       "publicSignoff": "release/public/1.1.0/A7E7532_IOS_AFFECTED_ACCEPTANCE_20260929.md"
     },
-    "previousDeliverySnapshot": "artifacts/closeout-regression/20260930-rc-25f3eb3/prior-delivery-before-ios-1-5.json",
+    "previousDeliverySnapshot": "artifacts/closeout-regression/20261001-rc-b990c1a/prior-delivery-before-ui0101.json",
     "iosRemainingExecution": {
       "authorizedAt": "2026-09-30T14:18:52Z",
-      "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
-      "build": "2026093008",
+      "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+      "build": "2026100103",
       "ordered": true,
       "steps": [
         {
@@ -593,19 +753,75 @@
             "CO11-05",
             "CO11-15"
           ],
-          "status": "confirmed_post_route_false_asr_requires_fix",
+          "status": "0103_user_self_test_accepted_remaining_original_system_route_scope_retained",
           "evidence": [
             "artifacts/closeout-regression/20260930-rc-25f3eb3/voice-toggle-interim.json",
             "artifacts/closeout-regression/20260930-rc-25f3eb3/bluetooth-route-assessment.json",
-            "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json"
+            "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
+            "artifacts/closeout-regression/20261001-rc-66f57fd/delivery-verification.json",
+            "artifacts/closeout-regression/20261001-0102-echo-review/ASSESSMENT.json",
+            "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+            "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json"
           ],
-          "sessionId": "public-2085713a5d9c307f7c7a9b750ffbaded2a5451bb9168b9b5724b61c878cc1b55",
+          "sessionId": "public-f8ec37a0274afdd3c2d375108bffdba32f1c0fa23a92d4e83b93d2c6481b8bb2",
           "successCriteria": [
             "关闭时ASR/MT继续且新TTS调用为0",
             "重新开启后新句正常朗读、无旧句重播",
             "路由变化后采音/输出恢复，结束保存并唯一结算"
           ],
-          "sameActiveSessionToggleExercised": false
+          "sameActiveSessionToggleExercised": true,
+          "voiceToggleRepair": {
+            "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+            "hostPassed": true,
+            "inInstalledCandidate": true,
+            "deviceAccepted": true,
+            "evidence": "artifacts/closeout-regression/20261001-ios-voice-toggle/VERIFICATION.json",
+            "candidateBuild": "2026100102",
+            "deployed": true
+          },
+          "sameActiveSessionToggleAccepted": true,
+          "echoResidualRepair": {
+            "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+            "sourceTree": "983eba64dad1ab6ffea0ff7abb9eaeda359e87ac",
+            "status": "DEVICE_USER_ACCEPTED_AFFECTED_SELF_TEST",
+            "evidence": "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+            "nativeSuites": 7,
+            "wiringChecks": 12,
+            "recordedScalarFrames": 528,
+            "flutterPassed": 86,
+            "scriptContractPassed": 41,
+            "gatewayContractPassed": 39,
+            "iosTargetTypecheck": true,
+            "maximumExtraAmbiguousOnsetWindowMs": 256,
+            "realModelCalls": 0,
+            "deployed": true,
+            "installed": true,
+            "deviceVerified": true,
+            "pushed": false,
+            "deviceVerificationKind": "User self-test acceptance with native/history/unique settlement evidence; not independent fixed-case proof",
+            "candidateBuild": "2026100103",
+            "candidateEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/delivery-verification.json",
+            "deviceEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+            "controlledCounterexampleRerun": false,
+            "noFurtherOptimizationThisScope": true
+          },
+          "priorSameSessionToggleSource": {
+            "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+            "build": "2026100102",
+            "accepted": true
+          },
+          "currentSelfTest": {
+            "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+            "build": "2026100103",
+            "userAccepted": true,
+            "evidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+            "controlledFixturePlayed": false,
+            "originalQuietCounterexampleRerun": false,
+            "sameSessionToggleSeparatelyObserved": false,
+            "prior0102VoiceControlEvidenceRetained": true,
+            "noFurtherTestingThisScope": true,
+            "fullIOSMatrixAccepted": false
+          }
         },
         {
           "id": 2,
@@ -614,7 +830,7 @@
             "CO11-07",
             "CO11-15"
           ],
-          "status": "local_zh_en_and_aux_storage_verified_overlay_fix_host_pass_device_retest_pending",
+          "status": "local_zh_en_aux_storage_scan_and_resource_ui_pass_other_original_scope_retained",
           "localSessionId": "local_1790779183535540_1",
           "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/VERIFICATION.json",
           "successCriteria": [
@@ -623,7 +839,8 @@
             "纯同步不触发模型或重复计费"
           ],
           "spanishTranslationResource": "not_installed_no_download_in_this_scope",
-          "coldStartUserConfirmed": true
+          "coldStartUserConfirmed": true,
+          "currentScanUiEvidence": "artifacts/closeout-regression/20261001-rc-b990c1a/ui-acceptance.json"
         },
         {
           "id": 3,
@@ -632,7 +849,7 @@
             "CO11-05",
             "CO11-15"
           ],
-          "status": "pending",
+          "status": "failed_device_case_preserved_source_host_repair_complete_retest_paused",
           "successCriteria": [
             "实物中断确实发生",
             "按原合同恢复或安全结束、保留历史与用户模式",
@@ -676,11 +893,34 @@
       "fullIOSMatrixAccepted": false
     },
     "latestFeedback": {
+      "voiceToggleFix": {
+        "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+        "status": "AFFECTED_HOST_PASS_BASELINE_LINE_GATE_FAIL_DEVICE_RETEST_PENDING",
+        "flutterFiles": 7,
+        "flutterPassed": 86,
+        "newTestsIncludedIn86": 7,
+        "gatewayFiles": 148,
+        "gatewayPassed": 1285,
+        "staticAnalysis": "No issues found",
+        "initialConcentratedFailureRetained": true,
+        "sameSourceSerialRerunPassed": true,
+        "globalFileSizeGatePassed": false,
+        "unchangedBaselineLineViolations": 2,
+        "deployed": true,
+        "installed": true,
+        "deviceAccepted": true,
+        "pushed": false,
+        "evidence": "artifacts/closeout-regression/20261001-ios-voice-toggle/VERIFICATION.json",
+        "candidateBuild": "2026100102",
+        "candidateEvidence": "artifacts/closeout-regression/20261001-rc-66f57fd/delivery-verification.json",
+        "deviceAcceptanceScope": "Same-session enable/disable only; echo and initial full playback failed",
+        "deviceEvidence": "artifacts/closeout-regression/20261001-0102-echo-review/ASSESSMENT.json"
+      },
       "at": "2026-09-30T15:47:11Z",
       "scope": "CO11-05/07/15",
       "spanish": {
         "status": "VOICE_CONTROL_RESOURCE_PRESENT_TRANSLATION_RESOURCE_ABSENT",
-        "observation": "Fresh iPhone Mirroring UI; public App zh-to-es check and Apple Translate Languages list",
+        "observation": "Prior system-app resource inspection retained; current 0101 App resource panel rechecked for zh-es missing and zh-en ready.",
         "publicAppAsrZhReady": true,
         "publicAppTranslationZhEsReady": false,
         "voiceControlSpanishPresent": true,
@@ -691,22 +931,123 @@
         ],
         "appleTranslateSpanishOfflineReady": false,
         "downloadStarted": false,
-        "languageRestored": "zh-to-en",
-        "mirrorExited": true
+        "languageRestored": "original_online_auto_auto_reverse",
+        "mirrorExited": true,
+        "currentResourcePanelSourceCommit": "b990c1a646e765dac20f521946d07cc38cad5c73",
+        "currentResourcePanelBuild": "2026100101",
+        "currentResourcePanelAccepted": true
       },
       "scanFix": {
         "commit": "c12ca4594bfa80fa6d84e466dec383565000fea5",
         "hostPass": 112,
-        "targetBuilt": false,
-        "installed": false
+        "targetBuilt": true,
+        "installed": true,
+        "candidateSourceCommit": "b990c1a646e765dac20f521946d07cc38cad5c73",
+        "candidateBuild": "2026100101",
+        "deviceUiPassed": true,
+        "userAccepted": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-b990c1a/ui-acceptance.json"
       },
-      "audioIssue": "confirmed_not_fixed",
+      "audioIssue": "current_0103_user_self_test_accepted_prior_counterexamples_and_quality_scope_retained",
       "nativeThresholdsOrModelsChanged": false,
       "previousRawRecordingAuthorizationExhausted": true,
       "newRawRecordingAuthorized": true,
-      "newRawRecordingScope": {"maximumCases":2,"maximumInputSecondsPerCase":30,"maximumTotalInputSeconds":60,"armedCases":2,"recordedSeconds":60,"status":"analysis_completed_raw_files_cleaned_user_accepts_current_headset_routing","authorization":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/raw-capture-authorization.json","remainingCases":0,"firstCaseSessionId":"public-139d033a2db238fde899edcc0d11152861054e8690173201e172be9069f20578","firstCaseEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/passive-waveform-route-quiet-1-assessment.json","secondCaseSessionId":"public-d72e05b8f6bacd34cab6606bb7c8db1f186abfc611517be9d6f818dc01cc8ead","rawCaptureDisabledEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/capture-disabled.json","orderedReplay":"ended_metadata_only_no_second_fixture","rawFilesDeletedPhoneAndMac":true,"cleanupEvidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/temporary-waveform-cleanup.json"},
-      "earphoneRoutingDecision": {"date":"2026-10-01","userDecision":"我觉得这样就很好，不用改了","scope":"Existing headset microphone and headset reading behavior","status":"user_accepted_keep_existing_route_no_change_or_further_test_this_item","sourceCommit":"25f3eb315461b8aaa6d6af22e96fc95020ce10c9","appBuild":"2026093008","frozen10RoutingActivationMatches":true,"modelOrProductCodeChanged":false,"latestSessionId":"public-b686d0da6b75bdaf94f77c9ae7986d8c3553c93d2aaea021c4212f219bce153b","ttsChunksFinished":21,"phoneServerSegments":4,"pending":0,"ledgerCount":1,"otherAcceptanceGatesUnchanged":true,"previousSpeakerphoneFalseAsrEvidenceRetained":true,"evidence":"artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/RESULT.md"},
-      "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/RESULT.md"
+      "newRawRecordingScope": {
+        "maximumCases": 2,
+        "maximumInputSecondsPerCase": 30,
+        "maximumTotalInputSeconds": 60,
+        "armedCases": 2,
+        "recordedSeconds": 60,
+        "status": "analysis_completed_raw_files_cleaned_user_accepts_current_headset_routing",
+        "authorization": "artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/raw-capture-authorization.json",
+        "remainingCases": 0,
+        "firstCaseSessionId": "public-139d033a2db238fde899edcc0d11152861054e8690173201e172be9069f20578",
+        "firstCaseEvidence": "artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/passive-waveform-route-quiet-1-assessment.json",
+        "secondCaseSessionId": "public-d72e05b8f6bacd34cab6606bb7c8db1f186abfc611517be9d6f818dc01cc8ead",
+        "rawCaptureDisabledEvidence": "artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/capture-disabled.json",
+        "orderedReplay": "ended_metadata_only_no_second_fixture",
+        "rawFilesDeletedPhoneAndMac": true,
+        "cleanupEvidence": "artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/temporary-waveform-cleanup.json"
+      },
+      "earphoneRoutingDecision": {
+        "date": "2026-10-01",
+        "userDecision": "我觉得这样就很好，不用改了",
+        "scope": "Existing headset microphone and headset reading behavior",
+        "status": "user_accepted_keep_existing_route_no_change_or_further_test_this_item",
+        "sourceCommit": "25f3eb315461b8aaa6d6af22e96fc95020ce10c9",
+        "appBuild": "2026093008",
+        "frozen10RoutingActivationMatches": true,
+        "modelOrProductCodeChanged": false,
+        "latestSessionId": "public-b686d0da6b75bdaf94f77c9ae7986d8c3553c93d2aaea021c4212f219bce153b",
+        "ttsChunksFinished": 21,
+        "phoneServerSegments": 4,
+        "pending": 0,
+        "ledgerCount": 1,
+        "otherAcceptanceGatesUnchanged": true,
+        "previousSpeakerphoneFalseAsrEvidenceRetained": true,
+        "evidence": "artifacts/closeout-regression/20260930-route-audio-diagnostic-3008/RESULT.md"
+      },
+      "evidence": "artifacts/closeout-regression/20260930-ios15-feedback/RESULT.md",
+      "currentUiAcceptance": {
+        "sourceCommit": "b990c1a646e765dac20f521946d07cc38cad5c73",
+        "build": "2026100101",
+        "status": "DEVICE_AFFECTED_SCAN_AND_RESOURCE_UI_PASS",
+        "uiCloudCallsAdded": 0,
+        "uiLedgerEntriesAdded": 0,
+        "originalPreferencesRestored": true,
+        "evidence": "artifacts/closeout-regression/20261001-rc-b990c1a/ui-acceptance.json"
+      },
+      "echoResidualRepair": {
+        "sourceCommit": "cc55707d3be5dff87e8f2a74a18d81bd3d3e711d",
+        "sourceTree": "983eba64dad1ab6ffea0ff7abb9eaeda359e87ac",
+        "status": "DEVICE_USER_ACCEPTED_AFFECTED_SELF_TEST",
+        "evidence": "artifacts/closeout-regression/20261001-echo-residual-fix/VERIFICATION.json",
+        "nativeSuites": 7,
+        "wiringChecks": 12,
+        "recordedScalarFrames": 528,
+        "flutterPassed": 86,
+        "scriptContractPassed": 41,
+        "gatewayContractPassed": 39,
+        "iosTargetTypecheck": true,
+        "maximumExtraAmbiguousOnsetWindowMs": 256,
+        "realModelCalls": 0,
+        "deployed": true,
+        "installed": true,
+        "deviceVerified": true,
+        "pushed": false,
+        "deviceVerificationKind": "User self-test acceptance with native/history/unique settlement evidence; not independent fixed-case proof",
+        "candidateBuild": "2026100103",
+        "candidateEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/delivery-verification.json",
+        "deviceEvidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+        "controlledCounterexampleRerun": false,
+        "noFurtherOptimizationThisScope": true
+      },
+      "currentEchoDeviceCase": {
+        "sourceCommit": "66f57fdbdf9a4b75b806833a1fe953f1112789c3",
+        "build": "2026100102",
+        "sessionId": "public-f8ec37a0274afdd3c2d375108bffdba32f1c0fa23a92d4e83b93d2c6481b8bb2",
+        "status": "VOICE_CONTROL_PASS_ECHO_FAIL",
+        "sameSession": true,
+        "ttsAttemptsWhileDisabled": 0,
+        "reopenedPlaybackChunks": 7,
+        "reopenedPlaybackAllFinished": true,
+        "phoneServerSegments": 5,
+        "pending": 0,
+        "ledgerCount": 1,
+        "consumedSeconds": 89,
+        "initialPlaybackCancelledByFalseSpeechStart": true,
+        "rawWaveformAvailable": false,
+        "evidence": "artifacts/closeout-regression/20261001-0102-echo-review/ASSESSMENT.json"
+      },
+      "current0103SelfTest": {
+        "userDecision": "我已经自己实测，没有问题，通过",
+        "evidence": "artifacts/closeout-regression/20261001-rc-cc55707/device-acceptance.json",
+        "untranslatedShortSegments": [
+          "是。",
+          "停止。"
+        ],
+        "noFurtherTests": true
+      }
     }
   },
   "historicalUndatedBeforeDeliveryClosure20260929": {
