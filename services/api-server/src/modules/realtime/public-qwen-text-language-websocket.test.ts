@@ -34,7 +34,7 @@ afterEach(async()=>{
 async function waitFor(test:()=>boolean){const until=performance.now()+5000;while(!test()){
   if(performance.now()>until)throw Error('condition timed out: '+JSON.stringify(messages));await new Promise(r=>setTimeout(r,10));
 }}
-async function setup(capability=true){
+async function setup(capability=true,speechEvidence=false){
   const update=body(1);Object.assign(update.components.asr,{protocol:'qwen_audio_streaming',modelId:'qwen-audio-3.1-asr-flash-streaming',endpoint:'wss://synthetic.invalid/api-ws/v1/inference'});
   await savePublicModelConfiguration(update);const config=capturePublicModelRuntimeConfiguration(false);
   const languagePolicy={source:'auto',target:'en',autoReverse:true,pair:['zh','en'],sourceLanguages:['zh','en','fr'],revision:1};
@@ -48,7 +48,7 @@ async function setup(capability=true){
   server=startWebSocketServer({publicRuntime:{credentialAccessSecret:access,apiFetchFn,modelFetchFn,asrSocketFactory}});await once(server,'listening');
   const address=server.address();if(!address||typeof address==='string')throw Error();
   ws=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,['ai-phone.realtime.v1',`ai-phone.token.${issued.realtimeToken}`,
-    ...(capability?['ai-phone.text-language.v1']:[])],{headers:{host:'127.0.0.1'}});
+    ...(capability?['ai-phone.text-language.v1']:[]),...(capability&&speechEvidence?['ai-phone.speech-evidence.v1']:[])],{headers:{host:'127.0.0.1'}});
   ws.on('message',data=>messages.push(JSON.parse(data.toString())));await once(ws,'open');
   return {issued,modelFetchFn,asrSocketFactory,apiFetchFn};
 }
@@ -77,6 +77,26 @@ it('old/unsupported clients are rejected before credentials or ASR, not silently
   expect(t.asrSocketFactory).not.toHaveBeenCalled();expect(t.modelFetchFn).not.toHaveBeenCalled();
   expect(t.apiFetchFn.mock.calls.some(c=>String(c[0]).endsWith('/credentials'))).toBe(false);
   expect(current().status).toBe('created');expect(current().publicRuntime).toBeUndefined();
+});
+it.each(['speech','unknown','non_speech','missing'])('single-character language admission uses the real wire contract, preserves End and one settlement: %s',async kind=>{
+  const t=await setup(true,true);await waitFor(()=>messages.some(e=>e.type==='session.started'));
+  vi.setSystemTime(now.getTime()+1000);
+  ws!.send(JSON.stringify({type:'audio.frame',sessionId:t.issued.sessionId,sequence:1,timestampMs:0,format:'pcm16',sampleRate:16000,data:Buffer.alloc(19200).toString('base64')}));
+  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer?.bytes===19200);
+  peer.sentence(1,'说。');await waitFor(()=>messages.some(e=>e.type==='text.language.request'));
+  const {text,audioRange,...challenge}=messages.find(e=>e.type==='text.language.request');
+  expect(text).toBe('说。');expect(audioRange).toEqual({startSample:0,endSample:9600,sampleRate:16000});
+  ws!.send(JSON.stringify({...challenge,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'zh-Hans',hypotheses:{'zh-Hans':1},
+    ...(kind==='missing'?{}:{audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:kind,coveredThroughSample:9600,
+      reason:kind==='speech'?'speech_overlap':kind==='non_speech'?'render_echo':'uncovered'}})}));
+  vi.setSystemTime(now.getTime()+4000);ws!.send(JSON.stringify({type:'session.end',sessionId:t.issued.sessionId}));
+  await waitFor(()=>messages.some(e=>e.type==='session.ended'));await waitFor(()=>getSession(t.issued.sessionId)===null);
+  expect(t.asrSocketFactory).toHaveBeenCalledTimes(1);expect(t.modelFetchFn).toHaveBeenCalledTimes(kind==='speech'?1:0);
+  expect(current().status).toBe('ended');expect(current().consumedSeconds).toBe(4);
+  expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${t.issued.sessionId}`)).toHaveLength(1);
+  if(kind==='non_speech')expect(current().segments).toHaveLength(0);
+  else expect(current().segments[0]).toMatchObject({sourceText:'说。',sourceLanguage:kind==='speech'?'zh':'auto',translatedText:kind==='speech'?'大家好。':''});
+  expect(messages.filter(e=>e.type==='error')).toHaveLength(0);
 });
 it('mixed-language children retire one parent, save both directions and end with one ASR and one settlement',async()=>{
   const t=await setup();await waitFor(()=>messages.some(e=>e.type==='session.started'));

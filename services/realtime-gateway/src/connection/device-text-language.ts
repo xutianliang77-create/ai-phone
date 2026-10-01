@@ -65,12 +65,17 @@ export class DeviceTextLanguageBroker {
     const language=top?.[0];
     const letters=r.text.match(/\p{L}/gu)??[];
     const latin=letters.filter(c=>/\p{Script=Latin}/u.test(c)).length;
-    const substantial=letters.length>=2;
+    // A one-character utterance can be genuine speech in any language. It may
+    // use the existing strict short-text thresholds only with a fully covered,
+    // exact-range positive observation. Missing evidence is never positive.
+    const singleSpeech=letters.length===1&&r.audioRange!==undefined&&
+      value.audioEvidence?.decision==='speech'&&value.audioEvidence.coveredThroughSample>=r.audioRange.endSample;
+    const substantial=letters.length>=2||singleSpeech;
     const shortObservation=letters.length<4||latin>=letters.length/2&&
       (letters.length<8||(r.text.match(/\p{Script=Latin}+/gu)?.length??0)<2);
     // A short utterance is not inherently an unknown language. Require stronger
     // independent evidence for it instead of rejecting even a 99.9999% result.
-    // Keep ambiguous one-character/identifier-only replies unknown; never
+    // Keep ambiguous or ungrounded one-character/identifier-only replies unknown; never
     // borrow a preceding sentence's language or renormalize to the output pair.
     const minimumProbability=shortObservation?0.98:0.85,minimumMargin=shortObservation?0.8:0.2;
     logPublicAsrLanguage({sessionId:this.sessionId,segmentId:r.segmentId,revision:r.revision,stage:'language_observation',

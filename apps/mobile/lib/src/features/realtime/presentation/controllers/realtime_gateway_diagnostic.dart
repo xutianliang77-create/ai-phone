@@ -8,6 +8,9 @@ class RealtimeGatewayDiagnostic {
     this.stage,
     this.provider,
     this.retryable,
+    this.message,
+    this.segmentId,
+    this.revision,
   });
 
   factory RealtimeGatewayDiagnostic.fromEvent(
@@ -21,6 +24,9 @@ class RealtimeGatewayDiagnostic {
       stage: event.stage,
       provider: event.provider,
       retryable: event.retryable,
+      message: event.message,
+      segmentId: event.segmentId,
+      revision: event.revision,
     );
   }
 
@@ -30,6 +36,9 @@ class RealtimeGatewayDiagnostic {
   final String? stage;
   final String? provider;
   final bool? retryable;
+  final String? message;
+  final String? segmentId;
+  final int? revision;
 
   bool get isRetryable => retryable == true;
 }

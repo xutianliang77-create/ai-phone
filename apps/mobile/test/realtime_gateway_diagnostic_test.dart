@@ -15,6 +15,7 @@ void main() {
       'stage': 'translation',
       'provider': 'hymt2_self_hosted',
       'retryable': true,
+      'revision': 2,
     });
 
     final diagnostic = RealtimeGatewayDiagnostic.fromEvent(
@@ -26,6 +27,9 @@ void main() {
     expect(diagnostic.stage, 'translation');
     expect(diagnostic.provider, 'hymt2_self_hosted');
     expect(diagnostic.isRetryable, isTrue);
+    expect(diagnostic.message, '翻译暂不可用');
+    expect(diagnostic.segmentId, 'seg_1');
+    expect(diagnostic.revision, 2);
   });
 
   test('parses quota end metadata from gateway events', () {

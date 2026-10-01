@@ -60,6 +60,8 @@ void main() {
     await pumpEventQueue();
     expect(controller.status.name, 'active');
     expect(controller.segments.last.translatedText, '早上好。');
+    expect(controller.message, isNull);
+    expect(controller.gatewayDiagnostic, isNull);
     expect(audio.startCalls, 1);
   });
 }

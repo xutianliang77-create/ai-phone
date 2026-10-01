@@ -174,8 +174,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     }
     if (event.type == 'translation.final' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
-      if (text != null) {
-        _gatewayDiagnostic = null;
+      if (text != null && _isCurrentTranslationResult(event)) {
+        _clearRecoveredTranslationNotice(event);
         _upsertSegment(
           event.segmentId!,
           turnId: event.turnId,
@@ -214,6 +214,43 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       _playAudioOutputIfNeeded(event);
       return;
     }
+  }
+
+  bool _isCurrentTranslationResult(GatewayRealtimeEvent event) {
+    final draft = _drafts[event.segmentId];
+    final retired = _retiredPublicSegmentRevisions[event.segmentId];
+    if (retired != null && (event.revision == null ||
+        event.revision! <= retired || draft == null)) {
+      return false;
+    }
+    return event.revision == null || draft?.recognitionRevision == null ||
+        event.revision! >= draft!.recognitionRevision!;
+  }
+
+  void _clearRecoveredTranslationNotice(GatewayRealtimeEvent event) {
+    final diagnostic = _gatewayDiagnostic;
+    if (diagnostic == null || diagnostic.type != 'translation.failed') return;
+    if (event.segmentId == diagnostic.segmentId) {
+      if (diagnostic.revision != null && (event.revision == null ||
+          event.revision! < diagnostic.revision!)) {
+        return;
+      }
+    } else if (_drafts.containsKey(diagnostic.segmentId)) {
+      final failed = _drafts[diagnostic.segmentId]!;
+      final succeeded = _drafts[event.segmentId];
+      if (succeeded == null) return;
+      final from = failed.timing?.startMs, to = succeeded.timing?.startMs;
+      if (from != null && to != null) {
+        if (to < from) return;
+      } else {
+        final ids = _drafts.keys.toList();
+        if (ids.indexOf(event.segmentId!) < ids.indexOf(diagnostic.segmentId!)) return;
+      }
+    }
+    // A newer TTS/route warning owns its own message. Translation recovery
+    // clears only the message belonging to this resolved segment diagnostic.
+    if (_message == diagnostic.message) _message = null;
+    _gatewayDiagnostic = null;
   }
 
   String _gatewayErrorMessage(GatewayRealtimeEvent event) {
