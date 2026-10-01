@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/app/app_language.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_settings_store.dart';
 import 'package:translation_mobile/src/features/realtime/data/voice_preset_catalog.dart';
@@ -14,6 +15,81 @@ import 'package:translation_mobile/src/features/realtime/presentation/widgets/re
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_status_bar.dart';
 
 void main() {
+  testWidgets(
+      'original settings sheet preserves automatic routing across modes',
+      (tester) async {
+    const settings = RealtimeRuntimeSettings(
+      processingMode: RealtimeProcessingMode.online,
+      sourceLanguage: 'auto',
+      targetLanguage: 'auto_reverse',
+      automaticLanguagePair: TranslationLanguagePair('zh', 'en'),
+      voiceOutputMode: RealtimeVoiceOutputMode.natural,
+      voicePresetId: 'zh_female_natural',
+      domainLexiconPack: 'product',
+    );
+    final store = MemoryRealtimeSettingsStore(settings);
+    final catalog = _DelayedCatalog()..complete();
+    final config = AppConfig(
+      apiBaseUrl: Uri.parse('http://localhost:3100'),
+      useMockAudio: false,
+      useDeviceAsr: false,
+      useLocalSessions: false,
+      useOnDeviceTranslation: false,
+      deviceAsrProvider: 'apple_speech_transcriber',
+      deviceAsrLanguage: 'auto',
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 256,
+      serverOwnedHistory: true,
+    );
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      home: AppLanguageScope(
+        locale: const Locale('zh'),
+        onChanged: (_) {},
+        child: RealtimePage(
+          config: config,
+          settingsStore: store,
+          voicePresetClient: catalog,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    tester
+        .widget<RealtimeLanguageMenu>(find.byType(RealtimeLanguageMenu))
+        .onOpenRealtimeSettings();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('端侧'));
+    await tester.pumpAndSettle();
+    final local =
+        settings.copyWith(processingMode: RealtimeProcessingMode.onDevice);
+    expect((await store.load())!.toStorageJson(), local.toStorageJson());
+    expect(
+        tester
+            .widget<RealtimeSettingsPanel>(find.byType(RealtimeSettingsPanel))
+            .settings
+            .toStorageJson(),
+        local.toStorageJson());
+    await tester.tap(find.text('在线'));
+    await tester.pumpAndSettle();
+    expect((await store.load())!.toStorageJson(), settings.toStorageJson());
+    await tester.tap(find.byKey(const ValueKey('close-realtime-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byType(RealtimeSettingsPanel), findsNothing);
+    expect(find.byType(RealtimeStatusBar), findsOneWidget);
+    expect((await store.load())!.toStorageJson(), settings.toStorageJson());
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    catalog.close();
+  });
+
   testWidgets(
       'catalog refresh does not overwrite the saved voice or other local preferences',
       (tester) async {

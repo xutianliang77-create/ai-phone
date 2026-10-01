@@ -16,6 +16,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
     required this.autoSpeakSupported,
     required this.onRealtimeModeChanged,
     required this.onSettingsChanged,
+    this.onClose,
     this.onEndRequested,
     this.voicePresets = const <VoicePreset>[],
     this.voicePresetsLoading = false,
@@ -30,6 +31,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
   final bool autoSpeakSupported;
   final ValueChanged<String> onRealtimeModeChanged;
   final ValueChanged<RealtimeRuntimeSettings> onSettingsChanged;
+  final VoidCallback? onClose;
   final VoidCallback? onEndRequested;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
@@ -41,45 +43,59 @@ class RealtimeSettingsSheet extends StatelessWidget {
     final theme = Theme.of(context);
     return SafeArea(
       top: false,
-      child: ListView(
-        shrinkWrap: true,
-        padding: EdgeInsets.fromLTRB(
-          16,
-          0,
-          16,
-          16 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            l10n.realtimeSettingsLabel,
-            style: theme.textTheme.titleLarge,
+          // Keep dismissal outside the scrolling resource/settings content.
+          // Closing this sheet must not stop the conversation or undo settings.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                    child: Text(l10n.realtimeSettingsLabel,
+                        style: theme.textTheme.titleLarge)),
+                CloseButton(
+                  key: const ValueKey('close-realtime-settings'),
+                  onPressed: onClose,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.conversationModeGroupLabel,
-            style: theme.textTheme.titleSmall,
-          ),
-          const SizedBox(height: 6),
-          RealtimeModeSelector(
-            mode: realtimeMode,
-            enabled: modeEnabled,
-            onChanged: onRealtimeModeChanged,
-            padding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 8),
-          RealtimeSettingsPanel(
-            settings: settings,
-            enabled: enabled,
-            autoSpeakSupported: autoSpeakSupported,
-            onChanged: onSettingsChanged,
-            voicePresets: voicePresets,
-            voicePresetsLoading: voicePresetsLoading,
-            onEndRequested: onEndRequested,
-            padding: EdgeInsets.zero,
-          ),
-          if (settings.processingMode == RealtimeProcessingMode.onDevice &&
-              resourceSection != null)
-            resourceSection!,
+          Flexible(
+              child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(
+                16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+            children: <Widget>[
+              const SizedBox(height: 12),
+              Text(
+                l10n.conversationModeGroupLabel,
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              RealtimeModeSelector(
+                mode: realtimeMode,
+                enabled: modeEnabled,
+                onChanged: onRealtimeModeChanged,
+                padding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 8),
+              RealtimeSettingsPanel(
+                settings: settings,
+                enabled: enabled,
+                autoSpeakSupported: autoSpeakSupported,
+                onChanged: onSettingsChanged,
+                voicePresets: voicePresets,
+                voicePresetsLoading: voicePresetsLoading,
+                onEndRequested: onEndRequested,
+                padding: EdgeInsets.zero,
+              ),
+              if (settings.processingMode == RealtimeProcessingMode.onDevice &&
+                  resourceSection != null)
+                resourceSection!,
+            ],
+          )),
         ],
       ),
     );

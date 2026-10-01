@@ -260,6 +260,31 @@ void main() {
         'my_voice');
   });
 
+  test('automatic mode preferences survive local storage and return online',
+      () {
+    const online = RealtimeRuntimeSettings(
+      processingMode: RealtimeProcessingMode.online,
+      sourceLanguage: 'auto',
+      targetLanguage: 'auto_reverse',
+      automaticLanguagePair: TranslationLanguagePair('zh', 'en'),
+      voiceOutputMode: RealtimeVoiceOutputMode.natural,
+      voicePresetId: 'zh_female_natural',
+      domainLexiconPack: 'product',
+    );
+    final local = online
+        .copyWith(processingMode: RealtimeProcessingMode.onDevice)
+        .normalizedForCapabilities();
+    final reloaded = RealtimeRuntimeSettings.fromJson(local.toStorageJson());
+    expect(reloaded.toStorageJson(), local.toStorageJson());
+    expect(reloaded.sourceLanguage, 'auto');
+    expect(reloaded.targetLanguage, 'auto_reverse');
+    expect(
+        reloaded
+            .copyWith(processingMode: RealtimeProcessingMode.online)
+            .toStorageJson(),
+        online.toStorageJson());
+  });
+
   test(
       'online always uses remote models after local roundtrip for all legacy flags',
       () {

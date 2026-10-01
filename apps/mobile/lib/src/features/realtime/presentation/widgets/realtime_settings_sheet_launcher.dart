@@ -23,6 +23,7 @@ void showRealtimeSettingsSheet({
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
+    useSafeArea: true,
     builder: (sheetContext) {
       return StatefulBuilder(
         builder: (sheetContext, setSheetState) {
@@ -47,6 +48,13 @@ void showRealtimeSettingsSheet({
                 autoSpeakSupported: autoSpeakSupported(),
                 onRealtimeModeChanged: changeRealtimeMode,
                 onSettingsChanged: changeSettings,
+                onClose: () {
+                  // During the exit animation a second tap must not pop the
+                  // underlying page, nor dismiss a different nested dialog.
+                  if (ModalRoute.of(sheetContext)?.isCurrent == true) {
+                    Navigator.of(sheetContext).pop();
+                  }
+                },
                 onEndRequested: onEndRequested,
                 voicePresets: voicePresets,
                 voicePresetsLoading: voicePresetsLoading,
