@@ -18,12 +18,25 @@ extension RealtimeControllerLifecycle on RealtimeController {
     );
   }
 
-  Future<void> handleLifecycleState(AppLifecycleState state) async {
+  Future<void> handleLifecycleState(AppLifecycleState state) {
+    // iOS sends inactive/paused/resumed without awaiting the preceding async
+    // notification. Keep pause/ACK/suspend ahead of resume on the SAME session.
+    // Explicit stop/dispose remains immediate and invalidates queued work.
     if (state == AppLifecycleState.detached) {
       _resumeAfterLifecyclePause = false;
-      await stop();
-      return;
+      return stop();
     }
+    final session = _session, generation = _startGeneration;
+    final work = _lifecycleWork.then((_) async {
+      if (_disposed || generation != _startGeneration ||
+          !identical(_session, session)) { return; }
+      await _applyLifecycleState(state);
+    });
+    _lifecycleWork = work.catchError((Object _) {});
+    return work;
+  }
+
+  Future<void> _applyLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed && _resumeAfterLifecyclePause) {
       _resumeAfterLifecyclePause = false;
       await _resumeAfterLifecycleOrFail();

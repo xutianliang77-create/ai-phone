@@ -16,6 +16,63 @@ import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 void main() {
+  test('late old resume failure cannot end a newly started session', () async {
+    final repository = _FakeRealtimeRepository()..resumeAck = Completer<bool>();
+    final controller = RealtimeController(repository: repository, audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: _LifecycleAsrProvider(), config: _deviceAsrConfig());
+    addTearDown(controller.dispose);
+    await controller.start(); await controller.handleLifecycleState(AppLifecycleState.inactive);
+    final resuming = controller.handleLifecycleState(AppLifecycleState.resumed);
+    await pumpEventQueue(); await controller.stop(); await controller.start();
+    repository.resumeAck!.completeError(StateError('old resume rejected'));
+    await resuming; await pumpEventQueue();
+    expect(controller.status, RealtimeStatus.active); expect(repository.endedSessionIds, ['sess_1']);
+  });
+  for (final stopEarly in [false, true]) {
+  test('foreground waits for pause ACK; explicit stop stays final: $stopEarly', () async {
+    final repository = _FakeRealtimeRepository()..pauseAck = Completer<bool>();
+    final provider = _LifecycleAsrProvider();
+    final controller = RealtimeController(repository: repository,
+      audioCapture: _NoopAudioCapture(), mobileAsrProvider: provider,
+      config: _deviceAsrConfig());
+    addTearDown(controller.dispose);
+    await controller.start();
+    final pausing = controller.handleLifecycleState(AppLifecycleState.inactive);
+    await pumpEventQueue();
+    final resuming = controller.handleLifecycleState(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    expect(repository.lifecycleResumedSessionIds, isEmpty);
+    if (stopEarly) await controller.stop();
+    repository.pauseAck!.complete(true);
+    await Future.wait([pausing, resuming]);
+    expect(controller.status, stopEarly ? RealtimeStatus.ended : RealtimeStatus.active);
+    expect(repository.pauseCalls, 1);
+    expect(repository.endedSessionIds, stopEarly ? ['sess_1'] : isEmpty);
+    expect(provider.startCalls, stopEarly ? 1 : 2);
+  });
+  }
+
+  test('inactive and paused notifications share one pending pause', () async {
+    final repository = _FakeRealtimeRepository()..pauseAck = Completer<bool>();
+    final controller = RealtimeController(repository: repository,
+      audioCapture: _NoopAudioCapture(), mobileAsrProvider: _LifecycleAsrProvider(),
+      config: _deviceAsrConfig());
+    addTearDown(controller.dispose);
+    await controller.start();
+    final first = controller.handleLifecycleState(AppLifecycleState.inactive);
+    await pumpEventQueue();
+    final second = controller.handleLifecycleState(AppLifecycleState.paused);
+    await pumpEventQueue();
+    repository.pauseAck!.complete(true);
+    await Future.wait([first, second]);
+    expect(repository.pauseCalls, 1);
+    expect(repository.lifecycleSuspendedSessionIds, ['sess_1']);
+    await controller.stop();
+    await controller.handleLifecycleState(AppLifecycleState.resumed);
+    expect(controller.status, RealtimeStatus.ended);
+    expect(repository.lifecycleResumedSessionIds, isEmpty);
+  });
+
   test('reconnects the same session after a lifecycle pause', () async {
     final repository = _FakeRealtimeRepository();
     final provider = _LifecycleAsrProvider();
@@ -148,6 +205,10 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   final lifecycleSuspendedSessionIds = <String>[];
   final lifecycleResumedSessionIds = <String>[];
   int closeRealtimeCalls = 0;
+  int pauseCalls = 0;
+  Completer<bool>? pauseAck;
+  Completer<bool>? resumeAck;
+  bool pausedConfirmed = false;
 
   @override
   Stream<GatewayRealtimeEvent> get events => _events.stream;
@@ -167,7 +228,10 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   bool pause(String sessionId) => true;
 
   @override
-  Future<bool> pauseAndWait(String sessionId) async => pause(sessionId);
+  Future<bool> pauseAndWait(String sessionId) async {
+    pauseCalls++;
+    return pausedConfirmed = await (pauseAck?.future ?? Future.value(pause(sessionId)));
+  }
 
   @override
   bool resume(String sessionId) {
@@ -186,7 +250,7 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   @override
   Future<bool> resumeAfterLifecycle(String sessionId) async {
     lifecycleResumedSessionIds.add(sessionId);
-    return true;
+    return resumeAck?.future ?? Future.value(pauseAck == null || pausedConfirmed);
   }
 
   @override

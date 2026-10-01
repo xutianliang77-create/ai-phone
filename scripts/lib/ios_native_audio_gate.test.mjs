@@ -17,7 +17,7 @@ function valid(){return {schemaVersion:1,status:'HOST_PASS',platform:'darwin',us
 describe('iOS native audio mandatory gate',()=>{
  it('accepts the full clean same-source receipt, not a DEVICE assertion',()=>{
    expect(validateNativeAudioReport(valid(),expected)).toBe(true);
-   expect(nativeAudioSuites.map(s=>s.id)).toEqual(['render-clock','sample-clock','pcm-player','capture-ownership','vad-onset','duplex-metadata','echo-residual-onset']);
+   expect(nativeAudioSuites.map(s=>s.id)).toEqual(['render-clock','sample-clock','pcm-player','capture-ownership','vad-onset','speech-evidence-clock','duplex-metadata','echo-residual-onset']);
  });
  const mutations={
    failed:r=>{r.status='FAIL';},unsupported:r=>{r.platform='linux';},microphone:r=>{r.usesMicrophone=true;},model:r=>{r.modelCalls=1;},
@@ -60,7 +60,7 @@ describe('iOS native audio mandatory gate',()=>{
    expect(JSON.parse(read('package.json')).scripts['check:ios-native-audio']).toBe('node scripts/check_ios_native_audio.mjs');
  });
  it('retains the production call sites that previously regressed',()=>{
-   expect(checkNativeAudioWiring(read)).toHaveLength(12);
+   expect(checkNativeAudioWiring(read)).toHaveLength(15);
    const input=compact('apps/mobile/ios/Runner/CoreMlNemotronAudioInput.swift');
    expect(input).toContain('guardstate.graphReadyForResume');
    expect(input).toContain('referenceBound:pcmPlayback!=nil&&(renderTap?.installed??true)');
@@ -85,6 +85,9 @@ describe('iOS native audio mandatory gate',()=>{
      ['PcmRenderReference.swift','at:stamp.hostTime','at:hostTime'],
      ['AppleOnlineEndpointSession.swift','speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms','speechAlreadyOpen:false,inputRms:0'],
      ['AppleOnlineEndpointSession.swift','frame.reduce(0.0)','[Float(0)].reduce(0.0)'],
+     ['AppleOnlineEndpointSession.swift','sessionSampleOffset:sessionSampleOffset','sessionSampleOffset:0'],
+     ['AppleSpeechAsrBridge.swift','previous?.productSessionId == productSessionId','true'],
+     ['AppleSpeechAsrBridge.swift','sessionSampleOffset:sampleOffset','sessionSampleOffset:0'],
      ['SpeechOutputBridge.swift','if PcmPlaybackBoundary.shouldStopBeforePlay','stop()\n        if PcmPlaybackBoundary.shouldStopBeforePlay'],
    ];
    for(const[file,from,to]of cases)expect(()=>checkNativeAudioWiring(p=>p.endsWith(file)?read(p).replace(from,to):read(p))).toThrow();

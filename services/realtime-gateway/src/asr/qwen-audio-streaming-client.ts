@@ -16,6 +16,7 @@ import {streamingAsrFailureDiagnostic,streamingAsrProviderContext,streamingAsrCl
   streamingAsrCancellationContext,type StreamingAsrFailureContext} from './streaming-asr-diagnostics.js';
 import {decodeQwenAudioEvent,qwenAudioFinishTask,qwenAudioRunTask,QwenAudioCumulativeUsage,type QwenAudioSentence} from './qwen-audio-streaming-protocol.js';
 import {routeQwenAudioLanguage,type RoutedAudioSentence} from './qwen-audio-language-routing.js';
+import {transcriptAudioRange} from '../connection/device-text-language.js';
 
 export interface QwenAudioStreamingOptions extends Omit<StreamingAsrOptions,'wireProfile'> {
   textLanguage?:DeviceTextLanguageBroker;
@@ -51,6 +52,7 @@ export class QwenAudioStreamingClient {
   private languagePending=0;
   private lastFinal=0;
   private lastFinalText='';
+  private previewGeneration=0;
   private removeAbort=()=>{};
   private get rate(){return this.options.sampleRate!;}
   constructor(private readonly options:QwenAudioStreamingOptions){}
@@ -157,8 +159,7 @@ export class QwenAudioStreamingClient {
       if(!sentence.isFinal)return;throw Error();
     }
     if(!sentence.isFinal){
-      const text=cleanRealtimeText(sentence.text);if(text)this.options.preview?.({type:'transcript.partial',sessionId:this.options.sessionId,
-        segmentId:id,revision:0,text,language:this.options.language});return;
+      this.previewSentence(sentence,id);return;
     }
     this.lastFinal=sentence.sentenceId;this.lastFinalText=sentence.text;
     tracePublicAsrFinal(this.options.sessionId,id,sentence.text,sentence.startMs,sentence.endMs!,sentence.tokenTimings);
@@ -192,6 +193,20 @@ export class QwenAudioStreamingClient {
     }).catch(()=>this.fail('qwen_audio_result_failed')).finally(()=>{this.languagePending--;});
   }
   private startedSeen=false;
+  private previewSentence(sentence:QwenAudioSentence,id:string){
+    const text=cleanRealtimeText(sentence.text),generation=++this.previewGeneration;
+    if(!text||!this.options.preview)return;
+    const range=transcriptAudioRange(sentence.startMs,sentence.endMs??this.cursor/this.rate*1000,this.rate);
+    const confirmed=this.options.textLanguage
+      ? range?this.options.textLanguage.confirmPreviewSpeech(id,text,range):Promise.resolve(false)
+      : Promise.resolve(true);
+    void confirmed.then(speech=>{
+      if(!speech||generation!==this.previewGeneration||sentence.sentenceId<=this.lastFinal||
+        this.failure||this.stop.signal.aborted||this.finishing||this.providerFinished)return;
+      this.options.preview?.({type:'transcript.partial',sessionId:this.options.sessionId,
+        segmentId:id,revision:0,text,language:this.options.language});
+    }).catch(()=>{/* Missing preview evidence is not a failed ASR/final. */});
+  }
   private transcript(sentence:QwenAudioSentence,id:string,language:TranscriptResult['language']):TranscriptResult{
     const text=cleanRealtimeText(sentence.text)!;
     const left=sentence.text.length-sentence.text.trimStart().length;

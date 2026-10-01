@@ -62,6 +62,34 @@ struct AppleSpeechInputQueueTest {
         analysedThrough:through,retainedFrom:floor,activity:gate,renderEchoRanges:echo)
     }
     precondition(evidence(silence)["decision"] as? String == "non_speech")
+    // Exact first two capture lengths from the 0103 lock/resume failure.
+    // The provider's clock is cumulative; VAD/render analysis restarts at 0.
+    let offset = 215860 + 123082
+    let resumedRange: [String:Any] = ["startSample":offset+1000,"endSample":offset+4000,"sampleRate":16000]
+    func resumedEvidence(_ gate: AppleSpeechActivityGate, _ echo:[Range<Int>] = []) -> [String:Any] {
+      appleOnlineAudioEvidence(sessionMatches:true,inputSampleRate:16000,range:resumedRange,
+        analysedThrough:32000,retainedFrom:0,activity:gate,renderEchoRanges:echo,sessionSampleOffset:offset)
+    }
+    precondition(resumedEvidence(silence)["decision"] as? String == "non_speech")
+    precondition(resumedEvidence(tail)["decision"] as? String == "speech")
+    precondition(resumedEvidence(tail,[0..<4096])["reason"] as? String == "render_echo")
+    precondition(resumedEvidence(silence)["coveredThroughSample"] as? Int == offset+32000)
+    precondition((resumedEvidence(silence)["range"] as? [String:Int]) == (resumedRange as? [String:Int]))
+    // Red/green comparison of the actual third capture's negative VAD window.
+    // The old call used offset 0 and returned unknown, which final routing
+    // deliberately does not mistake for negative evidence. No PCM is replayed.
+    var observed = AppleSpeechActivityGate(preRollSamples:12800)
+    observed.advance(through:16384,speechEvent:(true,16384))
+    observed.advance(through:45056,speechEvent:(false,32768))
+    observed.advance(through:122880,speechEvent:nil)
+    let echoRange:[String:Any] = ["startSample":423200,"endSample":438560,"sampleRate":16000]
+    func observedReply(_ shift:Int,_ range:[String:Any]) -> [String:Any] {
+      appleOnlineAudioEvidence(sessionMatches:true,inputSampleRate:16000,range:range,
+        analysedThrough:122880,retainedFrom:0,activity:observed,renderEchoRanges:[],sessionSampleOffset:shift)
+    }
+    precondition(observedReply(0,echoRange)["decision"] as? String == "unknown")
+    precondition(observedReply(offset,echoRange)["decision"] as? String == "non_speech")
+    precondition(observedReply(offset,["startSample":354240,"endSample":372800,"sampleRate":16000])["decision"] as? String == "speech")
     precondition(evidence(silence,3000)["decision"] as? String == "unknown") // EOF tail not analysed
     precondition(evidence(silence,32000,24000)["decision"] as? String == "unknown") // different resampler clock
     precondition(evidence(silence,32000,16000,false)["reason"] as? String == "stale")

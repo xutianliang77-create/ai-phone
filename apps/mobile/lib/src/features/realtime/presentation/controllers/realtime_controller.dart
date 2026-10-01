@@ -154,6 +154,7 @@ class RealtimeController extends ChangeNotifier {
   RealtimeGatewayDiagnostic? _gatewayDiagnostic;
   RealtimeStatus? _statusBeforeReconnect;
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
+  Future<void> _lifecycleWork = Future<void>.value();
   bool _disposed = false;
   bool _audioSessionRecoveryInFlight = false;
   bool _captureInvalidated = false;
@@ -216,9 +217,14 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _resume({bool afterLifecycle = false}) async {
     final session = _session;
     if (session == null) return;
+    final generation = _startGeneration;
+    bool current() => !_disposed && !_stopInFlight &&
+        generation == _startGeneration && identical(_session, session) &&
+        !isTerminalRealtimeStatus(_status);
     final resumed = afterLifecycle
         ? await _repository.resumeAfterLifecycle(session.sessionId)
         : await _repository.resumeAndWait(session.sessionId);
+    if (!current()) return;
     if (!resumed) {
       throw StateError('Realtime connection lost');
     }
@@ -227,24 +233,23 @@ class RealtimeController extends ChangeNotifier {
     } else {
       await _resumeManagedAudioCapture();
     }
-    _setStatus(RealtimeStatus.active);
+    if (current()) _setStatus(RealtimeStatus.active);
   }
 
-  Future<void> _resumeOrFail() async {
+  Future<void> _resumeOrFail({bool afterLifecycle = false}) async {
+    final session = _session, generation = _startGeneration;
     try {
-      await _resume();
+      await _resume(afterLifecycle: afterLifecycle);
     } catch (error) {
-      _fail(await _failureMessage(error));
+      final message = await _failureMessage(error);
+      if (!_disposed && !_stopInFlight && generation == _startGeneration &&
+          identical(_session, session) && !isTerminalRealtimeStatus(_status)) {
+        _fail(message);
+      }
     }
   }
 
-  Future<void> _resumeAfterLifecycleOrFail() async {
-    try {
-      await _resume(afterLifecycle: true);
-    } catch (error) {
-      _fail(await _failureMessage(error));
-    }
-  }
+  Future<void> _resumeAfterLifecycleOrFail() => _resumeOrFail(afterLifecycle: true);
 
   Future<String> _failureMessage(Object error) {
     if (!_usesDeviceAsr) {

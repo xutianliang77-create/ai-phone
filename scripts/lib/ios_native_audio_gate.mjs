@@ -12,6 +12,7 @@ export const nativeAudioSuites = [
   suite('pcm-player',[...render,ios+'PublicPcmMailbox.swift'],'voice_processing_pcm_player_test.swift'),
   suite('capture-ownership',[ios+'CaptureEngineInvalidationGate.swift'],'capture_engine_invalidation_test.swift'),
   suite('vad-onset',[ios+'CoreMlNemotronEndpointDetector.swift'],'online_vad_speech_start_test.swift'),
+  suite('speech-evidence-clock',[ios+'AppleSpeechInputQueue.swift',ios+'CoreMlNemotronEndpointDetector.swift'],'apple_speech_input_queue_test.swift'),
   suite('duplex-metadata',[...render,ios+'CoreMlNemotronEndpointDetector.swift'],'ios_duplex_metadata_test.swift',
     ['scripts/tests/fixtures/ios-duplex-3008-metadata.json']),
   suite('echo-residual-onset',[...render,ios+'CoreMlNemotronEndpointDetector.swift',ios+'AppleSpeechInputQueue.swift'],
@@ -20,7 +21,7 @@ export const nativeAudioSuites = [
 ];
 export const nativeAudioInputs = [...new Set([
   ...nativeAudioSuites.flatMap(s=>[...s.sources,...s.args]),
-  ...['CoreMlNemotronAudioInput.swift','PublicPcmCaptureBridge.swift','AppleOnlineEndpointSession.swift','SpeechOutputBridge.swift'].map(p=>ios+p),
+  ...['CoreMlNemotronAudioInput.swift','PublicPcmCaptureBridge.swift','AppleOnlineEndpointSession.swift','AppleSpeechAsrBridge.swift','SpeechOutputBridge.swift'].map(p=>ios+p),
   'apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_audio_input.dart',
   'scripts/check_ios_native_audio.mjs','scripts/lib/ios_native_audio_gate.mjs',
 ])].sort();
@@ -36,6 +37,9 @@ export const nativeAudioWiringChecks = [
   ['echo-aware-onset',ios+'AppleOnlineEndpointSession.swift','speechStartAllowed:echoDecision.speechStartAllowed'],
   ['residual-onset-context',ios+'AppleOnlineEndpointSession.swift','speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms'],
   ['residual-full-window-rms',ios+'AppleOnlineEndpointSession.swift','letrms=sqrt(frame.reduce(0.0){$0+Double($1)*Double($1)}/Double(frame.count))'],
+  ['resumed-evidence-offset',ios+'AppleOnlineEndpointSession.swift','sessionSampleOffset:sessionSampleOffset'],
+  ['same-session-clock',ios+'AppleSpeechAsrBridge.swift','letsameSession=productSessionId!=nil&&previous?.productSessionId==productSessionId'],
+  ['resume-clock-forwarded',ios+'AppleSpeechAsrBridge.swift','renderReference:renderReference,sessionSampleOffset:sampleOffset'],
   ['no-normal-chunk-stop',ios+'SpeechOutputBridge.swift','ifPcmPlaybackBoundary.shouldStopBeforePlay'],
   ['dart-barge-stop','apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_audio_input.dart',
     'if(frame.startsSegment&&(_speechCaptureGate.isPlaying||_publicAudioRevisionBySegment.isNotEmpty))unawaited(_stopSpeaking());'],

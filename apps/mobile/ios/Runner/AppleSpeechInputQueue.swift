@@ -219,16 +219,22 @@ struct AppleSpeechActivityGate {
 /// sample coverage. Unknown clocks, stale sessions and the unanalysed EOF tail
 /// cannot be reported as negative speech evidence.
 func appleOnlineAudioEvidence(sessionMatches:Bool, inputSampleRate:Int, range:[String:Any],
-  analysedThrough:Int, retainedFrom:Int, activity:AppleSpeechActivityGate, renderEchoRanges:[Range<Int>]) -> [String:Any] {
-  let covered = inputSampleRate == 16000 ? analysedThrough : 0
+  analysedThrough:Int, retainedFrom:Int, activity:AppleSpeechActivityGate, renderEchoRanges:[Range<Int>],
+  sessionSampleOffset:Int = 0) -> [String:Any] {
+  let covered = inputSampleRate == 16000 ? sessionSampleOffset + analysedThrough : 0
   func reply(_ decision:String,_ reason:String) -> [String:Any] {
     ["method":"ios_silero_render_v1","range":range,"decision":decision,
       "coveredThroughSample":covered,"reason":reason]
   }
   guard sessionMatches else { return reply("unknown","stale") }
-  guard let start = range["startSample"] as? Int, let end = range["endSample"] as? Int,
+  guard sessionSampleOffset >= 0,
+    let absoluteStart = range["startSample"] as? Int, let absoluteEnd = range["endSample"] as? Int,
     let rate = range["sampleRate"] as? Int, rate == 16000, inputSampleRate == 16000,
-    start >= retainedFrom, end > start, end <= analysedThrough else { return reply("unknown","uncovered") }
+    absoluteStart >= sessionSampleOffset + retainedFrom, absoluteEnd > absoluteStart,
+    absoluteEnd <= covered else { return reply("unknown","uncovered") }
+  // The server keeps a continuous accepted-audio clock when physical capture
+  // restarts. VAD and rendered-reference windows belong to this capture only.
+  let start = absoluteStart - sessionSampleOffset, end = absoluteEnd - sessionSampleOffset
   var through = start
   for echo in renderEchoRanges where echo.upperBound > through && echo.lowerBound < end {
     if echo.lowerBound > through { break }; through = max(through,echo.upperBound)

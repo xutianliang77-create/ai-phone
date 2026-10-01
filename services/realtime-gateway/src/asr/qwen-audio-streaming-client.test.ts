@@ -39,8 +39,8 @@ it('continues PCM during phone LID and accepts the final reply during end withou
   const t=setup(true);try{await t.start();expect(t.factory).not.toHaveBeenCalled();
     await t.client.transcribe(t.frame());expect(t.socket.sent[0].payload.parameters).not.toHaveProperty('language_hints');
     t.socket.sentence(1,'Bonjour tout le monde.',false);t.socket.sentence(1,'Bonjour tout le monde.');
-    await t.client.transcribe(t.frame(1));expect(t.socket.bytes).toBe(6400);expect(t.preview).toHaveBeenCalledWith(expect.objectContaining({language:'auto',revision:0}));
-    const ending=t.client.flush({...t.flush,finishSession:true});await tick();const {text,audioRange,...r}=t.requests[0];
+    await t.client.transcribe(t.frame(1));expect(t.socket.bytes).toBe(6400);expect(t.preview).not.toHaveBeenCalled();
+    const ending=t.client.flush({...t.flush,finishSession:true});await tick();const {text,audioRange,...r}=t.requests.find(r=>!r.segmentId.endsWith('.preview'))!;
     expect(t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'fr',hypotheses:{fr:0.99}})).toBe(true);
     const result=await ending;expect(result[0]).toMatchObject({language:'fr',automaticLanguageStatus:'detected'});expect(result[0]).not.toHaveProperty('confidence');
   }finally{await t.client.closeSession('s');}
@@ -83,7 +83,7 @@ it('negative native speech evidence retires the draft before MT without an error
   const t=setup(true);try{
     await t.start();await t.client.transcribe(t.frame());
     t.socket.sentence(1,'Can you book a room.',false);t.socket.sentence(1,'Can you book a room.');
-    const {text,audioRange,...r}=t.requests[0];
+    const {text,audioRange,...r}=t.requests.find(r=>!r.segmentId.endsWith('.preview'))!;
     expect(audioRange).toEqual({startSample:0,endSample:1600,sampleRate:16000});
     expect(t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
       audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:'non_speech',coveredThroughSample:1600,reason:'render_echo'}})).toBe(true);
@@ -91,6 +91,39 @@ it('negative native speech evidence retires the draft before MT without an error
     expect(t.client.takeLanguageNotices('s')).toEqual([expect.objectContaining({unconfirmedText:'',discarded:true})]);
     expect(t.records.filter(e=>e.state==='confirmed')).toHaveLength(1);
     expect(t.factory).toHaveBeenCalledTimes(1);
+  }finally{await t.client.closeSession('s');}
+});
+
+it('does not expose a supplier echo draft before phone speech evidence arrives',async()=>{
+  const t=setup(true);try{
+    await t.start();await t.client.transcribe(t.frame());
+    t.socket.sentence(1,'What are you doing?',false);await tick();
+    expect(t.preview).not.toHaveBeenCalled();
+    const request=t.requests.find(r=>r.segmentId.endsWith('.preview'));
+    expect(request).toBeDefined();
+    const {text,audioRange,...r}=request!;
+    t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
+      audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:'non_speech',coveredThroughSample:1600,reason:'render_echo'}});
+    await tick();expect(t.preview).not.toHaveBeenCalled();
+  }finally{await t.client.closeSession('s');}
+});
+
+it('publishes genuine near speech but never late or superseded preview evidence',async()=>{
+  const t=setup(true);try{
+    await t.start();await t.client.transcribe(t.frame());
+    t.socket.sentence(1,'Please stop speaking.',false);await tick();
+    function acceptLast(){const {text,audioRange,...r}=t.requests.at(-1)!;
+      return t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
+        audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:'speech',coveredThroughSample:1600,reason:'speech_overlap'}});}
+    expect(acceptLast()).toBe(true);await tick();
+    expect(t.preview).toHaveBeenCalledWith(expect.objectContaining({text:'Please stop speaking.',revision:0}));
+    t.preview.mockClear();t.socket.sentence(1,'Please stop speaking now.',false);await tick();
+    const pending=t.requests.at(-1)!;
+    t.socket.sentence(1,'Please stop speaking now.');await tick();
+    const {text,audioRange,...r}=pending;
+    t.broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
+      audioEvidence:{method:'ios_silero_render_v1',range:audioRange,decision:'speech',coveredThroughSample:1600,reason:'speech_overlap'}});
+    await tick();expect(t.preview).not.toHaveBeenCalled();
   }finally{await t.client.closeSession('s');}
 });
 it('preserves an allowlisted provider cause without logging message, transcript or credentials',async()=>{

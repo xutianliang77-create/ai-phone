@@ -23,7 +23,9 @@ final class AppleOnlineEndpointSession {
   private var pending: [Float] = []
   private let trace = CoreMlNemotronDiagnosticRecorder(metadataOnly: true, maximumTimelineEvents: 4096)
   private var tracing = false, inputSamples = 0, analysisSamples = 0
-  private let productSessionId: String?
+  let productSessionId: String?
+  let sessionSampleOffset: Int
+  var sessionAudioEndSample: Int { sessionSampleOffset + inputSamples }
   private let renderReference: PcmRenderReference?
   private var renderEchoGate = PcmRenderEchoGate()
   private var activity: AppleSpeechActivityGate
@@ -36,6 +38,7 @@ final class AppleOnlineEndpointSession {
     trace.start(enabled: true, sessionId: "vad-" + id, configuration: [
       "kind": "online_vad_metadata", "productSessionId": sessionId, "endpointId": id,
       "inputSampleRate": Int(inputFormat.sampleRate), "parameters": configuration.parameters,
+      "sessionSampleOffset": sessionSampleOffset,
       "analysisSampleRate": 16000, "pcmCaptured": false,
       "inputClock": "endpoint_capture_not_gateway", "correlateBy": "sequence_and_pcmSha256",
       "analysisMapping": inputFormat.sampleRate == 16000 ? "same_rate_cumulative_samples" : "resampler_output_clock"
@@ -47,8 +50,10 @@ final class AppleOnlineEndpointSession {
   #endif
 
   init(id: String, sampleRate: Int, configuration: AppleSpeechConfiguration,
-    productSessionId: String? = nil, renderReference: PcmRenderReference? = nil) throws {
+    productSessionId: String? = nil, renderReference: PcmRenderReference? = nil,
+    sessionSampleOffset: Int = 0) throws {
     guard !id.isEmpty, id.count <= 120, [16000, 24000].contains(sampleRate),
+      sessionSampleOffset >= 0,
       let input = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
       let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false) else {
       throw AppleSpeechFailure.invalidConfiguration
@@ -57,6 +62,7 @@ final class AppleOnlineEndpointSession {
     converter = AVAudioConverter(from: input, to: output)
     self.configuration = configuration
     self.productSessionId = productSessionId; self.renderReference = renderReference
+    self.sessionSampleOffset = sessionSampleOffset
     activity = AppleSpeechActivityGate(preRollSamples:configuration.preRollSamples)
     endpoint = CoreMlNemotronEndpointDetector(vadThreshold: configuration.threshold,
       vadNegativeThreshold: configuration.negativeThreshold, minSpeechMs: configuration.minSpeechMs,
@@ -165,6 +171,7 @@ final class AppleOnlineEndpointSession {
   func audioEvidence(sessionId: String, range: [String:Any]) -> [String:Any] {
     appleOnlineAudioEvidence(sessionMatches:productSessionId == sessionId,
       inputSampleRate:Int(inputFormat.sampleRate),range:range,analysedThrough:analysisSamples,
-      retainedFrom:evidenceFloor,activity:activity,renderEchoRanges:renderEchoRanges)
+      retainedFrom:evidenceFloor,activity:activity,renderEchoRanges:renderEchoRanges,
+      sessionSampleOffset:sessionSampleOffset)
   }
 }

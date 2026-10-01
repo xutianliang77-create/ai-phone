@@ -5,6 +5,21 @@ import {DeviceTextLanguageBroker} from './device-text-language.js';
 import {textForLanguageObservation} from './text-language-evidence.js';
 import {realtimeLogger} from '../metrics/realtime-metrics.js';
 const fixture=JSON.parse(readFileSync(new URL('../../../../packages/contracts/fixtures/device-text-language-v1.json',import.meta.url),'utf8'));
+it.each(['missing','unknown','non_speech','speech'] as const)('preview requires positive physical evidence: %s',async(kind)=>{
+  let request!:DeviceTextLanguageRequest;
+  const broker=new DeviceTextLanguageBroker('s',['en'],r=>{request=r;return true;},50);
+  const range={startSample:0,endSample:1600,sampleRate:16000};
+  try{
+    const pending=broker.confirmPreviewSpeech('seg','Hello everyone.',range);
+    const {text,audioRange,...r}=request;
+    expect(request.segmentId).toBe('seg.preview');
+    broker.accept({...r,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:'en',hypotheses:{en:0.99},
+      ...(kind==='missing'?{}:{audioEvidence:{method:'ios_silero_render_v1',range,
+        decision:kind,coveredThroughSample:1600,reason:kind==='speech'?'speech_overlap':kind==='non_speech'?'render_echo':'uncovered'}})});
+    await expect(pending).resolves.toBe(kind==='speech');
+    if(kind==='speech')await expect(broker.confirmPreviewSpeech('seg','Changed draft.',range)).resolves.toBe(false);
+  }finally{broker.close();}
+});
 const response=(r:DeviceTextLanguageRequest,dominant:string|null='fr',hypotheses:Record<string,number>={fr:0.98,en:0.01})=>{
   const {text,audioRange,...binding}=r;return {...binding,type:'text.language.result',evidence:'text_only_not_acoustic',dominant,hypotheses};
 };

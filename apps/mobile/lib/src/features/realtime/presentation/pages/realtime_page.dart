@@ -111,10 +111,12 @@ class _RealtimePageState extends State<RealtimePage>
 
   Future<void> _handleLifecycleState(AppLifecycleState state) async {
     final current = controller;
+    // Enqueue lifecycle work in OS notification order. Old finalization replay
+    // must not delay this resume behind a later inactive/paused notification.
+    await current.handleLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       await current.recoverPendingFinalizations();
     }
-    await current.handleLifecycleState(state);
   }
 
   @override

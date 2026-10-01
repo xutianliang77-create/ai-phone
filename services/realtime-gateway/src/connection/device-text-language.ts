@@ -90,6 +90,17 @@ export class DeviceTextLanguageBroker {
     if(!this.speechEvidence.has(key))await this.identify(segmentId,revision,text,range);
     return this.speechEvidence.get(key)?.decision!=='non_speech';
   }
+  /** Uncommitted previews may wait; unlike a final, missing evidence must not
+   * briefly expose playback echo as a new utterance. A separate observation ID
+   * prevents preview updates from cancelling the final's language challenge. */
+  async confirmPreviewSpeech(segmentId:string,text:string,range:DeviceSpeechAudioRange):Promise<boolean>{
+    if(!this.speechEvidenceSupported)return true;
+    const id=`${segmentId}.preview`;
+    if(id.length>240)return false;
+    this.speechEvidence.delete(this.speechKey(id,1,range));
+    await this.identify(id,1,text,range);
+    return !this.closed&&this.speechEvidence.get(this.speechKey(id,1,range))?.decision==='speech';
+  }
   private speechKey(id:string,revision:number,r:DeviceSpeechAudioRange){return `${id}:${revision}:${r.sampleRate}:${r.startSample}:${r.endSample}`;}
   close(){this.closed=true;for(const entry of this.pending.values())entry.finish({status:'unknown',reason:'unavailable'});this.speechEvidence.clear();}
 }
