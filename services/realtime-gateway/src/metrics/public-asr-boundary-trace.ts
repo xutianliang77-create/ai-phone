@@ -58,6 +58,7 @@ interface LanguageTrace {
   stage:'language_observation'|'language_decision'|'language_routing';
   sourceTextSha256?:string;observationTextSha256?:string;projection?:string;
   dominant?:string|null;hypotheses?:Record<string,number>;canonicalHypotheses?:Record<string,number>;substantial?:boolean;shortObservation?:boolean;
+  fullyCoveredSpeech?:boolean;minimumProbability?:number;minimumMargin?:number;
   status?:string;language?:string;confidence?:number;reason?:string;
   startMs?:number;endMs?:number;tokenTimingCount?:number;childCount?:number;
 }
