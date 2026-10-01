@@ -114,8 +114,10 @@ final class AppleOnlineEndpointSession {
       state = result.state
       // Feed the WHOLE 256 ms VAD window, not just the latest 40 ms capture packet.
       let echo = renderReference?.match(frame,analysisStart:analysisSamples,sessionId:productSessionId)
+      let rms = sqrt(frame.reduce(0.0) { $0 + Double($1) * Double($1) } / Double(frame.count))
       let echoDecision = echo.map { renderEchoGate.evaluate($0,
-        analysisStart:analysisSamples,frameSamples:frame.count) } ??
+        analysisStart:analysisSamples,frameSamples:frame.count,
+        speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms) } ??
         PcmRenderEchoGate.Decision(matched:false,carried:false)
       let decision = endpoint.acceptVadFrame(probability: Double(result.probability), samples: frame,
         provider: "fluidaudio_silero",speechStartAllowed:echoDecision.speechStartAllowed)
@@ -130,6 +132,7 @@ final class AppleOnlineEndpointSession {
         "probability": Double(result.probability), "hasSpeech": decision.hasSpeech, "rms": decision.rms,
         "speechStarted": decision.speechStarted, "finalized": decision.shouldFinalize,
         "renderEchoMatched": echoDecision.matched, "renderEchoCarried": echoDecision.carried,
+        "renderResidualStartDeferred": echoDecision.residualStartDeferred,
         "renderCorrelation": echo?.correlation ?? 0,
         "renderReferenceCoverage": echo?.coverage ?? 0,
         "renderReferenceKnown": echo?.referenceKnown ?? true,

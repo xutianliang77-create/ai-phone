@@ -17,7 +17,7 @@ function valid(){return {schemaVersion:1,status:'HOST_PASS',platform:'darwin',us
 describe('iOS native audio mandatory gate',()=>{
  it('accepts the full clean same-source receipt, not a DEVICE assertion',()=>{
    expect(validateNativeAudioReport(valid(),expected)).toBe(true);
-   expect(nativeAudioSuites.map(s=>s.id)).toEqual(['render-clock','sample-clock','pcm-player','capture-ownership','vad-onset','duplex-metadata']);
+   expect(nativeAudioSuites.map(s=>s.id)).toEqual(['render-clock','sample-clock','pcm-player','capture-ownership','vad-onset','duplex-metadata','echo-residual-onset']);
  });
  const mutations={
    failed:r=>{r.status='FAIL';},unsupported:r=>{r.platform='linux';},microphone:r=>{r.usesMicrophone=true;},model:r=>{r.modelCalls=1;},
@@ -60,7 +60,7 @@ describe('iOS native audio mandatory gate',()=>{
    expect(JSON.parse(read('package.json')).scripts['check:ios-native-audio']).toBe('node scripts/check_ios_native_audio.mjs');
  });
  it('retains the production call sites that previously regressed',()=>{
-   expect(checkNativeAudioWiring(read)).toHaveLength(10);
+   expect(checkNativeAudioWiring(read)).toHaveLength(12);
    const input=compact('apps/mobile/ios/Runner/CoreMlNemotronAudioInput.swift');
    expect(input).toContain('guardstate.graphReadyForResume');
    expect(input).toContain('referenceBound:pcmPlayback!=nil&&(renderTap?.installed??true)');
@@ -71,6 +71,7 @@ describe('iOS native audio mandatory gate',()=>{
    expect(tap).toContain('generation:self.generation,sampleTime:sampleTime');
    expect(compact('apps/mobile/ios/Runner/PcmRenderReference.swift')).toContain('renderClock.stamp(sampleTime:sampleTime');
    expect(compact('apps/mobile/ios/Runner/AppleOnlineEndpointSession.swift')).toContain('speechStartAllowed:echoDecision.speechStartAllowed');
+   expect(compact('apps/mobile/ios/Runner/AppleOnlineEndpointSession.swift')).toContain('speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms');
    const playback=read('apps/mobile/ios/Runner/SpeechOutputBridge.swift').split('private func playPcm(')[1];
    expect(playback).toContain('if PcmPlaybackBoundary.shouldStopBeforePlay');
    expect(playback.split('if PcmPlaybackBoundary.shouldStopBeforePlay')[0]).not.toContain('stop()');
@@ -82,6 +83,8 @@ describe('iOS native audio mandatory gate',()=>{
      ['CoreMlNemotronAudioInput.swift','guard state.graphReadyForResume','guard state.ready'],
      ['PcmRenderTap.swift','sampleTime:sampleTime','sampleTime:nil'],
      ['PcmRenderReference.swift','at:stamp.hostTime','at:hostTime'],
+     ['AppleOnlineEndpointSession.swift','speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms','speechAlreadyOpen:false,inputRms:0'],
+     ['AppleOnlineEndpointSession.swift','frame.reduce(0.0)','[Float(0)].reduce(0.0)'],
      ['SpeechOutputBridge.swift','if PcmPlaybackBoundary.shouldStopBeforePlay','stop()\n        if PcmPlaybackBoundary.shouldStopBeforePlay'],
    ];
    for(const[file,from,to]of cases)expect(()=>checkNativeAudioWiring(p=>p.endsWith(file)?read(p).replace(from,to):read(p))).toThrow();

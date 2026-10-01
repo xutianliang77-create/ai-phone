@@ -14,6 +14,9 @@ export const nativeAudioSuites = [
   suite('vad-onset',[ios+'CoreMlNemotronEndpointDetector.swift'],'online_vad_speech_start_test.swift'),
   suite('duplex-metadata',[...render,ios+'CoreMlNemotronEndpointDetector.swift'],'ios_duplex_metadata_test.swift',
     ['scripts/tests/fixtures/ios-duplex-3008-metadata.json']),
+  suite('echo-residual-onset',[...render,ios+'CoreMlNemotronEndpointDetector.swift',ios+'AppleSpeechInputQueue.swift'],
+    'pcm_echo_residual_start_test.swift',['scripts/tests/fixtures/ios-echo-0102-metadata.json',
+      'scripts/tests/fixtures/ios-barge-3008-full-metadata.json','scripts/tests/fixtures/ios-quiet-3008-full-metadata.json']),
 ];
 export const nativeAudioInputs = [...new Set([
   ...nativeAudioSuites.flatMap(s=>[...s.sources,...s.args]),
@@ -31,6 +34,8 @@ export const nativeAudioWiringChecks = [
   ['render-time-forwarded',ios+'PcmRenderTap.swift','generation:self.generation,sampleTime:sampleTime'],
   ['render-time-consumed',ios+'PcmRenderReference.swift','clock.position(at:stamp.hostTime,sampleRate:captureRate)'],
   ['echo-aware-onset',ios+'AppleOnlineEndpointSession.swift','speechStartAllowed:echoDecision.speechStartAllowed'],
+  ['residual-onset-context',ios+'AppleOnlineEndpointSession.swift','speechAlreadyOpen:endpoint.isSpeechOpen,inputRms:rms'],
+  ['residual-full-window-rms',ios+'AppleOnlineEndpointSession.swift','letrms=sqrt(frame.reduce(0.0){$0+Double($1)*Double($1)}/Double(frame.count))'],
   ['no-normal-chunk-stop',ios+'SpeechOutputBridge.swift','ifPcmPlaybackBoundary.shouldStopBeforePlay'],
   ['dart-barge-stop','apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller_audio_input.dart',
     'if(frame.startsSegment&&(_speechCaptureGate.isPlaying||_publicAudioRevisionBySegment.isNotEmpty))unawaited(_stopSpeaking());'],

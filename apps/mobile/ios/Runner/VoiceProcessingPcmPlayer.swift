@@ -40,32 +40,53 @@ struct PcmCaptureReadiness {
 /// A render echo may fall below the direct waveform threshold for one frame
 /// after Apple's voice processor changes its residual. Only a recent direct
 /// match with the same measured delay may protect the next two VAD windows;
-/// carried matches never extend the window. Independent or later speech wins.
+/// carried matches never extend the window. A fading same-delay adjacent frame
+/// may defer a NEW onset once, not claim echo or mute PCM. Like the 1.0 bounded
+/// tail guard, it cannot cut an open utterance or grow into a playback-long ban.
 struct PcmRenderEchoGate {
   struct Decision {
-    let matched: Bool, carried: Bool, speechStartAllowed: Bool
-    init(matched: Bool, carried: Bool, speechStartAllowed: Bool? = nil) {
+    let matched: Bool, carried: Bool, speechStartAllowed: Bool, residualStartDeferred: Bool
+    init(matched: Bool, carried: Bool, speechStartAllowed: Bool? = nil,
+      residualStartDeferred: Bool = false) {
       self.matched = matched; self.carried = carried
       self.speechStartAllowed = speechStartAllowed ?? !matched
+      self.residualStartDeferred = residualStartDeferred
     }
   }
-  private var lastDirect: (start: Int, lagMs: Int)?
+  private var lastDirect: (start: Int, frames: Int, lagMs: Int, rms: Double, acoustic: Bool)?
 
   mutating func evaluate(_ match: PcmRenderReference.Match,
-    analysisStart: Int, frameSamples: Int) -> Decision {
+    analysisStart: Int, frameSamples: Int, speechAlreadyOpen: Bool = false,
+    inputRms: Double = .nan) -> Decision {
     let carried: Bool
     if let previous = lastDirect, !match.matched, frameSamples > 0 {
       let distance = analysisStart - previous.start
       carried = distance > 0 && distance <= frameSamples * 2 &&
         match.correlation >= 0.40 && abs(match.lagMs - previous.lagMs) <= 40
     } else { carried = false }
-    if match.matched { lastDirect = (analysisStart, match.lagMs) }
+    let protected = match.matched || carried
+    var deferred = false
+    if let previous = lastDirect, !protected, !speechAlreadyOpen,
+      previous.acoustic, match.requiresEchoProof, match.referenceKnown {
+      // Correlation loss is not proof of near speech. Confirm only the next
+      // contiguous, non-growing-energy window when the measured delay persists.
+      // Stronger/differently delayed near speech wins immediately. Sustained
+      // ambiguous near speech wins on the following window; the existing 800ms
+      // pre-roll retains its beginning. Never renew this hold from a held frame.
+      deferred = frameSamples > 0 && frameSamples <= 350 * 16 &&
+        previous.frames == frameSamples && analysisStart - previous.start == frameSamples &&
+        match.correlation > 0 && abs(match.lagMs - previous.lagMs) <= 40 &&
+        inputRms.isFinite && inputRms > 0 && previous.rms.isFinite && previous.rms > 0 &&
+        inputRms <= previous.rms
+    }
+    if match.matched { lastDirect = (analysisStart, frameSamples, match.lagMs, inputRms,
+      match.requiresEchoProof && match.referenceKnown) }
     else if let previous = lastDirect,
       frameSamples <= 0 || analysisStart <= previous.start ||
       analysisStart - previous.start > frameSamples * 2 { lastDirect = nil }
-    let protected = match.matched || carried
     return Decision(matched:protected,carried:carried,
-      speechStartAllowed:!protected && (!match.requiresEchoProof || match.referenceKnown))
+      speechStartAllowed:!protected && !deferred && (!match.requiresEchoProof || match.referenceKnown),
+      residualStartDeferred:deferred)
   }
 
   mutating func reset() { lastDirect = nil }
