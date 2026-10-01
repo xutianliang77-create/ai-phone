@@ -56,7 +56,7 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
     }).finally(() => { confirmationInFlight = false; });
   }, 1000) : undefined;
   const publicUsage=sessionEventSink.requiresConfirmation&&session.claims.publicRuntime!==undefined;
-  const initialHold=session.claims.holdSeconds;
+  const initialHold=session.publicAuthorizedSeconds??session.claims.holdSeconds;
   let publicAllowance:UsageBalanceSnapshot|null=publicUsage&&Number.isSafeInteger(initialHold)&&initialHold!>0
     ? {authorizedSeconds:initialHold!,remainingSeconds:initialHold!,availableSeconds:0}:null;
   let accountStopStarted=false,allowanceInFlight=false;
@@ -86,6 +86,7 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
         !Number.isSafeInteger(next.remainingSeconds)||next.remainingSeconds<0||
         next.authorizedSeconds!<observed){await stopForAccount("connection_error");return;}
       publicAllowance=next;
+      session.publicAuthorizedSeconds=next.authorizedSeconds;
       if(next.remainingSeconds===0||observed>=next.authorizedSeconds!){
         await stopForAccount("quota_exhausted",0);
       }

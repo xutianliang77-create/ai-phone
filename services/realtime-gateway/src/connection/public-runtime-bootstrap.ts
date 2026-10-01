@@ -16,9 +16,9 @@ export function publicGatewayRuntimeBootstrapIssue(env:Pick<RealtimeEnv,
   return undefined;
 }
 
-/** Returns only the independently scoped material-access secret, never provider credentials. */
+/** No provider credentials; only confirmed-pause, same-process recovery. */
 export function publicGatewayRuntimeOptions(env:Pick<RealtimeEnv,
   "publicDeploymentId"|"publicRuntimeEnabled"|"publicCredentialAccessSecret"|"internalApiSecret"|"realtimeTokenSecret">):PublicGatewayRuntimeOptions|undefined{
   if(publicGatewayRuntimeBootstrapIssue(env))return undefined;
-  return {credentialAccessSecret:env.publicCredentialAccessSecret!};
+  return {credentialAccessSecret:env.publicCredentialAccessSecret!,pausedLifecycleRecovery:true};
 }

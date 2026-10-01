@@ -27,8 +27,10 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
       }
       if (event.type == 'session.paused') _publicPaused = true;
       if (event.type == 'session.resumed') {
+        if (_manualClose) return;
         _publicPaused = false;
         _suspended = false;
+        _publicRecovery.confirmResume();
       }
       if (event.type == 'session.recovery.ready') {
         _publicRecovery.receive(
@@ -69,7 +71,8 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
   void _handleDisconnect(int generation, [Object? error]) {
     if (generation != _connectionGeneration) return;
     _textLanguageClosed = true;
-    unawaited(_cancelDeviceSpeaker());
+    final recoverPaused = canRecoverPausedPublicSession(_session?.sessionId ?? '');
+    if (!recoverPaused) unawaited(_cancelDeviceSpeaker());
     final subscription = _subscription;
     final channel = _channel;
     _transportReady = false;
@@ -78,7 +81,7 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
     unawaited(subscription?.cancel());
     unawaited(channel?.sink.close());
     _stableConnectionTimer?.cancel();
-    if (_manualClose || _suspended) return;
+    if (_manualClose || _suspended || recoverPaused) return;
     if (_session?.syncBinding != null) {
       final started = _publicStarted;
       if (started != null && !started.isCompleted) {

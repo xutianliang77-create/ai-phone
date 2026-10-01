@@ -9,6 +9,7 @@ extension RealtimeGatewayControl on RealtimeGatewayClient {
     });
     if (sent && _session?.sessionId == sessionId) {
       _lastAudioSequence = frame.sequence;
+      _sentAudioSamples += frame.bytes.length ~/ 2;
       if (_session?.syncBinding != null && frame.startsSegment) unawaited(_interruptOutput(sessionId, frame.sequence));
       _acceptSpeakerAudio(sessionId, frame);
     }

@@ -106,10 +106,12 @@ export class RealtimeConnectionCleanup {
         pending.status !== "connecting" ||
         pending.disconnectDeadlineAt !== deadlineAt
       ) return;
-      await this.options.finalizer.finalize(reason);
-      this.options.releaseRetainedRecovery?.();
-      deleteSession(session.id, session);
-      this.options.closeClient();
+      try{await this.options.finalizer.finalize(reason);}
+      finally{
+        this.options.releaseRetainedRecovery?.();
+        deleteSession(session.id, session);
+        this.options.closeClient();
+      }
     }, deadlineAt);
     session.disconnectDeadlineAt = deadlineAt;
   }

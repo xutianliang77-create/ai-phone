@@ -16,7 +16,7 @@ let app:FastifyInstance,server:Server|undefined,ws:WebSocket|undefined,peer:Synt
 const messages:any[]=[];
 installConfigurationFixture();
 beforeEach(async()=>{
-  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(now);messages.length=0;
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(now);messages.length=0;peer=undefined!;
   for(const [key,value]of Object.entries({API_TEST_AUTO_ACCOUNT:'true',REALTIME_TOKEN_SECRET:signer,INTERNAL_API_SECRET:internal,
     REALTIME_WS_ENDPOINT:'wss://gateway.synthetic.invalid/realtime',API_BASE_URL:'https://api.synthetic.invalid',MODEL_ROUTING_FILE:'',
     REALTIME_BIND_HOST:'127.0.0.1',REALTIME_PORT:'0',REALTIME_PROVIDER:'mock',ASR_PROVIDER:'mock',SESSION_EVENT_SINK:'api',
@@ -56,12 +56,14 @@ it.each([true,false])('end queue consumes phone LID without deadlock; detected=%
   const t=await setup();await waitFor(()=>messages.some(e=>e.type==='session.started'));
   vi.setSystemTime(now.getTime()+1000);
   ws!.send(JSON.stringify({type:'audio.frame',sessionId:t.issued.sessionId,sequence:1,timestampMs:0,format:'pcm16',sampleRate:16000,data:Buffer.alloc(3200).toString('base64')}));
-  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer.bytes===3200);
+  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer?.bytes===3200);
   const text=detected?'Bonjour tout le monde.':'Okay.';peer.sentence(1,text);await waitFor(()=>messages.some(e=>e.type==='text.language.request'));
   const {text:original,...challenge}=messages.find(e=>e.type==='text.language.request');expect(original).toBe(text);
   vi.setSystemTime(now.getTime()+4000);ws!.send(JSON.stringify({type:'session.end',sessionId:t.issued.sessionId}));
   await waitFor(()=>!!current().publicRuntime?.meterStoppedAt);
-  ws!.send(JSON.stringify({...challenge,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:detected?'fr':'en',hypotheses:detected?{fr:0.99}:{en:0.99}}));
+  // The accepted short-answer policy allows an independent 0.99 result. This
+  // negative arm must actually be ambiguous, not rely on an obsolete length gate.
+  ws!.send(JSON.stringify({...challenge,type:'text.language.result',evidence:'text_only_not_acoustic',dominant:detected?'fr':'en',hypotheses:detected?{fr:0.99}:{en:0.6,fr:0.39}}));
   await waitFor(()=>messages.some(e=>e.type==='session.ended'));await waitFor(()=>getSession(t.issued.sessionId)===null);
   expect(current().status).toBe('ended');expect(current().consumedSeconds).toBe(4);
   expect(current().segments[0]).toMatchObject({sourceText:text,sourceLanguage:detected?'fr':'auto'});
@@ -80,7 +82,7 @@ it('mixed-language children retire one parent, save both directions and end with
   const t=await setup();await waitFor(()=>messages.some(e=>e.type==='session.started'));
   vi.setSystemTime(now.getTime()+1000);
   ws!.send(JSON.stringify({type:'audio.frame',sessionId:t.issued.sessionId,sequence:1,timestampMs:0,format:'pcm16',sampleRate:16000,data:Buffer.alloc(3200).toString('base64')}));
-  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer.bytes===3200);
+  ws!.send(JSON.stringify({type:'audio.boundary',sessionId:t.issued.sessionId,sequence:1}));await waitFor(()=>peer?.bytes===3200);
   const text='你好，这是中文测试。Hello everyone.';
   peer.sentence(1,text,false);
   peer.receive('result-generated',{output:{sentence:{sentence_id:1,text,sentence_end:true,begin_time:0,end_time:text.length*3,

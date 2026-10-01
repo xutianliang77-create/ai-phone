@@ -12,7 +12,8 @@ describe("explicit public runtime bootstrap",()=>{
     expect(publicGatewayRuntimeBootstrapIssue(base({publicCredentialAccessSecret:"i".repeat(32)}))).toBe("public_credential_access_must_be_independent");
   });
   it("exposes no provider key or legacy endpoint when the explicit public bridge is eligible",()=>{
-    const options=publicGatewayRuntimeOptions(base());expect(options).toEqual({credentialAccessSecret:"p".repeat(32)});
+    const options=publicGatewayRuntimeOptions(base());expect(options).toEqual({credentialAccessSecret:"p".repeat(32),pausedLifecycleRecovery:true});
+    expect(options?.recoverySocketAssembly).toBeUndefined();
     expect(publicGatewayRuntimeOptions(base({publicRuntimeEnabled:false}))).toBeUndefined();
   });
 });

@@ -47,10 +47,38 @@ void main() {
     await h.client.suspendForLifecycle();await until(()=>peer.readyState==WebSocket.closed);
     expect(h.client.sendAudio('session',wire.frame),false);expect(h.connections,1);
   });
-  test('actual background disconnect does not reconnect or replay',() async {
-    final h=wire.Wire();await h.setup();addTearDown(h.close);final peer=await connected(h);await paused(h,peer);
+  test('confirmed background disconnect stays paused until foreground explicitly restores the exact bridge',() async {
+    final h=wire.Wire();await h.setup();addTearDown(h.close);final peer=await connected(h);
+    expect(h.client.sendAudio('session',wire.frame),true);await paused(h,peer);
     await h.client.suspendForLifecycle();await peer.close();await Future<void>.delayed(const Duration(milliseconds:30));
-    expect(await h.client.reconnectAndResume('session'),false);expect(h.client.sendAudio('session',wire.frame),false);expect(h.connections,1);
+    expect(h.client.sendAudio('session',wire.frame),false);expect(h.connections,1);
+    final next=h.nextPeer(),resume=h.client.reconnectAndResume('session'),second=await next;
+    event(second,'session.started');second.add(jsonEncode({'type':'session.recovery.ready','sessionId':'session','lastAcceptedSample':1,'nextSequence':2}));
+    await until(()=>h.frames.any((f)=>f['type']=='session.resume'));
+    event(second,'session.resumed');expect(await resume,true);
+    expect(h.frames.where((f)=>f['type']=='audio.frame'),hasLength(1));
+    await paused(h,second);final again=h.client.resumeAndWait('session');
+    await until(()=>h.frames.where((f)=>f['type']=='session.resume').length==2);
+    expect(h.frames.lastWhere((f)=>f['type']=='session.resume').containsKey('recovery'),false);
+    event(second,'session.resumed');expect(await again,true);expect(h.connections,2);
+  });
+  for(final mismatch in ['sample','sequence']) {
+    test('paused recovery rejects $mismatch mismatch without resetting or replaying phone audio',() async {
+      final h=wire.Wire();await h.setup();addTearDown(h.close);final peer=await connected(h);
+      h.client.sendAudio('session',wire.frame);await paused(h,peer);await h.client.suspendForLifecycle();
+      await peer.close();await Future<void>.delayed(const Duration(milliseconds:20));
+      final next=h.nextPeer(),resuming=h.client.reconnectAndResume('session'),second=await next;
+      event(second,'session.started');second.add(jsonEncode({'type':'session.recovery.ready','sessionId':'session',
+        'lastAcceptedSample':mismatch=='sample'?0:1,'nextSequence':mismatch=='sequence'?3:2}));
+      expect(await resuming,false);expect(h.frames.where((f)=>f['type']=='session.resume'),isEmpty);
+      expect(h.client.sendAudio('session',wire.frame),false);
+    });
+  }
+  test('explicit end of a disconnected paused session cannot create or resume a socket',() async {
+    final h=wire.Wire();await h.setup();addTearDown(h.close);final peer=await connected(h);
+    h.client.sendAudio('session',wire.frame);await paused(h,peer);await h.client.suspendForLifecycle();
+    await peer.close();await Future<void>.delayed(const Duration(milliseconds:20));
+    h.client.end('session');expect(await h.client.reconnectAndResume('session'),false);expect(h.connections,1);
   });
   test('missing resume ACK keeps audio blocked; explicit close cannot revive the retained transport',() async {
     final h=wire.Wire();await h.setup();addTearDown(h.close);final peer=await connected(h);await paused(h,peer);

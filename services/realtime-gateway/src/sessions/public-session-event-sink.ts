@@ -143,6 +143,9 @@ export class PublicSessionEventSink implements SessionEventSink {
     const samples=this.samples;
     return this.enqueue(async()=>{if(this.phase!=="disconnected")await this.observe("disconnected",samples);});
   }
+  canRetainPaused(){
+    return this.phase==="paused"&&!this.failure&&!this.stopPromise&&!this.freezePromise&&this.frameSequence>=0;
+  }
   recoveryBridge() {
     if(this.phase!=="disconnected"||this.failure||this.stopPromise||this.freezePromise||this.frameSequence<0)throw Error("public_recovery_bridge_not_ready");
     return {lastAcceptedSample:this.samples,nextSequence:this.frameSequence+1};

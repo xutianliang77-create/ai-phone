@@ -92,4 +92,18 @@ describe("server-domain public lease issuance",()=>{
     const stopped=await observePublicRuntime("lease-session",{...event,sequence:2,phase:"stopped"},new Date(start+2000));
     expect(stopped.uncertain).toBe(true);expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
   });
+  it.each(['expired','revoked','changed_samples'])('closes a confirmed unchanged pause after %s without inventing activity or permitting resume',async(kind)=>{
+    const p=await issue(),event={leaseId:p.leaseId,captureId:p.captureId,languagePolicyKey:p.languagePolicyKey,
+      sequence:1,phase:'active',finalRevision:0,lastAcceptedSample:0};
+    await observePublicRuntime('lease-session',event,now());
+    await observePublicRuntime('lease-session',{...event,sequence:2,phase:'paused',lastAcceptedSample:16000},new Date(start+1000));
+    await observePublicRuntime('lease-session',{...event,sequence:3,phase:'disconnected',lastAcceptedSample:16000},new Date(start+2000));
+    if(kind!=='expired')current().publicInferenceAdmission!.revokedAt=at(3);
+    const ending=new Date(start+(kind==='expired'?302000:4000));
+    expect((await publicRecoveryStatus('lease-session','owner',ending)).canResume).toBe(false);
+    await expect(observePublicRuntime('lease-session',{...event,sequence:4,lastAcceptedSample:16000},ending)).rejects.toThrow('admission_required');
+    const stopped=await observePublicRuntime('lease-session',{...event,sequence:4,phase:'stopped',
+      lastAcceptedSample:kind==='changed_samples'?16001:16000},ending);
+    expect(stopped.activeMs).toBe(1000);expect(stopped.meterUncertain).toBe(kind==='changed_samples');
+  });
 });

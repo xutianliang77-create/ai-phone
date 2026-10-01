@@ -8,10 +8,14 @@ const _publicGatewayEndTimeout = Duration(seconds: 22);
 
 extension RealtimePublicLifecycle on RealtimeRepository {
   Future<bool> resumeRetainedPublicSession(String sessionId) async {
-    if (!_gatewayClient.canResumePublicTransport(sessionId)) return false;
-    // This is the original paused connection, not a new handshake. Recheck
-    // current server permission; a genuinely lost socket remains unsupported.
-    return resumePublicSession(sessionId, reconnect: false);
+    if (_gatewayClient.canResumePublicTransport(sessionId)) {
+      if (await resumePublicSession(sessionId, reconnect: false)) return true;
+      if (_gatewayClient.canResumePublicTransport(sessionId)) return false;
+    }
+    if (!_gatewayClient.canRecoverPausedPublicSession(sessionId)) return false;
+    // Foreground only, same paused session. API authority and the server's
+    // exact sample/sequence bridge must both match; never create a new lease.
+    return resumePublicSession(sessionId);
   }
   int get publicCreationAccountGeneration => _apiClient.accountGeneration;
   Future<PublicCreationResolution?> resolvePendingPublicCreation(

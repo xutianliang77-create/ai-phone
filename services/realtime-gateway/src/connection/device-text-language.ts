@@ -7,18 +7,19 @@ export type TextLanguageDecision={status:'detected';language:TranslationLanguage
   {status:'non_speech';reason:'no_speech_support'|'render_echo'}|
   {status:'unknown';reason:'unavailable'|'timeout'|'ambiguous'|'unsupported'|'stale'|'mixed_unaligned'};
 type Pending={request:DeviceTextLanguageRequest;finish:(value:TextLanguageDecision)=>void};
-/** Owned by ONE authenticated socket, not a global/account cache. Replies are
+/** Owned by ONE session and its currently authenticated socket. Replies are
  * consumed outside the audio/control queue so a final flush cannot deadlock it. */
 export class DeviceTextLanguageBroker {
   private pending=new Map<string,Pending>();
   private closed=false;
+  private disconnected=false;
   private speechEvidence=new Map<string,DeviceSpeechAudioEvidence|undefined>();
   constructor(private readonly sessionId:string,private readonly sources:readonly TranslationLanguageCode[],
     private readonly send:(request:DeviceTextLanguageRequest)=>boolean,private readonly timeoutMs=2000,
     private readonly speechEvidenceSupported=true){}
   identify(segmentId:string,revision:number,text:string,audioRange?:DeviceSpeechAudioRange):Promise<TextLanguageDecision>{
     if(!this.speechEvidenceSupported)audioRange=undefined;
-    if(this.closed||!text.trim()||text.length>16000||!Number.isSafeInteger(revision)||revision<1||this.pending.size>=32||audioRange&&!isDeviceSpeechAudioRange(audioRange))
+    if(this.closed||this.disconnected||!text.trim()||text.length>16000||!Number.isSafeInteger(revision)||revision<1||this.pending.size>=32||audioRange&&!isDeviceSpeechAudioRange(audioRange))
       return Promise.resolve({status:'unknown',reason:'unavailable'});
     for(const entry of this.pending.values())if(entry.request.segmentId===segmentId)entry.finish({status:'unknown',reason:'stale'});
     const sourceTextSha256=createHash('sha256').update(text,'utf8').digest('hex');
@@ -42,7 +43,7 @@ export class DeviceTextLanguageBroker {
     });
   }
   accept(value:unknown):boolean{
-    if(this.closed||!isDeviceTextLanguageResult(value)||value.sessionId!==this.sessionId)return false;
+    if(this.closed||this.disconnected||!isDeviceTextLanguageResult(value)||value.sessionId!==this.sessionId)return false;
     const entry=this.pending.get(value.requestId);if(!entry)return false;
     const r=entry.request;
     if(value.segmentId!==r.segmentId||value.revision!==r.revision||value.textSha256!==r.textSha256)return false;
@@ -102,7 +103,11 @@ export class DeviceTextLanguageBroker {
     return !this.closed&&this.speechEvidence.get(this.speechKey(id,1,range))?.decision==='speech';
   }
   private speechKey(id:string,revision:number,r:DeviceSpeechAudioRange){return `${id}:${revision}:${r.sampleRate}:${r.startSample}:${r.endSample}`;}
-  close(){this.closed=true;for(const entry of this.pending.values())entry.finish({status:'unknown',reason:'unavailable'});this.speechEvidence.clear();}
+  // A confirmed pause already drained final speech. Cancel any late preview
+  // challenge on transport loss; retaining its promise would deadlock cleanup.
+  disconnectTransport(){this.disconnected=true;for(const entry of this.pending.values())entry.finish({status:'unknown',reason:'unavailable'});}
+  resumeTransport(){if(!this.closed)this.disconnected=false;}
+  close(){this.closed=true;this.disconnectTransport();this.speechEvidence.clear();}
 }
 
 export function transcriptAudioRange(startMs:number|undefined,endMs:number|undefined,sampleRate:number):DeviceSpeechAudioRange|undefined {

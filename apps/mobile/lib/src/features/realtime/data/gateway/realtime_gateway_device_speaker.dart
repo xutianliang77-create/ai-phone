@@ -2,7 +2,7 @@ part of 'realtime_gateway_client.dart';
 
 class _DeviceSpeakerState {
   String? sessionId;
-  int samples = 0, sequence = 0, through = 0;
+  int samples = 0, sequence = 0, through = 0, epoch = 0;
   StreamSubscription<Map<String, Object?>>? subscription;
 }
 
@@ -15,30 +15,32 @@ extension RealtimeGatewayDeviceSpeaker on RealtimeGatewayClient {
     _speaker.sequence = 0;
     _speaker.through = 0;
     if (session.deviceSpeakerProfile != deviceSpeakerProfile) return;
-    final generation = _connectionGeneration;
+    final generation = ++_speaker.epoch;
     _speaker.sessionId = session.sessionId;
     try {
       if (deviceSpeaker == null) throw StateError('device_speaker_missing');
       _speaker.subscription = deviceSpeaker!.events.listen((event) {
-        if (_connectionGeneration != generation) return;
+        if (_speaker.epoch != generation) return;
         if (event['type'] == 'speaker.unavailable') {
           if (event['sessionId'] == _speaker.sessionId) _speakerUnavailable();
         } else {
           _sendSpeakerEvidence(event);
         }
-      }, onError: (Object _) { if (_connectionGeneration == generation) _speakerUnavailable(); });
+      }, onError: (Object _) { if (_speaker.epoch == generation) _speakerUnavailable(); });
       await deviceSpeaker!.start(session.sessionId, session.syncBinding!.captureSampleRate);
-      if (generation != _connectionGeneration) await _cancelDeviceSpeaker();
-    } catch (_) { _speakerUnavailable(); }
+      if (generation != _speaker.epoch) {
+        await deviceSpeaker!.cancel(session.sessionId).timeout(const Duration(seconds: 1));
+      }
+    } catch (_) { if (generation == _speaker.epoch) _speakerUnavailable(); }
   }
 
   void _acceptSpeakerAudio(String sessionId, AudioFrame frame) {
     if (_speaker.sessionId != sessionId) return;
-    final start = _speaker.samples, generation = _connectionGeneration;
+    final start = _speaker.samples, generation = _speaker.epoch;
     _speaker.samples += frame.bytes.length ~/ 2;
     // Native serial queue is bounded; never await inference in audio upload.
     unawaited(deviceSpeaker!.accept(sessionId, start, frame.bytes).catchError((Object _) {
-      if (generation == _connectionGeneration && _speaker.sessionId == sessionId) _speakerUnavailable();
+      if (generation == _speaker.epoch && _speaker.sessionId == sessionId) _speakerUnavailable();
     }));
   }
 
@@ -73,6 +75,7 @@ extension RealtimeGatewayDeviceSpeaker on RealtimeGatewayClient {
 
   Future<void> _cancelDeviceSpeaker() async {
     final id = _speaker.sessionId, subscription = _speaker.subscription;
+    _speaker.epoch++;
     _speaker.sessionId = null; _speaker.subscription = null;
     await subscription?.cancel();
     if (id != null) {

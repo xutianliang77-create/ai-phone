@@ -30,11 +30,13 @@ class Wire {
   final speaker = Speaker();
   late HttpServer server;
   WebSocket? peer;
+  int connections=0;
   final frames = <Map<String, dynamic>>[];
   late final client = RealtimeGatewayClient(deviceSpeaker:speaker);
   Future<void> start({bool enabled=true}) async {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4,0);
     server.listen((request) async {
+      connections++;
       final socket = peer = await WebSocketTransformer.upgrade(request,protocolSelector:(v)=>v.first);
       socket.listen((raw) {
         final frame=jsonDecode(raw as String) as Map<String,dynamic>; frames.add(frame);
@@ -42,6 +44,7 @@ class Wire {
         if(frame['type']=='session.resume') socket.add(jsonEncode({'type':'session.resumed','sessionId':'session'}));
       });
       socket.add(jsonEncode({'type':'session.started','sessionId':'session'}));
+      if(connections>1)socket.add(jsonEncode({'type':'session.recovery.ready','sessionId':'session','lastAcceptedSample':2,'nextSequence':2}));
     });
     await client.connect(RealtimeSession(sessionId:'session',realtimeToken:'synthetic',
       endpoint:Uri.parse('ws://127.0.0.1:${server.port}/realtime'),expiresAt:DateTime.now().add(const Duration(hours:1)),
@@ -84,5 +87,17 @@ void main() {
   test('old off profile never initializes or feeds a local speaker model',() async {
     final w=Wire();await w.start(enabled:false);addTearDown(w.close);w.audio(1);await tick();
     expect(w.speaker.starts,0);expect(w.speaker.frames,isEmpty);
+  });
+  test('paused socket recovery keeps the model, sample clock and evidence listener in the same session',() async {
+    final w=Wire();await w.start();addTearDown(w.close);expect(w.audio(1),true);await tick();
+    w.speaker.output.add(evidence());await tick();
+    expect(await w.client.pauseAndWait('session'),true);await w.client.suspendForLifecycle();
+    await w.peer!.close();await tick();expect(w.speaker.cancels,0);
+    expect(await w.client.reconnectAndResume('session'),true);expect(w.audio(2),true);await tick();
+    w.speaker.output.add(evidence(sequence:2,through:4));await tick();
+    expect(w.speaker.starts,1);expect(w.speaker.cancels,0);
+    expect(w.speaker.frames.map((e)=>e.$1),[0,2]);
+    expect(w.frames.where((e)=>e['type']=='speaker.evidence').map((e)=>e['sequence']),[1,2]);
+    await w.client.close();expect(w.client.canRecoverPausedPublicSession('session'),false);
   });
 }

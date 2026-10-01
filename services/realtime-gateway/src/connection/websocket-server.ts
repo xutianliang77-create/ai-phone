@@ -24,6 +24,7 @@ import { publicGatewayRuntimeOptions } from "./public-runtime-bootstrap.js";
 import { PublicSpeechInactivityWatchdog } from "./public-speech-inactivity-watchdog.js";
 import { DeviceSpeakerTimeline } from "../speaker/device-speaker-timeline.js";
 import { registerRealtimeShutdown } from "./realtime-gateway-shutdown.js";
+import {PublicRecoveryInput} from './public-recovery-input.js';
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
@@ -42,8 +43,9 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     if(!configured)return;
     const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
     const flushTracker = new RealtimeFlushTracker();
-    let outputSuppressed=false,recoveryResumeMatched=!configured.publicRecoveryConnection,recoveryResumeConfirmed=!configured.publicRecoveryConnection,
-      recoveryFirstAudioAccepted=!configured.publicRecoveryConnection,publicSessionStarted=false;
+    let outputSuppressed=false,publicSessionStarted=false;
+    const recoveryInput=configured.publicRecoveryConnection?new PublicRecoveryInput(session.id,configured.recoveryBridge,
+      event=>sendRealtimeEvent(ws,event)):undefined;
     let speechInactivity:PublicSpeechInactivityWatchdog|undefined, deviceSpeakerTimeline:DeviceSpeakerTimeline|undefined;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
@@ -78,16 +80,18 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
           if(event.type==="session.resumed"){
             outputSuppressed=false;
             speechInactivity?.resume();
-            if(configured.publicRecoveryConnection&&recoveryResumeMatched)recoveryResumeConfirmed=true;
+            recoveryInput?.confirm();
           }
           if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);
         }
       },
     });
     const sendRealtime = eventDispatcher.send;
-    if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = new DeviceSpeakerTimeline(session.id,sendRealtime,()=>provider.deviceSpeakerBoundaryGuards?.(session.id)??[]);
+    if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = configured.transport?.speakerTimeline(ws,sendRealtime,provider)??
+      new DeviceSpeakerTimeline(session.id,sendRealtime,()=>provider.deviceSpeakerBoundaryGuards?.(session.id)??[]);
     let unsubscribeProvider=()=>{};
-    const confirmAudio=()=>sessionEventSink.confirmAudio?.()??Promise.reject(Error("public_audio_confirmation_required"));
+    const confirmAudio=()=>recoveryInput&&!recoveryInput.confirmed?sessionEventSink.drain!():
+      sessionEventSink.confirmAudio?.()??Promise.reject(Error("public_audio_confirmation_required"));
     const startedEvent = { type: "session.started", sessionId: session.id } as const;
     if (resumed) sendRealtimeEvent(ws, startedEvent);
     else sendRealtime(startedEvent);
@@ -203,22 +207,8 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       }
       if(sessionEventSink.requiresConfirmation&&getSession(session.id)?.connectionGeneration!==generation)return;
       if(handleDeviceTextLanguageEvidence(event,'textLanguage' in configured?configured.textLanguage:undefined))return;
+      if(recoveryInput&&!recoveryInput.accept(event))return;
       if (handleDeviceSpeakerEvidence(event, session, sessionEventSink, provider, deviceSpeakerTimeline)) return;
-      if(configured.publicRecoveryConnection){
-        const bridge=configured.recoveryBridge;
-        if(!bridge){sendRealtime(buildError("bad_event","Public recovery bridge is unavailable",{sessionId:session.id,stage:"session",retryable:false}));return;}
-        if(event.type==="session.resume"){
-          if(event.recovery?.lastAcceptedSample!==bridge.lastAcceptedSample||event.recovery?.nextSequence!==bridge.nextSequence){
-            sendRealtime(buildError("bad_event","Public recovery resume bridge does not match the trusted watermark",{sessionId:session.id,stage:"session",retryable:false}));
-            return;
-          }
-          recoveryResumeMatched=true;
-        }
-        if(event.type==="audio.frame"&&(!recoveryResumeConfirmed||(!recoveryFirstAudioAccepted&&event.sequence!==bridge.nextSequence))){
-          sendRealtime(buildError("bad_event","Public recovery audio sequence does not match the trusted watermark",{sessionId:session.id,stage:"asr",retryable:false}));
-          return;
-        }
-      }
 
       if (event.sessionId === session.id && (!configured.publicRecoveryConnection||event.type==="session.resume") &&
           confirmSessionConnection(session.id, generation)) {
@@ -240,7 +230,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         if (activeSession?.status === "active") {
           logAudioFrameReceived(event);
           audioBatcher.enqueue(event);
-          if(configured.publicRecoveryConnection)recoveryFirstAudioAccepted=true;
+          recoveryInput?.acceptedAudio();
         }
         return;
       }
@@ -333,7 +323,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         ? "connection_error"
         : "connection_closed";
       await connectionCleanup.run(reason);
-      if(!connectionCleanup.retainedPublicRecovery){ttsOutputQueue.close();runtime.shutdown.remove(ws);}
+      if(!connectionCleanup.retainedPublicRecovery){
+        if(getSession(session.id)?.connectionGeneration===generation||!getSession(session.id)){
+          configured.transport?.close();ttsOutputQueue.close();
+        }
+        runtime.shutdown.remove(ws);
+      }
     };
     registerRealtimeShutdown(runtime.shutdown,ws,{session,generation,provider,endRealtimeSession,cleanupConnection,
       beforeStop:()=>{outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.close();return controlQueue.catch(()=>undefined);}});

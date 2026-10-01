@@ -55,7 +55,10 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     const gap=timestamp-last;
     const metering=old?.phase==="active"&&!old.meterStoppedAt;
     const activeMs=(old?.activeMs??0)+(metering&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
-    const meterUncertain=!old?.meterStoppedAt&&!admissionValid || !!old?.meterUncertain ||
+    // Expiry/revocation blocks resume, but does not erase an already confirmed
+    // pause watermark. Closing that unchanged pause adds no active time/audio.
+    const unchangedPause=old&&["paused","disconnected"].includes(old.phase)&&b.phase!=="active"&&b.lastAcceptedSample===old.lastAcceptedSample;
+    const meterUncertain=!old?.meterStoppedAt&&!admissionValid&&!unchangedPause || !!old?.meterUncertain ||
       !!old?.uncertain&&old.meterUncertain===undefined ||
       metering&&gap>PUBLIC_EVIDENCE_GAP_MS ||
       p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || metering&&timestamp>Date.parse(p.expiresAt);

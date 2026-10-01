@@ -13,7 +13,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:number,ordinaryPublic=false) {
+function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:number,ordinaryPublic=false,recoveredHold?:number) {
   const socket = Object.assign(new EventEmitter(), {
     readyState: 1, ping: vi.fn(), terminate: vi.fn(),
   });
@@ -28,6 +28,7 @@ function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:nu
     token.publicRuntime={deploymentId:"public-qa",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
   }
   const session = createSession(token);
+  if(recoveredHold!==undefined){session.publicAuthorizedSeconds=recoveredHold;session.accumulatedActiveMs=60_000;}
   const record = vi.fn(async () => {}), touch = vi.fn(async () => {});
   const confirmAudio = vi.fn(async () => {});
   const getBalance = vi.fn(async () => ({ remainingSeconds: 300 }));
@@ -150,6 +151,16 @@ describe("connection timer extraction", () => {
     await vi.advanceTimersByTimeAsync(10_000);await unknown.drain();
     expect(unknown.endRealtimeSession).toHaveBeenCalledWith("connection_error",0);
     expect(unknown.sendRealtime).not.toHaveBeenCalled();
+  });
+  it('keeps the current confirmed hold on paused recovery instead of resetting to the original 30 seconds',async()=>{
+    const t=setup(true,Promise.resolve(),undefined,true,90);
+    await vi.advanceTimersByTimeAsync(10_000);await t.drain();
+    expect(t.reserveAllowance).toHaveBeenCalledWith(t.session.id,100);
+    expect(t.session.publicAuthorizedSeconds).toBe(100);
+    expect(t.endRealtimeSession).not.toHaveBeenCalled();
+    t.reserveAllowance.mockResolvedValue(null as never);
+    await vi.advanceTimersByTimeAsync(10_000);await t.drain();
+    expect(t.endRealtimeSession).toHaveBeenCalledWith('connection_error',0);
   });
 
   it("retains ping/pong liveness and cancels every timer during cleanup", async () => {

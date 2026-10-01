@@ -67,6 +67,7 @@ class RealtimeGatewayClient {
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
   int _lastAudioSequence = -1;
+  int _sentAudioSamples = 0;
   bool _textLanguageClosed = false;
   final _textLanguagePending = <String>{};
   final _textLanguageSeen = <String>{};
@@ -78,6 +79,8 @@ class RealtimeGatewayClient {
   Future<void> connect(RealtimeSession session) async {
     _session = session;
     _publicPaused = false;
+    _lastAudioSequence = -1;
+    _sentAudioSamples = 0;
     _publicRecovery.reset();
     _manualClose = false;
     _suspended = false;
@@ -90,7 +93,7 @@ class RealtimeGatewayClient {
 
   Future<void> _open(RealtimeSession session, {bool expectPublicRecovery = false}) async {
     _transportReady = false;
-    _lastAudioSequence = -1;
+    if (!expectPublicRecovery) _lastAudioSequence = -1;
     final generation = ++_connectionGeneration;
     _textLanguageClosed = false;
     _textLanguagePending.clear();
@@ -118,7 +121,8 @@ class RealtimeGatewayClient {
       if (session.syncBinding != null) {
         await _publicStarted!.future.timeout(_publicStartTimeout);
         if (expectPublicRecovery) {
-          await _publicRecovery.waitForReady(_publicStartTimeout);
+          await _publicRecovery.waitForReady(_publicStartTimeout,
+              samples: _sentAudioSamples, nextSequence: _lastAudioSequence + 1);
         }
       }
     } catch (_) {
@@ -156,10 +160,13 @@ class RealtimeGatewayClient {
   }) async {
     final session = _session;
     if (session == null || session.sessionId != sessionId) return false;
-    if (session.syncBinding != null && !publicRecoverySocketAssembly) return false;
+    if (session.syncBinding != null &&
+        !publicRecoverySocketAssembly && !canRecoverPausedPublicSession(sessionId)) return false;
+    if (publicRecoverySocketAssembly) _manualClose = false;
     _reconnectTimer?.cancel();
-    await _closeTransport();
-    _manualClose = false;
+    final nextGeneration = _connectionGeneration + 1;
+    await _closeTransport(preserveSpeaker: session.syncBinding != null && _publicPaused);
+    if (_manualClose || _connectionGeneration != nextGeneration || !identical(session, _session)) return false;
     _suspended = false;
     try {
       await _open(session, expectPublicRecovery: session.syncBinding != null);
@@ -170,7 +177,7 @@ class RealtimeGatewayClient {
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
-    if (_session?.syncBinding != null && (_suspended || _publicPaused)) return false;
+    if (_session?.syncBinding != null && (_manualClose || _suspended || _publicPaused)) return false;
     if (!_transportReady || _channel == null) {
       if (_shouldBufferReconnectAudio(sessionId)) {
         _reconnectAudioBuffer.add(frame);
@@ -228,6 +235,7 @@ class RealtimeGatewayClient {
   }
 
   bool resume(String sessionId) {
+    if (_manualClose || _session?.sessionId != sessionId) return false;
     final recovery = _publicRecovery.resumePayload;
     return _send({
       'type': 'session.resume',
@@ -319,8 +327,8 @@ class RealtimeGatewayClient {
     );
   }
 
-  Future<void> _closeTransport() async {
-    unawaited(_cancelDeviceSpeaker());
+  Future<void> _closeTransport({bool preserveSpeaker = false}) async {
+    if (!preserveSpeaker) unawaited(_cancelDeviceSpeaker());
     final started = _publicStarted;
     if (started != null && !started.isCompleted) {
       started.completeError(

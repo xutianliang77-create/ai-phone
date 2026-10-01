@@ -88,6 +88,7 @@ void main() {
     final h = Wire();await h.setup(recoverySocketAssembly: true);addTearDown(h.close);
     final session=h.session(),connect=h.client.connect(session),first=await h.peer.future;
     first.add(jsonEncode({'type':'session.started','sessionId':'session'}));await connect;
+    expect(h.client.sendAudio('session',AudioFrame(sequence:4,timestampMs:0,sampleRate:16000,bytes:List.filled(3200,0))),true);
     await first.close();await Future<void>.delayed(const Duration(milliseconds:20));
     final next=h.nextPeer(),recovery=h.client.reconnectAndResume('session'),second=await next;
     second.add(jsonEncode({'type':'session.started','sessionId':'session'}));
@@ -104,6 +105,7 @@ void main() {
   test('missing recovery bridge keeps explicit public reconnect closed and sends no audio', () async {
     final h=Wire();await h.setup(recoverySocketAssembly:true);addTearDown(h.close);
     final connect=h.client.connect(h.session()),first=await h.peer.future;first.add(jsonEncode({'type':'session.started','sessionId':'session'}));await connect;
+    expect(h.client.sendAudio('session',AudioFrame(sequence:4,timestampMs:0,sampleRate:16000,bytes:List.filled(3200,0))),true);
     await first.close();await Future<void>.delayed(const Duration(milliseconds:20));
     final next=h.nextPeer(),recovery=h.client.reconnectAndResume('session'),second=await next;
     second.add(jsonEncode({'type':'session.started','sessionId':'session'}));
@@ -113,6 +115,7 @@ void main() {
     final h=Wire();await h.setup(recoverySocketAssembly:true);addTearDown(h.close);final events=<String>[];
     final subscription=h.client.events.listen((event)=>events.add(event.type));addTearDown(subscription.cancel);
     final connect=h.client.connect(h.session()),first=await h.peer.future;first.add(jsonEncode({'type':'session.started','sessionId':'session'}));await connect;
+    expect(h.client.sendAudio('session',AudioFrame(sequence:4,timestampMs:0,sampleRate:16000,bytes:List.filled(3200,0))),true);
     await first.close();await Future<void>.delayed(const Duration(milliseconds:20));
     final next=h.nextPeer(),recovery=h.client.reconnectAndResume('session'),second=await next;
     second.add(jsonEncode({'type':'session.started','sessionId':'session'}));
@@ -121,7 +124,7 @@ void main() {
     second.add(jsonEncode({'type':'error','sessionId':'session','code':'bad_event','stage':'session','retryable':false}));
     expect(await recovery,false);await Future<void>.delayed(const Duration(milliseconds:20));
     expect(events,containsAllInOrder(['error','connection.closed']));expect(h.client.sendAudio('session',frame),false);
-    expect(h.frames.where((f)=>f['type']=='audio.frame'),isEmpty);expect(h.connections,2);
+    expect(h.frames.where((f)=>f['type']=='audio.frame').map((f)=>f['sequence']),[4]);expect(h.connections,2);
   });
   test('legacy private connect keeps its transport-only handshake', () async {
     final h = Wire();await h.setup(public: false);addTearDown(h.close);

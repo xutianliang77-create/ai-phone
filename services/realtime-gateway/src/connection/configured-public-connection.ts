@@ -3,13 +3,14 @@ import type WebSocket from "ws";
 import type {RealtimeEnv} from "../config/env.js";
 import {extractRealtimeConnectionToken} from "../auth/realtime-connection-token.js";
 import {verifyRealtimeToken} from "../auth/realtime-token-verifier.js";
-import {publicRuntimeTokenBinding,DEVICE_TEXT_LANGUAGE_PROTOCOL,DEVICE_SPEECH_EVIDENCE_PROTOCOL,type TranslationLanguageCode} from "@translation/contracts";
-import {DeviceTextLanguageBroker} from './device-text-language.js';
+import {publicRuntimeTokenBinding,DEVICE_TEXT_LANGUAGE_PROTOCOL,type TranslationLanguageCode} from "@translation/contracts";
+import {PublicSessionTransport} from './public-session-transport.js';
+import {publicRecoveryHooks} from './public-paused-recovery.js';
 import {createSessionEventSink,bindPublicSessionEventSink} from "../sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../sessions/public-admission-client.js";
 import {createPublicRuntimeMaterialClient} from "../sessions/public-runtime-material-client.js";
 import {publicTerminologySessionFields} from "../sessions/public-session-terminology.js";
-import {attachSession,getSession,activeSessionCount,retainPublicRecoveryRuntime,releasePublicRecoveryRuntime,takePublicRecoveryRuntime} from "../sessions/session-manager.js";
+import {attachSession,getSession,activeSessionCount,takePublicRecoveryRuntime} from "../sessions/session-manager.js";
 import {ProviderRouter} from "../providers/provider-router.js";
 import type {ConfiguredPublicSessionOptions} from "../providers/configured-public-session.js";
 import {RealtimeTtsOutputQueue} from "../tts/realtime-tts-output.js";
@@ -24,17 +25,18 @@ export interface PublicGatewayRuntimeOptions {
   asrSocketFactory?:ConfiguredPublicSessionOptions["socketFactory"];
   ttsSocketFactory?:NonNullable<ConfiguredPublicSessionOptions["output"]>["socketFactory"];
   googleStreamFactory?:ConfiguredPublicSessionOptions["googleStreamFactory"];
-  /** Test-only assembly gate. Default production behavior still finalizes a
-   * disconnected public session immediately. */
+  /** Broad test-only assembly. Product recovery is separately restricted to
+   * a confirmed pause; active disconnect still finalizes immediately. */
   recoverySocketAssembly?:boolean;
+  /** Product path: original process/runtime, only AFTER confirmed pause. */
+  pausedLifecycleRecovery?:boolean;
   /** Explicit test owner. A recovery receipt without the original in-process
    * runtime is rejected; this never enables replacement model streams. */
   recoveryOwnership?:{ownerId:string;rejectMissingRuntime?:boolean};
 }
 const pending=new Set<string>();
 /** Explicit boot-time path using original Provider, queue, sink and session map.
- * No automatic reconnect: current API admission only permits a fresh created lease.
- * Multi-Gateway exclusive ownership is a separate production gate. */
+ * Active disconnect and cross-process replacement remain unsupported. */
 export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocket,request:IncomingMessage,options:PublicGatewayRuntimeOptions,readiness?:GatewayDependencyReadiness){
   const token=extractRealtimeConnectionToken(request,false),claims=token?verifyRealtimeToken(token,env.realtimeTokenSecret):null;
   const binding=claims&&env.publicDeploymentId?publicRuntimeTokenBinding(claims,env.publicDeploymentId):null;
@@ -51,17 +53,20 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     ws.close(1008,"public_runtime_not_ready");
     return null;
   }
-  const retained=getSession(claims.sessionId),recoveryCandidate=options.recoverySocketAssembly===true&&
+  const retained=getSession(claims.sessionId),recoveryCandidate=(options.recoverySocketAssembly===true||
+    options.pausedLifecycleRecovery===true&&retained?.publicRecoveryRuntime?.pausedLifecycle===true)&&
     retained?.status==="connecting"&&retained.publicDisconnect&&retained.publicRecoveryRuntime;
   if(pending.has(claims.sessionId)||(!recoveryCandidate&&getSession(claims.sessionId))||(!recoveryCandidate&&activeSessionCount()+pending.size>=env.maxSessions)){ws.close(1008,"public_session_already_attached_or_capacity");return null;}
   pending.add(claims.sessionId);
   const stop=new AbortController(),cancel=()=>stop.abort(),timer=setTimeout(cancel,30000);ws.once("close",cancel);ws.once("error",cancel);
   let built:ReturnType<ProviderRouter["createConfiguredPublicSessionFromVerifiedClaims"]>|undefined;
-  let textLanguage:DeviceTextLanguageBroker|undefined;
+  let transport:PublicSessionTransport|undefined;
+  const protocols=request.headers['sec-websocket-protocol'];
+  const capabilities=(Array.isArray(protocols)?protocols.join(','):protocols??'').split(',').map(x=>x.trim());
   try{
     if(!options.credentialAccessSecret||options.credentialAccessSecret.length<32||options.credentialAccessSecret===env.internalApiSecret||options.credentialAccessSecret===env.realtimeTokenSecret)throw Error("public_credential_access_required");
     const sink=createSessionEventSink(env,options.apiFetchFn),admission=createPublicAdmissionClient(sink,claims,env.publicDeploymentId!);
-    if(recoveryCandidate)return await reopenConfiguredPublicConnection(claims,ws,stop,admission,sink,options.recoveryOwnership);
+    if(recoveryCandidate)return await reopenConfiguredPublicConnection(claims,ws,stop,admission,sink,options,capabilities);
     if(options.recoveryOwnership?.rejectMissingRuntime){
       await abortable(admission.inspectRecovery(),stop.signal);
       throw Error("public_cross_process_recovery_not_supported");
@@ -69,18 +74,12 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     await abortable(admission.authorize("connect"),stop.signal);
     const material=createPublicRuntimeMaterialClient(sink,claims,env.publicDeploymentId!,options.credentialAccessSecret);
     const {snapshot,authorization,terminology}=await material.configuration(stop.signal);
-    const protocols=request.headers['sec-websocket-protocol'];
-    const capabilities=(Array.isArray(protocols)?protocols.join(','):protocols??'').split(',').map(x=>x.trim());
     const deviceObservation=capabilities.includes(DEVICE_TEXT_LANGUAGE_PROTOCOL);
     if(snapshot.components.asr?.protocol==='qwen_audio_streaming'&&claims.sourceLanguage==='auto'){
       if(!deviceObservation)throw Error('public_device_text_language_required');
-      if(options.recoverySocketAssembly)throw Error('public_text_language_recovery_not_supported');
     }
-    if(deviceObservation){
-      textLanguage=new DeviceTextLanguageBroker(claims.sessionId,authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair??[],
-        event=>{if(ws.readyState!==1)return false;sendRealtimeEvent(ws,event);return true;},2000,capabilities.includes(DEVICE_SPEECH_EVIDENCE_PROTOCOL));
-      ws.once('close',()=>textLanguage?.close());ws.once('error',()=>textLanguage?.close());
-    }
+    transport=new PublicSessionTransport(claims.sessionId,capabilities,authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair??[]);
+    transport.bind(ws);
     let started=false;const purpose=()=>started?"dispatch" as const:"connect" as const;
     const scoped={sessionId:claims.sessionId,ownerId:claims.userId,deploymentId:binding.deploymentId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
       leaseId:binding.leaseId,captureId:binding.captureId,languagePolicyKey:binding.languagePolicyKey,sampleRate:binding.sampleRate};
@@ -92,7 +91,7 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
       ...(claims.processing!.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...claims.processing!.languagePolicy.sourceLanguages]}:{})};
     if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000)throw Error("public_qa_deadline_elapsed");
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,terminology,binding:scoped,session:sessionInput,
-      textLanguage,preview:event=>{if(ws.readyState===1&&getSession(claims.sessionId)?.status==='active')sendRealtimeEvent(ws,event);},
+      textLanguage:transport.textLanguage,preview:transport.preview,
       deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
       resolveTranslationCredentials:signal=>material.credentials("translation","dispatch",signal),recordAttempt:event=>sink.modelAttempt!(event),
@@ -108,47 +107,43 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
       synthesizer:{enabled:false,async *synthesizeStream(){throw Error("public_tts_disabled");},cancelSession(){},closeSession(){}}});
     const sessionEventSink=bindPublicSessionEventSink(sink,scoped);
     const output=built.ttsOutput??disabledOutput();
-    const recovery=options.recoverySocketAssembly===true?{
-      retain:()=>retainPublicRecoveryRuntime(claims.sessionId,attachment.generation,{generation:attachment.generation,
-        provider:built!.provider,ttsOutputQueue:output,sessionEventSink,
-        release:()=>{output.close();void built!.provider.closeSession(claims.sessionId).catch(()=>{});}}),
-      release:()=>releasePublicRecoveryRuntime(claims.sessionId,attachment.generation),
-    }:undefined;
-    return {...attachment,provider:built.provider,ttsOutputQueue:output,sessionEventSink,textLanguage,
-      checkpointDisconnect:async()=>{await sessionEventSink.disconnect();await sessionEventSink.drain();return admission.inspectRecovery();},
-      retainPublicRecovery:recovery?.retain,releaseRetainedRecovery:recovery?.release,
+    const recovery=publicRecoveryHooks(claims.sessionId,attachment.generation,{generation:attachment.generation,
+      provider:built.provider,ttsOutputQueue:output,sessionEventSink,transport,
+      release:()=>{transport?.close();output.close();void built!.provider.closeSession(claims.sessionId).catch(()=>{});}},admission,options);
+    return {...attachment,provider:built.provider,ttsOutputQueue:output,sessionEventSink,transport,textLanguage:transport.textLanguage,...recovery,
       markStarted:()=>{started=true;},publicConnection:true,publicRecoveryConnection:false,recoveryBridge:undefined};
   }catch{
-    textLanguage?.close();
+    transport?.close();
     built?.ttsOutput?.close();if(built)await built.provider.closeSession(claims.sessionId).catch(()=>{});
     sendRealtimeEvent(ws,buildError("provider_unavailable","Public runtime could not be authorized or initialized",{sessionId:claims.sessionId,stage:"provider",retryable:false}));
     if(ws.readyState===1)ws.close(1008,"public_runtime_not_ready");return null;
   }finally{clearTimeout(timer);pending.delete(claims.sessionId);ws.off("close",cancel);ws.off("error",cancel);}
 }
 
-/** Explicit same-process recovery assembly. It rechecks the current server
- * authority before the compare-and-set, consumes no credentials, and deliberately
- * leaves audio input blocked until the phone sequence bridge is implemented. */
+/** Recheck current authority before CAS; consume no new model credentials.
+ * Audio stays blocked until the exact saved sample/sequence bridge is confirmed. */
 async function reopenConfiguredPublicConnection(claims:NonNullable<ReturnType<typeof verifyRealtimeToken>>,ws:WebSocket,stop:AbortController,
-    admission:ReturnType<typeof createPublicAdmissionClient>,sink:ReturnType<typeof createSessionEventSink>,ownership?:{ownerId:string}){
+    admission:ReturnType<typeof createPublicAdmissionClient>,sink:ReturnType<typeof createSessionEventSink>,options:PublicGatewayRuntimeOptions,capabilities:readonly string[]){
   const current=getSession(claims.sessionId);
   if(!current||!Number.isSafeInteger(current.connectionGeneration)||current.connectionGeneration<1||!current.publicRecoveryRuntime||!current.publicDisconnect)throw Error("public_recovery_runtime_missing");
   const expected=current.connectionGeneration;
+  const saved=current.publicRecoveryRuntime,ownership=options.recoveryOwnership;
+  saved.transport?.assertCapabilities(capabilities);
   const receipt=await abortable(admission.inspectRecovery(),stop.signal);
   if(stop.signal.aborted||ws.readyState!==1)throw Error("public_recovery_cancelled");
   if(ownership){
     if(!/^[A-Za-z0-9._:-]{8,160}$/.test(ownership.ownerId)||!receipt.recovery||!sink.recoveryOwnership)throw Error("public_recovery_ownership_required");
     await abortable(sink.recoveryOwnership(claims.sessionId,{ownerId:ownership.ownerId,runtimeSequence:receipt.recovery.runtimeSequence}),stop.signal);
   }
+  const recoveryBridge=saved.sessionEventSink.recoveryBridge();
+  if(recoveryBridge.lastAcceptedSample!==receipt.recovery?.lastAcceptedSample||recoveryBridge.nextSequence<0)throw Error("public_recovery_bridge_mismatch");
   const attachment=attachSession(claims,{expectedGeneration:expected,receipt});
   if(!attachment||!attachment.resumed)throw Error("public_recovery_handoff_denied");
   const runtime=takePublicRecoveryRuntime(claims.sessionId,attachment.generation);
   if(!runtime)throw Error("public_recovery_runtime_lost");
-  const recoveryBridge=runtime.sessionEventSink.recoveryBridge();
-  if(recoveryBridge.lastAcceptedSample!==receipt.recovery?.lastAcceptedSample||recoveryBridge.nextSequence<0)throw Error("public_recovery_bridge_mismatch");
-  const retain=()=>retainPublicRecoveryRuntime(claims.sessionId,attachment.generation,{...runtime,generation:attachment.generation});
+  runtime.transport?.bind(ws);
   return {...attachment,provider:runtime.provider,ttsOutputQueue:runtime.ttsOutputQueue,sessionEventSink:runtime.sessionEventSink,
-    checkpointDisconnect:async()=>{await runtime.sessionEventSink.disconnect();await runtime.sessionEventSink.drain();return admission.inspectRecovery();},
-    retainPublicRecovery:retain,releaseRetainedRecovery:()=>releasePublicRecoveryRuntime(claims.sessionId,attachment.generation),
+    transport:runtime.transport,textLanguage:runtime.transport?.textLanguage,
+    ...publicRecoveryHooks(claims.sessionId,attachment.generation,{...runtime,generation:attachment.generation},admission,options),
     markStarted:()=>{},publicConnection:true,publicRecoveryConnection:true,recoveryBridge};
 }

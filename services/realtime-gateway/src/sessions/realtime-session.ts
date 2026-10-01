@@ -7,6 +7,7 @@ import type {
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import type { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 import type { PublicSessionEventSink } from "./public-session-event-sink.js";
+import type { PublicSessionTransport } from "../connection/public-session-transport.js";
 
 export type RealtimeSessionStatus = Extract<
   RealtimeSessionState,
@@ -21,6 +22,8 @@ export interface PublicRecoveryRuntime {
   provider: RealtimeProvider;
   ttsOutputQueue: RealtimeTtsOutputQueue;
   sessionEventSink: PublicSessionEventSink;
+  pausedLifecycle?:boolean;
+  transport?:PublicSessionTransport;
   release(): void;
 }
 
@@ -36,6 +39,8 @@ export interface RealtimeSession {
   accumulatedActiveMs: number;
   connectionGeneration: number;
   billableSeconds: number;
+  /** Current API-confirmed hold; survives a same-process paused socket handoff. */
+  publicAuthorizedSeconds?:number;
   reconnectStatus?: Extract<RealtimeSessionStatus, "active" | "paused">;
   disconnectDeadlineAt?: number;
   publicDisconnect?:{generation:number;receipt:PublicAdmissionReceipt};
