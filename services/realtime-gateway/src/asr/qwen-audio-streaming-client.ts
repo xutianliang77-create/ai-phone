@@ -11,7 +11,8 @@ import {abortable} from '../providers/abortable.js';
 import {cleanRealtimeText} from '../protocol/realtime-text.js';
 import {realtimeLogger} from '../metrics/realtime-metrics.js';
 import {logPublicAsrLanguage} from '../metrics/public-asr-boundary-trace.js';
-import {tracePublicAsrFinal} from '../metrics/public-audio-evidence-trace.js';
+import {tracePublicAsrFinal,traceRejectedAsrExpansion} from '../metrics/public-audio-evidence-trace.js';
+import {repeatedAsrExpansion} from './repeated-transcript-expansion.js';
 import {streamingAsrFailureDiagnostic,streamingAsrProviderContext,streamingAsrCloseContext,streamingAsrTransportContext,
   streamingAsrCancellationContext,type StreamingAsrFailureContext} from './streaming-asr-diagnostics.js';
 import {decodeQwenAudioEvent,qwenAudioFinishTask,qwenAudioRunTask,QwenAudioCumulativeUsage,type QwenAudioSentence} from './qwen-audio-streaming-protocol.js';
@@ -164,6 +165,12 @@ export class QwenAudioStreamingClient {
     this.lastFinal=sentence.sentenceId;this.lastFinalText=sentence.text;
     tracePublicAsrFinal(this.options.sessionId,id,sentence.text,sentence.startMs,sentence.endMs!,sentence.tokenTimings);
     if(this.languagePending>=32||this.completed.length+this.notices.length>=256)throw Error();
+    const rejection=repeatedAsrExpansion({text:sentence.text,timing:{startMs:sentence.startMs,endMs:sentence.endMs!}});
+    if(rejection){
+      traceRejectedAsrExpansion(this.options.sessionId,id,sentence.text,rejection);
+      this.notices.push({segmentId:id,revision:1,language:'unknown',unconfirmedText:'',discarded:true,rejectionReason:rejection.reason});
+      return;
+    }
     this.languagePending++;
     // Start LID immediately, independently of PCM ingestion; preserve final order
     // when delivering to the original assembler/MT path.
@@ -195,7 +202,8 @@ export class QwenAudioStreamingClient {
   private startedSeen=false;
   private previewSentence(sentence:QwenAudioSentence,id:string){
     const text=cleanRealtimeText(sentence.text),generation=++this.previewGeneration;
-    if(!text||!this.options.preview)return;
+    if(!text||!this.options.preview||repeatedAsrExpansion({text:sentence.text,
+      timing:{startMs:sentence.startMs,endMs:sentence.endMs??this.cursor/this.rate*1000}}))return;
     const range=transcriptAudioRange(sentence.startMs,sentence.endMs??this.cursor/this.rate*1000,this.rate);
     const confirmed=this.options.textLanguage
       ? range?this.options.textLanguage.confirmPreviewSpeech(id,text,range):Promise.resolve(false)

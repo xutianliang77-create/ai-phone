@@ -74,6 +74,6 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     ...(authorization.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...authorization.languagePolicy.sourceLanguages]}:{}),
     googleStreamFactory:options.googleStreamFactory};
   if(google)googleAsrConfiguration(clientOptions);
-  return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:protocol==='qwen_audio_streaming'?
+  return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,publicTranscriptIntegrity:true,client:protocol==='qwen_audio_streaming'?
     new QwenAudioStreamingClient({...clientOptions,streaming:streaming!,textLanguage:options.textLanguage,preview:options.preview}):new OpenAiStreamingAsrClient(clientOptions)});
 }

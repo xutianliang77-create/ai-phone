@@ -108,7 +108,7 @@ export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
 /** Supplier-valid language outside the product's supported scope. No invented
  * source language/transcript enters MT, TTS or history through this notice. */
 export interface AsrLanguageNotice {segmentId:string;revision:number;language:string;previewLanguage?:TranslationLanguageCode;
-  unconfirmedText?:string;timing?:SegmentTimingDto;discarded?:boolean;}
+  unconfirmedText?:string;timing?:SegmentTimingDto;discarded?:boolean;rejectionReason?:'repeated_expansion';}
 
 export interface AsrFailureNotice {code:string;outcome:"not_sent"|"rejected"|"uncertain";}
 

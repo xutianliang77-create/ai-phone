@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import type {DeviceSpeakerEvidenceEvent,AsrTokenTimingDto} from '@translation/contracts';
 import type {RevisableSpeakerSegment,SpeakerRevisionReconcileResult} from '../speaker/speaker-revision-reconciler.js';
 import {realtimeLogger} from './realtime-metrics.js';
+import type {RepeatedAsrExpansion} from '../asr/repeated-transcript-expansion.js';
 
 const enabled=()=>process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED==='true';
 const emit=(value:object)=>{if(enabled())try{realtimeLogger.info(value,'Public audio evidence trace');}catch{/* diagnostics cannot stop audio */}};
@@ -31,4 +32,11 @@ export function tracePublicAsrFinal(sessionId:string,segmentId:string,text:strin
   emit({stage:'provider_final',sessionId,segmentId,startMs,endMs,textSha256:createHash('sha256').update(text,'utf8').digest('hex'),
     textUtf16Length:text.length,tokenCount:tokens?.length??0,
     tokenOffsets:tokens?.map(t=>({startMs:t.startMs,endMs:t.endMs,characterStart:t.characterStart,characterEnd:t.characterEnd}))});
+}
+
+/** Quarantine diagnostics contain a hash and bounded measurements, never the
+ * rejected transcript, credentials or PCM. Logging failure must not stop audio. */
+export function traceRejectedAsrExpansion(sessionId:string,segmentId:string,text:string,rejection:RepeatedAsrExpansion){
+  try{realtimeLogger.warn({sessionId,segmentId,...rejection,
+    textSha256:createHash('sha256').update(text,'utf8').digest('hex')},'Public ASR repeated expansion rejected');}catch{}
 }
