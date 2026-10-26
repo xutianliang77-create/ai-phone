@@ -5,6 +5,7 @@ import {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
+import { authorizationSessionHash, authSessionHashIsActive } from "../account/auth-session-binding.js";
 import {
   findSession,
   saveSegments,
@@ -23,6 +24,7 @@ import {
   parseBillableSeconds,
 } from "./realtime-route-validation.js";
 import { isValidSegmentPatch } from "./realtime-segment-validation.js";
+import { formalRealtimeRelease, verifiedGatewaySettlement } from "./gateway-settlement.js";
 
 export async function registerRealtimeRoutes(app: FastifyInstance) {
   registerRealtimeFinalizationRoute(app);
@@ -33,8 +35,18 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     if (!parsed.ok) {
       return sendError(reply, 400, parsed.error.code, parsed.error.message);
     }
+    if (formalRealtimeRelease() && !authorizationSessionHash(request.headers.authorization)) {
+      return sendError(reply, 401, "auth_required", "A signed-in account is required");
+    }
+    if (formalRealtimeRelease() &&
+        (!["auto", "zh", "en"].includes(parsed.value.sourceLanguage) ||
+         !["zh", "en"].includes(parsed.value.targetLanguage) ||
+         (parsed.value.voice && parsed.value.voice.mode !== "preset"))) {
+      return sendError(reply, 400, "feature_not_in_release", "This release supports Chinese/English and preset voices");
+    }
 
-    const result = await createRealtimeSession(account.id, parsed.value);
+    const result = await createRealtimeSession(account.id, parsed.value,
+      formalRealtimeRelease() ? { ownerAuthSessionHash: authorizationSessionHash(request.headers.authorization) } : {});
     if (!result) {
       return sendError(
         reply,
@@ -70,6 +82,9 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
+      if (formalRealtimeRelease() && existing.status !== "ended") {
+        return sendError(reply, 409, "gateway_settlement_pending", "Gateway stop evidence is required; usage remains pending");
+      }
       const session = await completeSessionWithUsage(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
@@ -140,7 +155,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
         );
       }
       const params = request.params as { sessionId: string };
-      const body = request.body as Partial<UpdateRealtimeSessionStateRequest>;
+      const body = request.body as Partial<UpdateRealtimeSessionStateRequest> & { fresh?: boolean };
       if (!isInternalRealtimeState(body.status)) {
         return sendError(
           reply,
@@ -151,6 +166,16 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       }
       const requestedStatus = body.status;
       return withSessionWriteLock(params.sessionId, async () => {
+        if (formalRealtimeRelease()) {
+          const current = await findSession(params.sessionId);
+          if (!current?.ownerAuthSessionHash ||
+              !await authSessionHashIsActive(current.ownerAuthSessionHash, current.userId)) {
+            return sendError(reply, 403, "session_authorization_revoked", "Session authorization is unavailable");
+          }
+          if (body.fresh === true && current.status !== "created") {
+            return sendError(reply, 409, "session_admission_conflict", "Session has already been admitted");
+          }
+        }
         const result = await transitionSessionState(params.sessionId, requestedStatus);
         if (!result) {
           return sendError(reply, 404, "session_not_found", "Session not found");
@@ -188,6 +213,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       const body = request.body as Partial<{
         billableSeconds: unknown;
         diagnostics: unknown;
+        gatewayReceipt: unknown;
       }> | undefined;
       const billableSeconds = parseBillableSeconds(body?.billableSeconds);
       const diagnostics = parseRealtimeDiagnostics(body?.diagnostics);
@@ -200,8 +226,16 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
         );
       }
       return withSessionWriteLock(params.sessionId, async () => {
+        const existing = await findSession(params.sessionId);
+        if (!existing) return sendError(reply, 404, "session_not_found", "Session not found");
+        const gateway = formalRealtimeRelease() ? verifiedGatewaySettlement(existing, body?.gatewayReceipt) : null;
+        if (formalRealtimeRelease() && !gateway) {
+          return sendError(reply, 409, "gateway_settlement_pending", "Valid gateway stop evidence is required");
+        }
         const session = await completeSessionWithUsage(params.sessionId, {
-          ...(typeof billableSeconds === "number" ? { billableSeconds } : {}),
+          ...(gateway ? { billableSeconds: gateway.billableSeconds } :
+            typeof billableSeconds === "number" ? { billableSeconds } : {}),
+          ...(gateway ? { gatewayReceipt: gateway.receipt } : {}),
           ...(diagnostics ? { diagnostics } : {}),
         });
         if (!session)

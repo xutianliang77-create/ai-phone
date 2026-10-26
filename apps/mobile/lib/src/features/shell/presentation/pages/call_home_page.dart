@@ -21,7 +21,9 @@ class CallHomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final appConfig = config ?? AppConfig.fromEnvironment();
-    final profile = capabilityProfile ?? ProductCapabilityProfile.current;
+    final profile = appConfig.isFormalRelease
+        ? ProductCapabilityProfile.coreTranslation
+        : capabilityProfile ?? ProductCapabilityProfile.current;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.tabCall)),
       body: SafeArea(
@@ -41,9 +43,13 @@ class CallHomePage extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    l10n.isChinese
-                        ? '连接状态将在进入通话时检查'
-                        : 'Connection is checked when you enter a call',
+                    appConfig.isFormalRelease
+                        ? (l10n.isChinese
+                            ? '实时通话功能暂未开放'
+                            : 'Live calls are not available in this release')
+                        : l10n.isChinese
+                            ? '连接状态将在进入通话时检查'
+                            : 'Connection is checked when you enter a call',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -56,9 +62,13 @@ class CallHomePage extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              l10n.isChinese
-                  ? '选择一种方式开始，字幕和译音将在通话中同步。'
-                  : 'Choose how to begin. Captions and translated audio stay in sync.',
+              appConfig.isFormalRelease
+                  ? (l10n.isChinese
+                      ? '可使用输入并朗读，实时通话功能暂未开放。'
+                      : 'Type to speak is available. Live calls are not yet available.')
+                  : l10n.isChinese
+                      ? '选择一种方式开始，字幕和译音将在通话中同步。'
+                      : 'Choose how to begin. Captions and translated audio stay in sync.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -69,7 +79,9 @@ class CallHomePage extends StatelessWidget {
               title: l10n.startTranslationCall,
               subtitle:
                   l10n.isChinese ? '实时听懂彼此' : 'Understand each other live',
-              onTap: () => _open(context, const CallLinkPage()),
+              onTap: appConfig.isFormalRelease
+                  ? null
+                  : () => _open(context, const CallLinkPage()),
             ),
             if (profile.showPstn)
               _CallAction(
@@ -92,9 +104,14 @@ class CallHomePage extends StatelessWidget {
             _CallAction(
               icon: Icons.group_outlined,
               title: l10n.joinCallLink,
-              subtitle:
-                  l10n.isChinese ? '加入多人翻译通话' : 'Join a multilingual call',
-              onTap: () => _open(context, const JoinCallLinkPage()),
+              subtitle: appConfig.isFormalRelease
+                  ? (l10n.isChinese ? '暂未开放' : 'Not yet available')
+                  : l10n.isChinese
+                      ? '加入多人翻译通话'
+                      : 'Join a multilingual call',
+              onTap: appConfig.isFormalRelease
+                  ? null
+                  : () => _open(context, const JoinCallLinkPage()),
             ),
             if (profile.showAiCallingAgent)
               _CallAction(
@@ -144,7 +161,7 @@ class _CallAction extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +174,7 @@ class _CallAction extends StatelessWidget {
             child: Icon(icon, color: Theme.of(context).colorScheme.onSurface),
           ),
           title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          enabled: onTap != null,
           subtitle: Text(subtitle),
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,

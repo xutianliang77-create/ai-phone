@@ -23,4 +23,7 @@ export interface RealtimeSession {
   billableSeconds: number;
   reconnectStatus?: Extract<RealtimeSessionStatus, "active" | "paused">;
   disconnectDeadlineAt?: number;
+  formalRelease?: boolean;
+  providerCloseConfirmed?: boolean;
+  gatewayReceipt?: string;
 }

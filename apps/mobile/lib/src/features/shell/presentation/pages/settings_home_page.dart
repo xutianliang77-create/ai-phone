@@ -28,7 +28,9 @@ class SettingsHomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final sessionStore = accountSessionStore ?? const FileAccountSessionStore();
-    final profile = capabilityProfile ?? ProductCapabilityProfile.current;
+    final profile = config.isFormalRelease
+        ? ProductCapabilityProfile.coreTranslation
+        : capabilityProfile ?? ProductCapabilityProfile.current;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.tabMe)),
       body: SafeArea(
@@ -48,7 +50,7 @@ class SettingsHomePage extends StatelessWidget {
               title: '同传设置',
               onTap: () => _open(
                 context,
-                const RealtimePreferencesPage(title: '同传设置'),
+                RealtimePreferencesPage(title: '同传设置', config: config),
               ),
             ),
             _SettingsAction(
@@ -56,7 +58,7 @@ class SettingsHomePage extends StatelessWidget {
               title: '语言与行业',
               onTap: () => _open(
                 context,
-                const RealtimePreferencesPage(title: '语言与行业'),
+                RealtimePreferencesPage(title: '语言与行业', config: config),
               ),
             ),
             _SettingsAction(
@@ -64,16 +66,20 @@ class SettingsHomePage extends StatelessWidget {
               title: '朗读声音',
               onTap: () => _open(
                 context,
-                const RealtimePreferencesPage(title: '朗读声音'),
+                RealtimePreferencesPage(title: '朗读声音', config: config),
               ),
             ),
             _SettingsAction(
               icon: Icons.graphic_eq_outlined,
-              title: l10n.myVoiceTitle,
-              onTap: () => _open(
-                context,
-                MyVoicePage(apiBaseUrl: config.apiBaseUrl),
-              ),
+              title: config.isFormalRelease
+                  ? '${l10n.myVoiceTitle}（暂未开放）'
+                  : l10n.myVoiceTitle,
+              onTap: config.isFormalRelease
+                  ? null
+                  : () => _open(
+                        context,
+                        MyVoicePage(apiBaseUrl: config.apiBaseUrl),
+                      ),
             ),
             if (profile.showVoiceIdentity)
               _SettingsAction(
@@ -218,7 +224,7 @@ class _SettingsAction extends StatelessWidget {
 
   final IconData icon;
   final String title;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -228,6 +234,7 @@ class _SettingsAction extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(vertical: 3),
           leading: Icon(icon),
           title: Text(title),
+          enabled: onTap != null,
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
         ),

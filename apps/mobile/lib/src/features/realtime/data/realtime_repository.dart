@@ -149,6 +149,7 @@ class RealtimeRepository {
       idempotencyKey: 'finalize:$sessionId',
       segments: _snapshotSegments(segments),
       billableSeconds: billableSeconds ?? 0,
+      gatewayReceipt: _gatewayClient.gatewayReceiptForSession(sessionId),
       createdAt: _now(),
     ));
   }
@@ -184,12 +185,21 @@ class RealtimeRepository {
 
   Future<bool> _finalizeTask(RealtimeFinalizationTask task) async {
     try {
-      await _apiClient.finalizeSession(
-        sessionId: task.sessionId,
-        segments: task.segments,
-        billableSeconds: task.billableSeconds,
-        idempotencyKey: task.idempotencyKey,
-      );
+      if (task.gatewayReceipt != null) {
+        await _apiClient.finalizeWithGatewayReceipt(
+            sessionId: task.sessionId,
+            segments: task.segments,
+            billableSeconds: task.billableSeconds,
+            idempotencyKey: task.idempotencyKey,
+            gatewayReceipt: task.gatewayReceipt!);
+      } else {
+        await _apiClient.finalizeSession(
+          sessionId: task.sessionId,
+          segments: task.segments,
+          billableSeconds: task.billableSeconds,
+          idempotencyKey: task.idempotencyKey,
+        );
+      }
     } on RealtimeApiException catch (error) {
       if (error.statusCode != 404) rethrow;
       await _finalizationOutbox.quarantine(
@@ -200,6 +210,7 @@ class RealtimeRepository {
       return false;
     }
     await _finalizationOutbox.remove(task.sessionId);
+    _gatewayClient.forgetGatewayReceipt(task.sessionId);
     return true;
   }
 

@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "@redis/client";
+export { releaseDistribution, releaseDeferredCapabilities, isPublicReleaseEndpoint, redactReleaseEndpoint } from "./release-distribution.js";
+export { signGatewayStopReceipt, verifyGatewayStopReceipt } from "./gateway-stop-receipt.js";
+export type { GatewayStopReceipt } from "./gateway-stop-receipt.js";
 
 export type RateLimitProvider = "memory" | "redis";
 
@@ -107,7 +110,7 @@ export class FixedWindowRateLimiter {
       if (client.isOpen) await client.close();
       else client.destroy();
     } catch {
-      client.destroy();
+      destroyClosedSafe(client);
     }
   }
 
@@ -165,7 +168,7 @@ export class FixedWindowRateLimiter {
       .catch((error) => {
         this.options.onError?.(error);
         if (this.client === client) this.client = null;
-        client.destroy();
+        destroyClosedSafe(client);
         return false;
       })
       .finally(() => {
@@ -173,6 +176,10 @@ export class FixedWindowRateLimiter {
       });
     return this.connecting;
   }
+}
+
+function destroyClosedSafe(client: ReturnType<typeof createClient>) {
+  try { client.destroy(); } catch { /* A failed connection may already be closed. */ }
 }
 
 function validInput(input: {

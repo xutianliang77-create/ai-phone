@@ -70,8 +70,9 @@ export class HttpAsrProvider implements AsrProvider {
     this.sessions.delete(sessionId);
     try {
       await this.client.closeSession(sessionId);
-    } catch {
+    } catch (error) {
       // Best-effort cleanup; a dropped ASR service must not break WebSocket close.
+      if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store") throw error;
     }
   }
 

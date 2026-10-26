@@ -46,8 +46,12 @@ export class RealtimeConnectionCleanup {
       this.scheduleDeferredFinalization(reason);
     }
     await this.options.finalizer.flush();
-    await this.bestEffort("provider", () =>
+    const closed = await this.bestEffort("provider", () =>
       this.options.provider.closeSession(session.id));
+    if (session.formalRelease) {
+      session.providerCloseConfirmed = closed;
+      if (closed && session.status === "ending") await this.options.finalizer.finalize(reason);
+    }
     await this.bestEffort("sync", () => this.options.sessionSync.drain());
     if (!isCurrent) return;
     if (session.status === "ended") {
@@ -69,7 +73,7 @@ export class RealtimeConnectionCleanup {
         pending.disconnectDeadlineAt !== deadlineAt
       ) return;
       await this.options.finalizer.finalize(reason);
-      deleteSession(session.id, session);
+      if (!session.formalRelease || session.status === "ended") deleteSession(session.id, session);
       this.options.closeClient();
     }, deadlineAt);
     session.disconnectDeadlineAt = deadlineAt;
@@ -81,8 +85,10 @@ export class RealtimeConnectionCleanup {
   ) {
     try {
       await operation();
+      return true;
     } catch (error) {
       this.options.onError(stage, error);
+      return false;
     }
   }
 }

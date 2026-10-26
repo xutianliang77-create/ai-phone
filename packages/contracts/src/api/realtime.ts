@@ -47,6 +47,7 @@ export interface FinalizeRealtimeSessionRequest {
   sessionId: string;
   idempotencyKey: string;
   billableSeconds: number;
+  gatewayReceipt?: string;
   segments: SessionSegmentDto[];
 }
 

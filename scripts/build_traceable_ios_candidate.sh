@@ -6,6 +6,7 @@ MOBILE_DIR="$ROOT_DIR/apps/mobile"
 SERVER_BASE_URL="${SERVER_BASE_URL:-}"
 BUILD_MODE="${BUILD_MODE:-profile}"
 PRODUCT_PROFILE="${PRODUCT_PROFILE:-core_translation}"
+DISTRIBUTION_CHANNEL="${DISTRIBUTION_CHANNEL:-restricted_instance}"
 APP_VERSION="${APP_VERSION:-$(awk '/^version:/{split($2,v,"+"); print v[1]; exit}' "$MOBILE_DIR/pubspec.yaml")}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date '+%Y%m%d01')}"
 SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
@@ -24,6 +25,21 @@ fi
 if [[ "$PRODUCT_PROFILE" != "core_translation" && "$PRODUCT_PROFILE" != "full" ]]; then
   echo "PRODUCT_PROFILE must be core_translation or full" >&2
   exit 2
+fi
+if [[ "$DISTRIBUTION_CHANNEL" != "restricted_instance" && "$DISTRIBUTION_CHANNEL" != "app_store" ]]; then
+  echo "DISTRIBUTION_CHANNEL is invalid" >&2
+  exit 2
+fi
+if [[ "$DISTRIBUTION_CHANNEL" == "app_store" ]]; then
+  if [[ "$BUILD_MODE" != "release" || "$PRODUCT_PROFILE" != "core_translation" || "$APP_VERSION" != "1.0.0" ]]; then
+    echo "Formal 1.0 requires Release/core_translation" >&2
+    exit 2
+  fi
+  SERVER_BASE_URL="$SERVER_BASE_URL" node --input-type=module -e '
+    import { isPublicReleaseEndpoint } from "@translation/platform-security";
+    if (!isPublicReleaseEndpoint(process.env.SERVER_BASE_URL, ["https:"])) {
+      throw new Error("Formal 1.0 requires a public HTTPS endpoint without credentials");
+    }'
 fi
 if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo "BUILD_NUMBER must be numeric" >&2
@@ -51,6 +67,7 @@ WUJIE_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WUJIE_SOURCE_TREE="$SOURCE_TREE" \
 WUJIE_SOURCE_STATE=clean \
 WUJIE_PRODUCT_PROFILE="$PRODUCT_PROFILE" \
+WUJIE_DISTRIBUTION_CHANNEL="$DISTRIBUTION_CHANNEL" \
 node "$ROOT_DIR/scripts/lib/write_ios_build_identity_xcconfig.mjs" \
   "$MOBILE_DIR/ios/Flutter/LocalIdentity.xcconfig"
 flutter build ios "--$BUILD_MODE" \
@@ -64,6 +81,7 @@ flutter build ios "--$BUILD_MODE" \
   --dart-define="SOURCE_TREE=$SOURCE_TREE" \
   --dart-define="SOURCE_STATE=clean" \
   --dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE" \
+  --dart-define="WUJIE_DISTRIBUTION_CHANNEL=$DISTRIBUTION_CHANNEL" \
   --dart-define="SERVER_OWNED_HISTORY=true" \
   --dart-define="USE_MOCK_AUDIO=false"
 
@@ -83,6 +101,11 @@ if find "$APP_PATH" -name 'Runner.debug.dylib' -print -quit | grep -q .; then
   exit 1
 fi
 codesign --verify --deep --strict "$APP_PATH"
+SIGNING_DETAILS="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
+SIGNING_IDENTITY="$(awk -F= '/^Authority=/{if (!found) {print $2; found=1}}' <<< "$SIGNING_DETAILS")"
+DISTRIBUTION_CHANNEL="$DISTRIBUTION_CHANNEL" BUILD_MODE="$BUILD_MODE" \
+PRODUCT_PROFILE="$PRODUCT_PROFILE" SIGNING_IDENTITY="$SIGNING_IDENTITY" \
+node "$ROOT_DIR/scripts/check_ios_candidate_distribution.mjs" "$APP_PATH"
 
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
 ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
@@ -122,6 +145,7 @@ SOURCE_TREE="$SOURCE_TREE" BUNDLE_ID="$BUNDLE_ID" \
 APP_VERSION="$ACTUAL_VERSION" BUILD_NUMBER="$ACTUAL_BUILD" \
 BUILD_MODE="$BUILD_MODE" SERVER_BASE_URL="$SERVER_BASE_URL" \
 PRODUCT_PROFILE="$PRODUCT_PROFILE" \
+DISTRIBUTION_CHANNEL="$DISTRIBUTION_CHANNEL" \
 APP_SHA256="$APP_SHA256" SIGNING_IDENTITY="$SIGNING_IDENTITY" \
 node "$ROOT_DIR/scripts/lib/write_ios_candidate_manifest.mjs" \
   "$OUTPUT_ROOT/candidate-manifest.json"

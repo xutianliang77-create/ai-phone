@@ -9,6 +9,7 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     enabled: () => state._canChangeSettings,
     modeEnabled: () => state._canChangeMode,
     autoSpeakSupported: () => state._realtimeAutoSpeakSupported,
+    onlineCoreOnly: state._config.isFormalRelease,
     onRealtimeModeChanged: state._changeRealtimeMode,
     onSettingsChanged: state._changeSettings,
     onEndRequested: () {
@@ -47,6 +48,7 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
   }
 
   void _changeSettings(RealtimeRuntimeSettings settings) {
+    if (_rejectDeferredFormalSettings(settings)) return;
     if (!_canChangeSettings) {
       if (_isAutoSpeakOnlyChange(settings)) {
         unawaited(_applyAutoSpeakSetting(settings));
@@ -91,5 +93,15 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.l10n.settingsLockedHint)),
     );
+  }
+
+  bool _rejectDeferredFormalSettings(RealtimeRuntimeSettings settings) {
+    if (!_config.isFormalRelease) return false;
+    final supported = settings.isSupportedIn(_config);
+    if (!supported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('此版本支持中英在线翻译。原设置已保留，请选择支持的模式和语言。')));
+    }
+    return !supported;
   }
 }

@@ -27,6 +27,8 @@ import { getReleaseCapabilityProfileReadiness } from
 export async function getReleaseReadiness() {
   const capabilityProfileReadiness = getReleaseCapabilityProfileReadiness();
   const fullRelease = capabilityProfileReadiness.profile === "commercial_full";
+  const formalRelease = capabilityProfileReadiness.distributionChannel === "app_store";
+  const deferCallLink = formalRelease && capabilityProfileReadiness.profile === "core_translation";
   const accountReadiness = getAccountDeploymentReadiness();
   const paymentReadiness = getPaymentDeploymentReadiness();
   const callRoomReadiness = getCallRoomReadiness();
@@ -49,13 +51,13 @@ export async function getReleaseReadiness() {
   const issues = [
     ...capabilityProfileReadiness.issues,
     ...accountReadiness.issues,
-    ...callRoomReadiness.issues,
-    ...workerDispatchReadiness.issues,
+    ...(deferCallLink ? [] : callRoomReadiness.issues),
+    ...(deferCallLink ? [] : workerDispatchReadiness.issues),
     ...(fullRelease ? paymentReadiness.issues : []),
     ...(fullRelease ? pstnReadiness.issues : []),
-    ...(fullRelease ? smsReadiness.issues : []),
-    ...(fullRelease ? diagnosticsReadiness.issues : []),
-    ...(fullRelease ? releaseMaterialsReadiness.issues : []),
+    ...(fullRelease || formalRelease ? smsReadiness.issues : []),
+    ...(fullRelease || formalRelease ? diagnosticsReadiness.issues : []),
+    ...(fullRelease || formalRelease ? releaseMaterialsReadiness.issues : []),
     ...(fullRelease ? egressReadiness.issues : []),
     ...postgresProjectionReadiness.issues,
     ...(agentAssistReadiness.status === "disabled" ? [] : agentAssistReadiness.issues),

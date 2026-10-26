@@ -17,6 +17,13 @@ const productProfile = required(
   "WUJIE_PRODUCT_PROFILE",
   /^(core_translation|full)$/u,
 );
+const distributionChannel = process.env.WUJIE_DISTRIBUTION_CHANNEL ?? "restricted_instance";
+if (!["restricted_instance", "app_store"].includes(distributionChannel)) {
+  throw new Error("WUJIE_DISTRIBUTION_CHANNEL is invalid");
+}
+if (distributionChannel === "app_store" && productProfile !== "core_translation") {
+  throw new Error("Formal 1.0 requires the approved core_translation profile");
+}
 
 writeFileSync(output, [
   `WUJIE_CANDIDATE_ID=${candidateId}`,
@@ -24,5 +31,7 @@ writeFileSync(output, [
   `WUJIE_SOURCE_TREE=${sourceTree}`,
   `WUJIE_SOURCE_STATE=${sourceState}`,
   `WUJIE_PRODUCT_PROFILE=${productProfile}`,
+  `WUJIE_DISTRIBUTION_CHANNEL=${distributionChannel}`,
+  `WUJIE_INFO_PLIST_SUFFIX=${distributionChannel === "app_store" ? "-Formal" : ""}`,
   "",
 ].join("\n"), { mode: 0o600 });

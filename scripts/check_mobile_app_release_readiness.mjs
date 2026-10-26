@@ -8,13 +8,15 @@ const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const args = process.argv.slice(2);
 const help = takeFlag("--help") || takeFlag("-h");
 const json = takeFlag("--json");
+const platform = valueFlag("--platform") ?? "all";
+const distributionChannel = valueFlag("--distribution-channel") ?? "restricted_instance";
 
 if (help || args.length > 0) {
   usage();
   process.exit(help ? 0 : 1);
 }
 
-const result = checkMobileAppReleaseReadiness(root);
+const result = checkMobileAppReleaseReadiness(root, { platform, distributionChannel });
 if (json) {
   console.log(JSON.stringify(result, null, 2));
 } else if (result.status === "ready") {
@@ -36,9 +38,19 @@ function takeFlag(flag) {
   return true;
 }
 
+function valueFlag(flag) {
+  const index = args.indexOf(flag);
+  if (index < 0) return undefined;
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+  args.splice(index, 2);
+  return value;
+}
+
 function usage() {
   console.log(`Usage:
-  scripts/check_mobile_app_release_readiness.mjs [--json]
+  scripts/check_mobile_app_release_readiness.mjs [--json] [--platform ios|android|all]
+    [--distribution-channel restricted_instance|app_store]
 
 Verifies mobile app release metadata:
 - Chinese interface and permission strings

@@ -8,6 +8,39 @@ import 'package:translation_mobile/src/features/realtime/presentation/widgets/re
 import 'package:translation_mobile/src/platform/translation/supported_translation_language.dart';
 
 void main() {
+  testWidgets(
+      'formal core keeps deferred mode disabled and only offers approved languages and voice modes',
+      (tester) async {
+    var changes = 0;
+    await tester.pumpWidget(_TestApp(
+        child: RealtimeSettingsPanel(
+            settings: const RealtimeRuntimeSettings(
+                processingMode: RealtimeProcessingMode.online,
+                sourceLanguage: 'zh',
+                targetLanguage: 'en',
+                voiceOutputMode: RealtimeVoiceOutputMode.off),
+            enabled: true,
+            onlineCoreOnly: true,
+            onChanged: (_) => changes++)));
+    final mode = tester.widget<SegmentedButton<RealtimeProcessingMode>>(
+        find.byType(SegmentedButton<RealtimeProcessingMode>));
+    expect(
+        mode.segments
+            .firstWhere((s) => s.value == RealtimeProcessingMode.onDevice)
+            .enabled,
+        isFalse);
+    await tester.tap(find.text('端侧'));
+    expect(changes, 0);
+    final voice = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
+        find.byType(SegmentedButton<RealtimeVoiceOutputMode>));
+    expect(
+        voice.segments.any((s) => s.value == RealtimeVoiceOutputMode.myVoice),
+        isFalse);
+    await tester.tap(find.text('中文'));
+    await tester.pumpAndSettle();
+    expect(find.text('法语'), findsNothing);
+    expect(find.text('英语'), findsWidgets);
+  });
   testWidgets('disables realtime auto speech when unsupported', (tester) async {
     await tester.pumpWidget(_TestApp(
       child: RealtimeSettingsPanel(

@@ -1,13 +1,15 @@
-import { spawnSync } from "node:child_process";
+import { androidSigningStatus, androidCertificateSubjectStatus, androidReleaseValue, EXPECTED_ANDROID_CERTIFICATE_SUBJECT } from "./mobile_android_signing_checks.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { checkMobileChineseInterface } from "./mobile_chinese_interface_check.mjs";
 
-const EXPECTED_ANDROID_CERTIFICATE_SUBJECT = "北京乾坤祥云科技有限公司";
 
 export function checkMobileAppReleaseReadiness(root, options = {}) {
   const checks = [];
   const issues = [];
+  const platform = options.platform ?? "all";
+  if (!["all", "ios", "android"].includes(platform)) issues.push("Invalid mobile release platform");
+  if (!["restricted_instance", "app_store"].includes(options.distributionChannel ?? "restricted_instance")) issues.push("Invalid mobile distribution channel");
   const chineseInterface = (options.chineseInterfaceCheck ?? checkMobileChineseInterface)(root);
   record(checks, "mobile_chinese_interface", chineseInterface.status === "ready", {
     failures: chineseInterface.failures,
@@ -19,11 +21,14 @@ export function checkMobileAppReleaseReadiness(root, options = {}) {
   checkDomesticDefaults(root, checks, issues);
   checkComplianceCenter(root, checks, issues);
   checkMobilePaymentSurface(root, checks, issues);
-  checkIosReleaseMetadata(root, checks, issues);
-  checkAndroidReleaseMetadata(root, checks, issues, options);
-  checkAndroidSystemAsrFallback(root, checks, issues);
+  if (platform !== "android") checkIosReleaseMetadata(root, checks, issues, options);
+  if (platform !== "ios") {
+    checkAndroidReleaseMetadata(root, checks, issues, options);
+    checkAndroidSystemAsrFallback(root, checks, issues);
+  }
   return {
     schemaVersion: 1,
+    platform,
     status: issues.length === 0 ? "ready" : "not_ready",
     checks,
     issues,
@@ -123,8 +128,9 @@ function checkComplianceCenter(root, checks, issues) {
   ]);
 }
 
-function checkIosReleaseMetadata(root, checks, issues) {
-  const plist = read(root, "apps/mobile/ios/Runner/Info.plist");
+function checkIosReleaseMetadata(root, checks, issues, options) {
+  const formal = options.distributionChannel === "app_store";
+  const plist = read(root, formal ? "apps/mobile/ios/Runner/Info-Formal.plist" : "apps/mobile/ios/Runner/Info.plist");
   const project = read(root, "apps/mobile/ios/Runner.xcodeproj/project.pbxproj");
   const zhStrings = read(root, "apps/mobile/ios/Runner/zh-Hans.lproj/InfoPlist.strings");
   const iosIdentity = loadIosIdentity(root);
@@ -132,8 +138,19 @@ function checkIosReleaseMetadata(root, checks, issues) {
     "NSCameraUsageDescription",
     "NSMicrophoneUsageDescription",
     "NSPhotoLibraryUsageDescription",
-    "NSLocalNetworkUsageDescription",
+    ...(formal ? [] : ["NSLocalNetworkUsageDescription"]),
   ]);
+  if (formal) {
+    const selected = parseProperties(read(root, "apps/mobile/ios/Flutter/LocalIdentity.xcconfig"));
+    const matches = selected.WUJIE_DISTRIBUTION_CHANNEL === "app_store" &&
+      selected.WUJIE_INFO_PLIST_SUFFIX === "-Formal" && selected.WUJIE_PRODUCT_PROFILE === "core_translation";
+    record(checks, "ios_formal_channel_build_config", matches);
+    if (!matches) issues.push("Formal iOS release must select the approved channel and plist in build configuration");
+    const secure = /<key>NSAllowsArbitraryLoads<\/key>\s*<false\s*\/>/.test(plist) &&
+      /<key>NSAllowsLocalNetworking<\/key>\s*<false\s*\/>/.test(plist);
+    record(checks, "ios_formal_transport_security", secure);
+    if (!secure) issues.push("Formal iOS release must disable arbitrary and local cleartext loads");
+  }
   requireText(checks, issues, "ios_chinese_permission_strings", zhStrings, [
     "NSCameraUsageDescription",
     "NSMicrophoneUsageDescription",
@@ -239,79 +256,6 @@ function resolveAndroidApplicationId(gradle, releaseProperties) {
   const literal = gradle.match(/applicationId\s*=\s*"([^"]+)"/)?.[1];
   if (literal) return literal;
   return gradle.match(/applicationId\s*=\s*releaseString\("applicationId",\s*"([^"]+)"\)/)?.[1] ?? "";
-}
-
-function androidSigningStatus(root, releaseProperties) {
-  const names = ["storeFile", "storePassword", "keyAlias", "keyPassword"];
-  const values = Object.fromEntries(names.map((name) => [name, androidReleaseValue(releaseProperties, name)]));
-  const missing = names.filter((name) => !values[name]);
-  const storeFileExists = Boolean(values.storeFile && androidStoreFilePath(root, values.storeFile));
-  if (values.storeFile && !storeFileExists) missing.push("storeFileExists");
-  return { ready: missing.length === 0, missing, storeFileExists };
-}
-
-function androidCertificateSubjectStatus(root, releaseProperties, options) {
-  const storeFile = androidReleaseValue(releaseProperties, "storeFile");
-  const storePassword = androidReleaseValue(releaseProperties, "storePassword");
-  const keyAlias = androidReleaseValue(releaseProperties, "keyAlias");
-  const storeFilePath = storeFile ? androidStoreFilePath(root, storeFile) : "";
-  if (!storeFile || !storePassword || !keyAlias || !storeFilePath) {
-    return {
-      ready: false,
-      subject: "",
-      issue: "Android release certificate subject cannot be checked without complete signing properties.",
-    };
-  }
-  const reader = options.androidCertificateSubjectReader ?? readAndroidCertificateSubject;
-  const result = reader({ storeFilePath, storePassword, keyAlias });
-  if (!result.ok) {
-    return {
-      ready: false,
-      subject: result.subject ?? "",
-      issue: "Android release certificate subject could not be read.",
-    };
-  }
-  const subject = result.subject ?? "";
-  const ready = subject.includes(EXPECTED_ANDROID_CERTIFICATE_SUBJECT);
-  return {
-    ready,
-    subject,
-    issue: ready
-      ? ""
-      : `Android release certificate subject must include ${EXPECTED_ANDROID_CERTIFICATE_SUBJECT}.`,
-  };
-}
-
-function readAndroidCertificateSubject({ storeFilePath, storePassword, keyAlias }) {
-  const result = spawnSync("keytool", [
-    "-list",
-    "-v",
-    "-keystore",
-    storeFilePath,
-    "-storepass",
-    storePassword,
-    "-alias",
-    keyAlias,
-  ], { encoding: "utf8" });
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  const subject = output.match(/(?:Owner|Subject):\s*([^\n]+)/)?.[1]?.trim() ?? "";
-  return { ok: result.status === 0 && Boolean(subject), subject };
-}
-
-function androidReleaseValue(releaseProperties, name) {
-  return (process.env[androidReleaseEnvName(name)] || releaseProperties[name] || "").trim();
-}
-
-function androidReleaseEnvName(name) {
-  return `TRANSLATION_ANDROID_${name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
-}
-
-function androidStoreFilePath(root, storeFile) {
-  if (path.isAbsolute(storeFile)) return existsSync(storeFile) ? storeFile : "";
-  return [
-    path.join(root, "apps/mobile/android", storeFile),
-    path.join(root, "apps/mobile/android/app", storeFile),
-  ].find((candidate) => existsSync(candidate)) ?? "";
 }
 
 function parseProperties(content) {

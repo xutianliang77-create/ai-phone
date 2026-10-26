@@ -157,12 +157,15 @@ class _RealtimePageState extends State<RealtimePage>
                       _shouldShowOnlineRecovery && !_onlineRecoveryInFlight,
                   onRetryOnline: () => unawaited(_retryOnline()),
                   onSwitchToOnDevice: () => unawaited(_switchToOnDevice()),
+                  onDeviceSupported: !_config.isFormalRelease,
                 ),
                 if (_shouldShowRealtimeAccountRequiredPanel(this))
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: AccountRequiredPanel(
-                      message: '在线同传需要登录账号。端侧模式可以不登录使用。',
+                      message: _config.isFormalRelease
+                          ? '在线同传需要登录账号。'
+                          : '在线同传需要登录账号。端侧模式可以不登录使用。',
                       onReturn: () => unawaited(_retryOnlineAfterLogin(this)),
                     ),
                   ),
@@ -235,6 +238,7 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   Future<void> _switchToOnDevice() async {
+    if (_config.isFormalRelease) return;
     if (!_shouldShowOnlineRecovery || _onlineRecoveryInFlight) return;
     final shouldRestart = _isRunningForRecovery;
     setState(() => _onlineRecoveryInFlight = true);
@@ -260,6 +264,7 @@ class _RealtimePageState extends State<RealtimePage>
     final savedSettings = await _settingsStore.load();
     if (!mounted || savedSettings == null) return;
     if (!_canChangeSettings) return;
+    if (_rejectDeferredFormalSettings(savedSettings)) return;
     _replaceSettings(_normalizeVoicePreset(savedSettings));
   }
 

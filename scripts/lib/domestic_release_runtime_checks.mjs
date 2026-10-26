@@ -6,6 +6,7 @@ import { checkMobileAppReleaseReadiness } from "./mobile_app_release_readiness.m
 export function checkMobileAppRelease(context) {
   const result = (context.checkFn ?? checkMobileAppReleaseReadiness)(
     context.root ?? process.cwd(),
+    { platform: context.platform, distributionChannel: context.distributionChannel },
   );
   const ready = result.status === "ready";
   context.record(context.checks, "mobile_app_release_readiness", ready, {

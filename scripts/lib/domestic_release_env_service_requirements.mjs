@@ -1,3 +1,5 @@
+import { isPublicReleaseEndpoint } from "@translation/platform-security";
+
 const requiredText = [
   "LIVEKIT_API_KEY",
   "LIVEKIT_API_SECRET",
@@ -41,6 +43,10 @@ const fullReleaseRequiredText = [
   "PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY",
 ];
 
+const formalCoreText = ["REALTIME_TOKEN_SECRET", "DIAGNOSTICS_ADMIN_TOKEN", "DIAGNOSTICS_ONCALL_CONTACT",
+  "DIAGNOSTICS_ALERT_WEBHOOK_SECRET", "SMS_PROVIDER", "SMS_HTTP_API_KEY",
+  "SMS_HTTP_TEMPLATE_ID", "SMS_SIGN_NAME"];
+
 const requiredHttps = [
   "PUBLIC_CALL_BASE_URL",
 ];
@@ -63,6 +69,7 @@ const fullReleaseRequiredHttps = [
 ];
 
 const secretMinimumLengths = {
+  REALTIME_TOKEN_SECRET: 32,
   TRANSLATION_API_KEY: 16,
   TRANSLATION_SERVICE_API_KEY: 16,
   ASR_HTTP_API_KEY: 16,
@@ -95,26 +102,29 @@ export function requireDomesticReleaseServiceConfig(context) {
   requireCoreServiceUrls(context);
   requireSecretStrength(context);
   requireAppleRootFingerprint(context);
-  requireLiveKit(context);
+  if (!context.deferCallLink) requireLiveKit(context);
 }
 
-function requireText({ env, checks, issues, fullRelease }) {
+function requireText({ env, checks, issues, fullRelease, formalRelease, deferCallLink }) {
   const keys = fullRelease
     ? [...requiredText, ...fullReleaseRequiredText]
-    : requiredText;
+    : [...requiredText, ...(formalRelease ? formalCoreText : [])];
   for (const key of keys) {
+    if (deferCallLink && key.startsWith("LIVEKIT_")) continue;
     const ok = hasRealValue(env[key]);
     record(checks, key, ok, { configured: ok });
     if (!ok) issues.push(`domestic release env missing ${key}`);
   }
 }
 
-function requireHttps({ env, checks, issues, fullRelease }) {
+function requireHttps({ env, checks, issues, fullRelease, formalRelease, deferCallLink }) {
   const keys = fullRelease
     ? [...requiredHttps, ...fullReleaseRequiredHttps]
-    : requiredHttps;
+    : [...requiredHttps, ...(formalRelease ? ["DIAGNOSTICS_ALERT_WEBHOOK_URL", "SMS_HTTP_ENDPOINT"] : [])];
   for (const key of keys) {
-    const ok = isPublicUrl(env[key], ["https:"]);
+    if (deferCallLink && key === "PUBLIC_CALL_BASE_URL") continue;
+    const ok = formalRelease ? isPublicReleaseEndpoint(env[key], ["https:"])
+      : isPublicUrl(env[key], ["https:"]);
     record(checks, key, ok, { value: mask(env[key]) });
     if (!ok) issues.push(`domestic release env invalid ${key}`);
   }
@@ -130,9 +140,9 @@ function requireCoreServiceUrls({ env, checks, issues, fullRelease }) {
   }
 }
 
-function requireSecretStrength({ env, checks, issues, fullRelease }) {
+function requireSecretStrength({ env, checks, issues, fullRelease, formalRelease }) {
   for (const [key, minLength] of Object.entries(secretMinimumLengths)) {
-    if (!fullRelease && isCommercialOnlySecret(key)) continue;
+    if (!fullRelease && isCommercialOnlySecret(key) && !(formalRelease && formalCoreText.includes(key))) continue;
     const value = env[key];
     if (!hasRealValue(value)) continue;
     const ok = value.trim().length >= minLength;
@@ -217,7 +227,13 @@ function hasRealValue(value) {
 
 function mask(value = "") {
   if (!value) return "";
-  if (/^https?:|^wss?:/.test(value)) return value;
+  if (/^https?:|^wss?:/.test(value)) {
+    try {
+      const url = new URL(value);
+      url.username = ""; url.password = ""; url.search = ""; url.hash = "";
+      return url.toString();
+    } catch { return "invalid-url"; }
+  }
   return value.length <= 6 ? "***" : `${value.slice(0, 3)}***${value.slice(-2)}`;
 }
 

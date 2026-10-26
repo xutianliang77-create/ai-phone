@@ -107,6 +107,13 @@ class RealtimeRuntimeSettings {
     );
   }
 
+  bool isSupportedIn(AppConfig config) =>
+      !config.isFormalRelease ||
+      (processingMode == RealtimeProcessingMode.online &&
+          const {'auto', 'zh', 'en'}.contains(sourceLanguage) &&
+          const {'auto_reverse', 'zh', 'en'}.contains(targetLanguage) &&
+          voiceOutputMode != RealtimeVoiceOutputMode.myVoice);
+
   RealtimeRuntimeSettings copyWith({
     RealtimeProcessingMode? processingMode,
     String? sourceLanguage,

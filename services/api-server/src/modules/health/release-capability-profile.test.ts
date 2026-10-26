@@ -4,6 +4,9 @@ import { getReleaseCapabilityProfileReadiness } from
 
 const keys = [
   "DOMESTIC_RELEASE_CAPABILITY_PROFILE",
+  "DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL",
+  "API_BASE_URL",
+  "REALTIME_WS_ENDPOINT",
   "CALL_PROVIDER_POLICY",
   "AGENT_CALL_WORKER_ENABLED",
   "VOICE_AGENT_ENABLED",
@@ -35,6 +38,7 @@ describe("release capability profile", () => {
       status: "ready",
       profile: "core_translation",
       explicit: false,
+      distributionChannel: "restricted_instance",
       deferredCapabilities: [
         "livekit_sip",
         "agent",

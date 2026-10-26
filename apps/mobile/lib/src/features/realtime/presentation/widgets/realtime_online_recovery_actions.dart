@@ -7,12 +7,14 @@ class RealtimeOnlineRecoveryActions extends StatelessWidget {
     required this.visible,
     required this.onRetryOnline,
     required this.onSwitchToOnDevice,
+    this.onDeviceSupported = true,
     super.key,
   });
 
   final bool visible;
   final VoidCallback onRetryOnline;
   final VoidCallback onSwitchToOnDevice;
+  final bool onDeviceSupported;
 
   @override
   Widget build(BuildContext context) {
@@ -33,17 +35,22 @@ class RealtimeOnlineRecoveryActions extends StatelessWidget {
                 icon: const Icon(Icons.refresh),
                 label: Text(l10n.isChinese ? '重试在线' : 'Retry online'),
               ),
-              OutlinedButton.icon(
-                onPressed: onSwitchToOnDevice,
-                icon: const Icon(Icons.phone_iphone),
-                label: Text(l10n.isChinese ? '切回端侧' : 'Use on device'),
-              ),
+              if (onDeviceSupported)
+                OutlinedButton.icon(
+                  onPressed: onSwitchToOnDevice,
+                  icon: const Icon(Icons.phone_iphone),
+                  label: Text(l10n.isChinese ? '切回端侧' : 'Use on device'),
+                ),
               SizedBox(
                 width: constraints.maxWidth,
                 child: Text(
-                  l10n.isChinese
-                      ? '在线链路异常时可先切回端侧继续同传'
-                      : 'Retry the server route or keep translating on device.',
+                  !onDeviceSupported
+                      ? (l10n.isChinese
+                          ? '在线服务暂不可用，请稍后重试。'
+                          : 'Online service is unavailable. Please retry later.')
+                      : l10n.isChinese
+                          ? '在线链路异常时可先切回端侧继续同传'
+                          : 'Retry the server route or keep translating on device.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall,

@@ -43,6 +43,8 @@ const capabilityProfile =
   valueFlag("--profile") ??
   process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE ??
   "commercial_full";
+const distributionChannel = valueFlag("--distribution-channel") ??
+  process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL ?? "restricted_instance";
 const output = path.resolve(
   root,
   valueFlag("--output") ?? ".cache/domestic-release-readiness.json",
@@ -110,6 +112,7 @@ const result = {
       : checkDomesticReleaseReadiness
   )({
     root,
+    distributionChannel,
     apiBaseUrl,
     gatewayBaseUrl,
     pstnBridgeBaseUrl,
@@ -212,6 +215,8 @@ function valueFlag(flag) {
 
 function usage() {
   console.log(`Usage:
+  --distribution-channel restricted_instance|app_store selects the release audience.
+  app_store/core_translation keeps account delivery, materials, and operations mandatory.
   scripts/check_domestic_release_readiness.mjs [--json]
   scripts/check_domestic_release_readiness.mjs --local-stack --json
   scripts/check_domestic_release_readiness.mjs --api-base-url http://127.0.0.1:3100 --gateway-base-url http://127.0.0.1:3001

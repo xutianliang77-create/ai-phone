@@ -1,4 +1,5 @@
 import type { Pool, QueryResultRow } from "pg";
+import { gatewayStopHoldNote } from "./gateway-stop-hold.js";
 import type {
   ImmutableBillingLedgerEntry,
   PostgresUsageBalance,
@@ -32,8 +33,9 @@ export class PostgresUsageQueriesRepository {
       const holds = await client.query<HeldRow>(`
         SELECT COALESCE(sum(seconds), 0)::text AS held_seconds
         FROM ai_phone.usage_holds
-        WHERE user_id = $1 AND status = 'active' AND expires_at > $2::timestamptz
-      `, [userId, now.toISOString()]);
+        WHERE user_id = $1 AND status = 'active'
+          AND (expires_at > $2::timestamptz OR note = $3)
+      `, [userId, now.toISOString(), gatewayStopHoldNote]);
       await client.query("COMMIT");
       const heldSeconds = Number(holds.rows[0]?.held_seconds ?? 0);
       if (!Number.isSafeInteger(heldSeconds) || heldSeconds < 0) {

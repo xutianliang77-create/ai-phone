@@ -34,6 +34,8 @@ export async function recoverStaleRealtimeSessions(options: {
     withSessionWriteLock(sessionId, async () => {
       const session = await findSession(sessionId);
       if (!session || isTerminalRealtimeSessionState(session.status)) return;
+      // A missing heartbeat is not evidence that inference stopped.
+      if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store") return;
       const lastActivityMs = Date.parse(
         session.lastActivityAt ?? session.createdAt,
       );

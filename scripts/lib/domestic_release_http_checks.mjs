@@ -36,11 +36,17 @@ export async function checkReleaseEndpoint(context) {
       timeoutMs: context.timeoutMs,
       allowError: true,
     });
-    const ready = response.status === 200 && response.body?.status === "ready";
+    const remoteProfile = response.body?.capabilityProfileReadiness;
+    const channelMatches = !context.expectedDistributionChannel ||
+      (remoteProfile?.distributionChannel === context.expectedDistributionChannel &&
+       remoteProfile?.profile === context.expectedCapabilityProfile);
+    const ready = response.status === 200 && response.body?.status === "ready" && channelMatches;
     record(context.checks, context.name, ready, {
       httpStatus: response.status,
       status: response.body?.status,
       issues: response.body?.issues ?? [],
+      ...(context.expectedDistributionChannel ? { channelMatches,
+        distributionChannel: remoteProfile?.distributionChannel } : {}),
     });
     if (!ready) {
       context.issues.push(`${context.name} is not ready.`);

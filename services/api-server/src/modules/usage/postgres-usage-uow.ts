@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gatewayStopHoldNote } from "./gateway-stop-hold.js";
 import type { QueryResultRow } from "pg";
 import type {
   PostgresAggregateFence,
@@ -158,8 +159,9 @@ export async function activeHeldSeconds(
   const rows = await transaction.queryRead<SumRow>(`
     SELECT COALESCE(sum(seconds), 0)::text AS held_seconds
     FROM ai_phone.usage_holds
-    WHERE user_id = $1 AND status = 'active' AND expires_at > $2::timestamptz
-  `, [userId, now]);
+    WHERE user_id = $1 AND status = 'active'
+      AND (expires_at > $2::timestamptz OR note = $3)
+  `, [userId, now, gatewayStopHoldNote]);
   const held = Number(rows[0]?.held_seconds ?? 0);
   if (!Number.isSafeInteger(held) || held < 0) {
     throw new Error("Invalid PostgreSQL held usage total");

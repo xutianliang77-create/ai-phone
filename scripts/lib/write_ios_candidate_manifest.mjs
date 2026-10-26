@@ -20,6 +20,7 @@ const manifest = {
   buildNumber: required("BUILD_NUMBER"),
   buildMode: required("BUILD_MODE"),
   productProfile: required("PRODUCT_PROFILE"),
+  distributionChannel: process.env.DISTRIBUTION_CHANNEL ?? "restricted_instance",
   serverBaseUrl: required("SERVER_BASE_URL"),
   appAggregateSha256: required("APP_SHA256"),
   signingIdentity: required("SIGNING_IDENTITY"),

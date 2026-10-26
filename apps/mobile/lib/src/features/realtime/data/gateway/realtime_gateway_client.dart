@@ -46,10 +46,15 @@ class RealtimeGatewayClient {
   bool _transportReady = false;
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
+  final Map<String, String> _stopReceipts = {};
   RealtimeReconnectAudioDrain _lastReconnectAudioDrain =
       RealtimeReconnectAudioDrain.empty;
 
   Stream<GatewayRealtimeEvent> get events => _events.stream;
+  String? gatewayReceiptForSession(String sessionId) =>
+      _stopReceipts[sessionId];
+  void forgetGatewayReceipt(String sessionId) =>
+      _stopReceipts.remove(sessionId);
 
   Future<void> connect(RealtimeSession session) async {
     _session = session;
@@ -237,6 +242,9 @@ class RealtimeGatewayClient {
     final json = jsonDecode(message) as Map<String, Object?>;
     final event = GatewayRealtimeEvent.fromJson(json);
     if (event.type == 'session.ended') {
+      if (event.sessionId != null && event.gatewayReceipt != null) {
+        _stopReceipts[event.sessionId!] = event.gatewayReceipt!;
+      }
       _manualClose = true;
       _reconnectTimer?.cancel();
       _stableConnectionTimer?.cancel();

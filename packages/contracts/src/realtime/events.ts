@@ -131,6 +131,7 @@ export interface SessionEndedEvent {
   sessionId: string;
   reason?: SessionEndReason;
   billableSeconds?: number;
+  gatewayReceipt?: string;
   remainingSeconds?: number;
   flush?: RealtimeFlushSummary;
   diagnostics?: RealtimeSessionDiagnosticsDto;

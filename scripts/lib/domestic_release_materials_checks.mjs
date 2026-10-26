@@ -6,7 +6,7 @@ export async function appendReleaseMaterialsReadiness(context) {
     return;
   }
   const checkFn = context.checkFn ?? checkReleaseMaterialsReadiness;
-  const result = await checkFn({ root: context.root, file: context.file, timeoutMs: context.timeoutMs });
+  const result = await checkFn({ root: context.root, file: context.file, timeoutMs: context.timeoutMs, distributionChannel: context.distributionChannel });
   const ready = result.status === "ready";
   context.record(context.checks, "release_materials_readiness", ready, {
     status: result.status,
@@ -30,7 +30,8 @@ function runReleaseMaterialsCheck(options) {
     if (options.file) args.push("--file", options.file);
     const child = spawn("npm", args, {
       cwd: options.root ?? process.cwd(),
-      env: { ...process.env },
+      env: { ...process.env, ...(options.distributionChannel ?
+        { DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL: options.distributionChannel } : {}) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

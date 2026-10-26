@@ -83,6 +83,7 @@ class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
                   ? task.billableSeconds
                   : existing.billableSeconds,
               createdAt: existing.createdAt,
+              gatewayReceipt: task.gatewayReceipt ?? existing.gatewayReceipt,
             );
       await _write(
         file,
@@ -201,6 +202,7 @@ class MemoryRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
                 ? task.billableSeconds
                 : existing.billableSeconds,
             createdAt: existing.createdAt,
+            gatewayReceipt: task.gatewayReceipt ?? existing.gatewayReceipt,
           );
   }
 

@@ -173,6 +173,9 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (session.userId !== account.id) return forbidden(reply);
+      if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" && session.status !== "ended") {
+        return sendError(reply, 409, "gateway_settlement_pending", "Stop and settle the session before deleting its history");
+      }
       if (!await deleteSession(params.sessionId)) {
         return sendError(reply, 404, "session_not_found", "Session not found");
       }

@@ -10,6 +10,7 @@ import {
   findBillingLedgerEntryByIdempotencyKey,
 } from "../billing/billing-ledger.service.js";
 import type { UsageHoldRecord } from "./usage-hold-record.js";
+import { gatewayStopHoldNote } from "./gateway-stop-hold.js";
 
 interface UsagePlan {
   code: PlanCode;
@@ -247,7 +248,7 @@ function activeUsageHolds(userId: string) {
   return getStoreSnapshot().usageHolds.filter((hold) =>
     hold.userId === userId &&
     hold.status === "active" &&
-    Date.parse(hold.expiresAt) > nowMs
+    (hold.note === gatewayStopHoldNote || Date.parse(hold.expiresAt) > nowMs)
   );
 }
 

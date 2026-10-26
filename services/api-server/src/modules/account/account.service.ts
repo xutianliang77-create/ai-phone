@@ -138,7 +138,7 @@ export function accountFromAuthorization(authorization: string | undefined) {
   if (
     !session ||
     session.revokedAt ||
-    Date.parse(session.expiresAt) < Date.now()
+    !(Date.parse(session.expiresAt) > Date.now())
   ) {
     return null;
   }

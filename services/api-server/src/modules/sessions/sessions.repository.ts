@@ -285,6 +285,14 @@ export function markSessionFinalized(
   return session;
 }
 
+export function saveGatewayFinalizationReceipt(sessionId: string, receipt: string) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  session.gatewayFinalizationReceipt ??= receipt;
+  persistSessionMutation(session);
+  return session;
+}
+
 function persistSessionMutation(session: SessionRecord) {
   session.version = (session.version ?? 0) + 1;
   persistStoreSnapshot();

@@ -11,12 +11,14 @@ class RealtimePreferencesPage extends StatefulWidget {
     this.title = '同传设置',
     this.settingsStore,
     this.voicePresetClient,
+    this.config,
     super.key,
   });
 
   final String title;
   final RealtimeSettingsStore? settingsStore;
   final VoicePresetClient? voicePresetClient;
+  final AppConfig? config;
 
   @override
   State<RealtimePreferencesPage> createState() =>
@@ -24,15 +26,17 @@ class RealtimePreferencesPage extends StatefulWidget {
 }
 
 class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
+  late final AppConfig _config = widget.config ?? AppConfig.fromEnvironment();
   late final RealtimeSettingsStore _store =
       widget.settingsStore ?? const FileRealtimeSettingsStore();
   late final VoicePresetClient _voiceClient = widget.voicePresetClient ??
-      VoicePresetClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
+      VoicePresetClient(baseUrl: _config.apiBaseUrl);
   late final bool _ownsVoiceClient = widget.voicePresetClient == null;
   RealtimeRuntimeSettings? _settings;
   List<VoicePreset> _presets = const <VoicePreset>[];
   bool _loadingPresets = true;
   Object? _error;
+  String? _scopeMessage;
 
   @override
   void initState() {
@@ -58,16 +62,17 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
                 children: <Widget>[
                   RealtimeSettingsPanel(
                     settings: _settings!,
+                    onlineCoreOnly: _config.isFormalRelease,
                     enabled: true,
                     onChanged: _save,
                     voicePresets: _presets,
                     voicePresetsLoading: _loadingPresets,
                   ),
-                  if (_error != null)
+                  if (_error != null || _scopeMessage != null)
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Text(
-                        '部分在线音色暂不可用，其他设置仍可保存。',
+                        _scopeMessage ?? '部分在线音色暂不可用，其他设置仍可保存。',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -80,11 +85,16 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
   }
 
   Future<void> _load() async {
-    final config = AppConfig.fromEnvironment();
+    final config = _config;
     final saved = await _store.load();
     if (!mounted) return;
-    setState(
-        () => _settings = saved ?? RealtimeRuntimeSettings.fromConfig(config));
+    final unsupported = saved != null && !saved.isSupportedIn(config);
+    setState(() {
+      _settings = unsupported
+          ? RealtimeRuntimeSettings.fromConfig(config)
+          : saved ?? RealtimeRuntimeSettings.fromConfig(config);
+      if (unsupported) _scopeMessage = '此版本支持中英在线翻译。原设置已保留，请选择支持的模式和语言。';
+    });
     try {
       final catalog = await _voiceClient.load();
       if (!mounted) return;
@@ -102,7 +112,14 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
   }
 
   Future<void> _save(RealtimeRuntimeSettings settings) async {
-    setState(() => _settings = settings);
+    if (!settings.isSupportedIn(_config)) {
+      setState(() => _scopeMessage = '此版本支持中英在线翻译，原设置未修改。');
+      return;
+    }
+    setState(() {
+      _settings = settings;
+      _scopeMessage = null;
+    });
     try {
       await _store.save(settings);
     } catch (error) {

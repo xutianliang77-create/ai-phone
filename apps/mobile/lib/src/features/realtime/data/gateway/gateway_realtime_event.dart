@@ -23,6 +23,7 @@ class GatewayRealtimeEvent {
     this.retryable,
     this.reason,
     this.billableSeconds,
+    this.gatewayReceipt,
     this.remainingSeconds,
     this.lowBalance,
     this.format,
@@ -60,6 +61,7 @@ class GatewayRealtimeEvent {
   final bool? retryable;
   final String? reason;
   final int? billableSeconds;
+  final String? gatewayReceipt;
   final int? remainingSeconds;
   final bool? lowBalance;
   final String? format;
@@ -99,6 +101,7 @@ class GatewayRealtimeEvent {
         retryable = true,
         reason = null,
         billableSeconds = null,
+        gatewayReceipt = null,
         remainingSeconds = null,
         lowBalance = null,
         format = null,
@@ -143,6 +146,7 @@ class GatewayRealtimeEvent {
       retryable: json['retryable'] as bool?,
       reason: json['reason'] as String?,
       billableSeconds: json['billableSeconds'] as int?,
+      gatewayReceipt: json['gatewayReceipt'] as String?,
       remainingSeconds: json['remainingSeconds'] as int?,
       lowBalance: json['lowBalance'] as bool?,
       format: json['format'] as String?,

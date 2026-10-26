@@ -1,5 +1,8 @@
 import 'region_edition_config.dart';
-import '../platform/translation/supported_translation_language.dart';
+import 'app_release_environment.dart';
+import 'app_config_normalization.dart';
+import '../platform/translation/supported_translation_language.dart'
+    show autoReverseTargetLanguageCode;
 import '../features/realtime/data/voice_preset_catalog.dart';
 import '../features/realtime/data/domain_lexicon_pack.dart';
 
@@ -13,6 +16,8 @@ class AppConfig {
     required this.deviceAsrAutoDownloadModel,
     required this.deviceAsrModelChunkMs,
     required this.serverOwnedHistory,
+    this.distributionChannel = 'restricted_instance',
+    this.productProfile = 'full',
     this.appErrorReportingEnabled = true,
     this.voiceAgentBackgroundWorkEnabled = false,
     this.voiceAgentOwnershipEnabled = false,
@@ -41,15 +46,31 @@ class AppConfig {
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
   })  : realtimeVoiceOutputMode =
-            _normalizeRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
-        sourceLanguage = _normalizeSourceLanguage(sourceLanguage),
-        realtimeVoicePresetId = _normalizeVoicePresetId(realtimeVoicePresetId),
+            normalizeConfigRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
+        sourceLanguage = normalizeConfigSourceLanguage(sourceLanguage),
+        realtimeVoicePresetId =
+            normalizeConfigVoicePresetId(realtimeVoicePresetId),
         domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
-        targetLanguage = _normalizeTargetLanguage(targetLanguage),
-        realtimeMode = _normalizeRealtimeMode(realtimeMode),
-        region = region ?? const RegionEditionConfig.domestic();
+        targetLanguage = normalizeConfigTargetLanguage(targetLanguage),
+        realtimeMode = normalizeConfigRealtimeMode(realtimeMode),
+        region = region ?? const RegionEditionConfig.domestic() {
+    validateAppReleaseEnvironment(
+        channel: distributionChannel,
+        apiBaseUrl: apiBaseUrl,
+        productProfile: productProfile,
+        useMockAudio: useMockAudio,
+        useDeviceAsr: useDeviceAsr,
+        useLocalSessions: useLocalSessions,
+        useOnDeviceTranslation: useOnDeviceTranslation,
+        sourceLanguage: this.sourceLanguage,
+        targetLanguage: this.targetLanguage,
+        voiceOutputMode: this.realtimeVoiceOutputMode);
+  }
 
   final Uri apiBaseUrl;
+  final String distributionChannel;
+  final String productProfile;
+  bool get isFormalRelease => distributionChannel == 'app_store';
   final bool useMockAudio;
   final bool useDeviceAsr;
   final String realtimeMode;
@@ -86,6 +107,11 @@ class AppConfig {
   final RegionEditionConfig region;
 
   static AppConfig fromEnvironment() {
+    const distributionChannel = String.fromEnvironment(
+        'WUJIE_DISTRIBUTION_CHANNEL',
+        defaultValue: 'restricted_instance');
+    const productProfile =
+        String.fromEnvironment('WUJIE_PRODUCT_PROFILE', defaultValue: 'full');
     final region = RegionEditionConfig.fromEnvironment();
     const apiBaseUrl = String.fromEnvironment(
       'API_BASE_URL',
@@ -209,6 +235,8 @@ class AppConfig {
       defaultValue: '1',
     );
     return AppConfig(
+      distributionChannel: distributionChannel,
+      productProfile: productProfile,
       apiBaseUrl: Uri.parse(apiBaseUrl),
       useMockAudio: useMockAudio,
       useDeviceAsr: useDeviceAsr,
@@ -227,8 +255,7 @@ class AppConfig {
       deviceAsrVadThreshold: deviceAsrVadThreshold,
       deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
       deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
-      deviceAsrDiagnosticCaptureEnabled:
-          deviceAsrDiagnosticCaptureEnabled,
+      deviceAsrDiagnosticCaptureEnabled: deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: useOnDeviceTranslation,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
@@ -263,6 +290,8 @@ class AppConfig {
     String? domainLexiconPack,
   }) {
     return AppConfig(
+      distributionChannel: distributionChannel,
+      productProfile: productProfile,
       apiBaseUrl: apiBaseUrl,
       useMockAudio: useMockAudio,
       useDeviceAsr: useDeviceAsr ?? this.useDeviceAsr,
@@ -281,8 +310,7 @@ class AppConfig {
       deviceAsrVadThreshold: deviceAsrVadThreshold,
       deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
       deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
-      deviceAsrDiagnosticCaptureEnabled:
-          deviceAsrDiagnosticCaptureEnabled,
+      deviceAsrDiagnosticCaptureEnabled: deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions ?? this.useLocalSessions,
       useOnDeviceTranslation:
           useOnDeviceTranslation ?? this.useOnDeviceTranslation,
@@ -306,33 +334,4 @@ class AppConfig {
       region: region,
     );
   }
-}
-
-String _normalizeVoicePresetId(String value) {
-  final cleaned = value.trim();
-  return RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(cleaned)
-      ? cleaned
-      : defaultRealtimeVoicePresetId;
-}
-
-String _normalizeRealtimeVoiceOutputMode(String value) {
-  final mode = value.trim().toLowerCase();
-  if (mode == 'natural' || mode == 'my_voice') return mode;
-  return 'off';
-}
-
-String _normalizeSourceLanguage(String value) {
-  return normalizeSourceLanguageCode(value);
-}
-
-String _normalizeTargetLanguage(String value) {
-  return normalizeTargetLanguageCode(value);
-}
-
-String _normalizeRealtimeMode(String value) {
-  final mode = value.trim().toLowerCase();
-  if (mode == 'meeting' || mode == 'classroom' || mode == 'business') {
-    return mode;
-  }
-  return 'conversation';
 }

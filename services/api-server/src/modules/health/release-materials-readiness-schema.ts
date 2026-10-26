@@ -1,4 +1,6 @@
 export interface ReleaseMaterialsManifest {
+  platforms?: Array<"ios" | "android">;
+  billingMode?: "disabled" | "iap";
   accountDeletionUrl?: string;
   androidPackageId?: string;
   androidScreenshots?: string[];
@@ -24,6 +26,21 @@ export interface ReleaseMaterialsManifest {
   iphoneScreenshots?: string[];
   iosChinaScreenshots?: string[];
   iosScreenshots?: string[];
+}
+
+export function releaseMaterialsScope(manifest: ReleaseMaterialsManifest, formal = false) {
+  const platforms = manifest.platforms ?? ["ios", "android"];
+  const issues: string[] = [];
+  if (!Array.isArray(platforms) || platforms.length === 0 ||
+      platforms.some((p) => !["ios", "android"].includes(p)) ||
+      new Set(platforms).size !== platforms.length) issues.push("release materials invalid platforms");
+  if (formal && (!manifest.platforms || platforms.length !== 1 || platforms[0] !== "ios")) {
+    issues.push("formal 1.0 requires explicit iOS-only materials");
+  }
+  if (manifest.billingMode !== undefined && !["disabled", "iap"].includes(manifest.billingMode)) issues.push("release materials invalid billing mode");
+  if (formal && manifest.billingMode !== "disabled") issues.push("formal core 1.0 requires billing disabled");
+  return { android: Array.isArray(platforms) && platforms.includes("android"),
+    billing: manifest.billingMode !== "disabled", issues };
 }
 
 export const DOMESTIC_BASELINES: Array<

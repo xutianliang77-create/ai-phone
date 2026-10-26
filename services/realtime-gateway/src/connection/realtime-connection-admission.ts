@@ -10,6 +10,7 @@ import {
   attachSession,
   getSession,
   sessionBillableSeconds,
+  closedSessionReceipt,
 } from "../sessions/session-manager.js";
 import type { IncomingMessage } from "node:http";
 
@@ -18,6 +19,11 @@ export function admitRealtimeConnection(
   request: IncomingMessage,
   env: RealtimeEnv,
 ) {
+  if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" &&
+      (env.sessionEventSink !== "api" || env.realtimeTokenSecret.length < 32 || /dev-secret|replace-with|changeme/i.test(env.realtimeTokenSecret))) {
+    sendRealtimeEvent(ws, buildError("provider_unavailable", "Gateway signing configuration is unavailable", { stage: "connection", retryable: true }));
+    ws.close(); return null;
+  }
   const token = extractRealtimeConnectionToken(
     request,
     env.allowQueryToken === true,
@@ -32,6 +38,12 @@ export function admitRealtimeConnection(
     }));
     ws.close();
     return null;
+  }
+  const closed = closedSessionReceipt(claims.sessionId, claims.userId);
+  if (closed) {
+    sendRealtimeEvent(ws, { type: "session.ended", sessionId: claims.sessionId,
+      billableSeconds: closed.billableSeconds, ...(closed.gatewayReceipt ? { gatewayReceipt: closed.gatewayReceipt } : {}) });
+    ws.close(); return null;
   }
 
   if (!getSession(claims.sessionId) && activeSessionCount() >= env.maxSessions) {

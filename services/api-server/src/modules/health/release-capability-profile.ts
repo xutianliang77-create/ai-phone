@@ -1,29 +1,34 @@
+import { releaseDistribution, releaseDeferredCapabilities, isPublicReleaseEndpoint } from "@translation/platform-security";
+
 export type DomesticReleaseCapabilityProfile =
   | "core_translation"
   | "commercial_full";
 
-const deferredCapabilities = [
-  "livekit_sip",
-  "agent",
-  "egress",
-  "payment",
-  "sms",
-  "diagnostics_alerting",
-  "release_materials",
-] as const;
-
 export function getReleaseCapabilityProfileReadiness() {
   const configured = process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE?.trim();
   const profile = configured || "core_translation";
+  const distribution = releaseDistribution(process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL);
   const issues = validProfile(profile)
     ? profileIssues(profile)
     : [`invalid DOMESTIC_RELEASE_CAPABILITY_PROFILE ${profile}`];
+  issues.push(...distribution.issues);
+  if (distribution.formal) {
+    if (!process.env.REALTIME_TOKEN_SECRET || process.env.REALTIME_TOKEN_SECRET.length < 32 ||
+        /dev-secret|replace-with|changeme/i.test(process.env.REALTIME_TOKEN_SECRET)) issues.push("Formal release requires a strong REALTIME_TOKEN_SECRET");
+    if (!configured) issues.push("App Store release requires explicit capability profile");
+    if (profile !== "core_translation") issues.push("Formal 1.0 requires the approved core_translation profile");
+    for (const [key, protocols] of [
+      ["API_BASE_URL", ["https:"]], ["REALTIME_WS_ENDPOINT", ["wss:"]],
+    ] as const) {
+      if (!isPublicReleaseEndpoint(process.env[key], protocols)) issues.push(`App Store release requires public secure ${key}`);
+    }
+  }
   return {
     status: issues.length === 0 ? "ready" as const : "not_ready" as const,
     profile,
     explicit: Boolean(configured),
-    deferredCapabilities:
-      profile === "core_translation" ? [...deferredCapabilities] : [],
+    distributionChannel: distribution.channel,
+    deferredCapabilities: releaseDeferredCapabilities(profile, distribution.channel),
     issues,
   };
 }

@@ -119,6 +119,33 @@ class RealtimeApiClient {
     required List<Map<String, Object?>> segments,
     required int billableSeconds,
     required String idempotencyKey,
+  }) =>
+      _finalizeRequest(
+          sessionId: sessionId,
+          segments: segments,
+          billableSeconds: billableSeconds,
+          idempotencyKey: idempotencyKey);
+
+  Future<void> finalizeWithGatewayReceipt({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+    required String gatewayReceipt,
+  }) =>
+      _finalizeRequest(
+          sessionId: sessionId,
+          segments: segments,
+          billableSeconds: billableSeconds,
+          idempotencyKey: idempotencyKey,
+          gatewayReceipt: gatewayReceipt);
+
+  Future<void> _finalizeRequest({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+    String? gatewayReceipt,
   }) async {
     final response = await _client
         .post(
@@ -129,6 +156,7 @@ class RealtimeApiClient {
             'segments': segments,
             'billableSeconds': billableSeconds,
             'idempotencyKey': idempotencyKey,
+            if (gatewayReceipt != null) 'gatewayReceipt': gatewayReceipt,
           }),
         )
         .timeout(_requestTimeout);

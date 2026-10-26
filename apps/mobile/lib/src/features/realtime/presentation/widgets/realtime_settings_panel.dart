@@ -7,6 +7,7 @@ import '../realtime_settings_l10n.dart';
 import 'translation_language_picker.dart';
 import 'voice_preset_picker.dart';
 import 'domain_lexicon_picker.dart';
+import 'realtime_language_button.dart';
 
 class RealtimeSettingsPanel extends StatelessWidget {
   const RealtimeSettingsPanel({
@@ -14,6 +15,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
     this.autoSpeakSupported = true,
+    this.onlineCoreOnly = false,
     this.voicePresets = const <VoicePreset>[],
     this.voicePresetsLoading = false,
     this.onEndRequested,
@@ -25,6 +27,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
   final bool enabled;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
   final bool autoSpeakSupported;
+  final bool onlineCoreOnly;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
   final VoidCallback? onEndRequested;
@@ -46,6 +49,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
             segments: <ButtonSegment<RealtimeProcessingMode>>[
               ButtonSegment<RealtimeProcessingMode>(
                 value: RealtimeProcessingMode.onDevice,
+                enabled: !onlineCoreOnly,
                 icon: const Icon(Icons.phone_iphone),
                 label: Text(l10n.onDeviceModeLabel),
               ),
@@ -66,14 +70,14 @@ class RealtimeSettingsPanel extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              _LanguageButton(
+              RealtimeLanguageButton(
                 label: l10n.sourceLanguageLabel,
                 value: l10n.languageDisplayName(settings.sourceLanguage),
                 enabled: enabled,
                 onPressed: () =>
                     _pickLanguage(context, LanguagePickerKind.source),
               ),
-              _LanguageButton(
+              RealtimeLanguageButton(
                 label: l10n.targetLanguageLabel,
                 value: l10n.languageDisplayName(settings.targetLanguage),
                 enabled: enabled,
@@ -102,6 +106,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
           const SizedBox(height: 6),
           _VoiceOutputSelector(
             settings: settings,
+            allowMyVoice: !onlineCoreOnly,
             enabled: enabled && autoSpeakSupported,
             onChanged: onChanged,
             voicePresets: voicePresets,
@@ -162,9 +167,11 @@ class RealtimeSettingsPanel extends StatelessWidget {
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
-      supportedCodes: settings.processingMode == RealtimeProcessingMode.onDevice
-          ? onDeviceTranslationLanguageCodes
-          : null,
+      supportedCodes: onlineCoreOnly
+          ? const {'zh', 'en'}
+          : settings.processingMode == RealtimeProcessingMode.onDevice
+              ? onDeviceTranslationLanguageCodes
+              : null,
     );
     if (selected == null) return;
     onChanged(kind == LanguagePickerKind.source
@@ -191,6 +198,7 @@ class _VoiceOutputSelector extends StatelessWidget {
     required this.onChanged,
     required this.voicePresets,
     required this.voicePresetsLoading,
+    this.allowMyVoice = true,
   });
 
   final RealtimeRuntimeSettings settings;
@@ -198,6 +206,7 @@ class _VoiceOutputSelector extends StatelessWidget {
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
+  final bool allowMyVoice;
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +239,8 @@ class _VoiceOutputSelector extends StatelessWidget {
               icon: const Icon(Icons.record_voice_over_outlined),
               label: Text(l10n.voiceOutputNaturalLabel),
             ),
-            if (settings.processingMode == RealtimeProcessingMode.online)
+            if (allowMyVoice &&
+                settings.processingMode == RealtimeProcessingMode.online)
               ButtonSegment<RealtimeVoiceOutputMode>(
                 value: RealtimeVoiceOutputMode.myVoice,
                 icon: const Icon(Icons.graphic_eq_outlined),
@@ -315,35 +325,5 @@ class _VoicePresetButton extends StatelessWidget {
     if (selected != null) {
       onChanged(settings.copyWith(voicePresetId: selected));
     }
-  }
-}
-
-class _LanguageButton extends StatelessWidget {
-  const _LanguageButton({
-    required this.label,
-    required this.value,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final String label;
-  final String value;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: enabled ? onPressed : null,
-      icon: const Icon(Icons.translate),
-      label: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
-          Text(value),
-        ],
-      ),
-    );
   }
 }

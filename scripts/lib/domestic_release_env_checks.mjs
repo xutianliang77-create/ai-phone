@@ -10,12 +10,15 @@ export function appendDomesticReleaseEnvFileReadiness(context) {
   const checkFn = context.checkFn ?? checkDomesticReleaseEnvFile;
   const result = checkFn({ root: context.root, file: context.file });
   const ready = result.status === "ready";
+  const channelMatches = !context.expectedDistributionChannel ||
+    result.distributionChannel === context.expectedDistributionChannel;
   context.record(context.checks, "domestic_release_env_file", ready, {
     status: result.status,
     filePath: result.filePath,
     profile: result.profile,
     deferredCapabilities: result.deferredCapabilities ?? [],
   });
+  if (!channelMatches) context.issues.push("release env distribution channel does not match requested App Store channel");
   if (!ready) {
     context.issues.push("domestic_release_env_file is not ready.");
     context.issues.push(...context.normalizeIssues(result.issues));

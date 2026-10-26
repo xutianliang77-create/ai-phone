@@ -9,6 +9,36 @@ import 'package:translation_mobile/src/features/shell/presentation/pages/call_ho
 import 'package:translation_mobile/src/features/shell/presentation/pages/settings_home_page.dart';
 
 void main() {
+  testWidgets(
+      'formal core retains the call tab while deferred creation actions are unavailable',
+      (tester) async {
+    final config = AppConfig(
+        apiBaseUrl: Uri.parse('https://api.publisher.cn'),
+        distributionChannel: 'app_store',
+        productProfile: 'core_translation',
+        useMockAudio: false,
+        useDeviceAsr: false,
+        deviceAsrProvider: 'coreml_nemotron',
+        deviceAsrLanguage: 'auto',
+        deviceAsrAutoDownloadModel: false,
+        deviceAsrModelChunkMs: 2240,
+        serverOwnedHistory: true);
+    await tester.pumpWidget(_app(CallHomePage(config: config)));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<ListTile>(find.widgetWithText(ListTile, '发起翻译电话'))
+            .enabled,
+        isFalse);
+    expect(
+        tester
+            .widget<ListTile>(find.widgetWithText(ListTile, '加入通话链接'))
+            .enabled,
+        isFalse);
+    expect(
+        tester.widget<ListTile>(find.widgetWithText(ListTile, '输入并朗读')).enabled,
+        isTrue);
+  });
   testWidgets('private beta call surface keeps core communication only',
       (WidgetTester tester) async {
     await tester.pumpWidget(_app(CallHomePage(

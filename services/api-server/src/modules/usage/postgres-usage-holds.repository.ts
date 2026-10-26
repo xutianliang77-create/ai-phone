@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { gatewayStopHoldNote } from "./gateway-stop-hold.js";
 import {
   PostgresPrimaryStore,
   type PostgresAggregateFence,
@@ -117,7 +118,8 @@ export class PostgresUsageHoldsRepository {
           userId: input.userId,
           sessionId: input.sessionId,
         });
-        if (activeForSession && Date.parse(activeForSession.hold.expiresAt) <= Date.parse(now)) {
+        if (activeForSession && activeForSession.hold.note !== gatewayStopHoldNote &&
+            Date.parse(activeForSession.hold.expiresAt) <= Date.parse(now)) {
           const expired: VersionedUsageHoldRecord = {
             ...activeForSession.hold,
             status: "released",

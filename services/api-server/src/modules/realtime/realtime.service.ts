@@ -12,12 +12,15 @@ import { getReadyVoiceProfileTtsConfig } from
   "../voice-profiles/voice-profiles-runtime.service.js";
 import { createRealtimeToken } from "./realtime-token.js";
 import { realtimeMaxSessionSeconds } from "./realtime-session-duration.js";
+import { formalRealtimeRelease } from "./gateway-settlement.js";
+import { gatewayStopHoldNote } from "../usage/gateway-stop-hold.js";
 
 const realtimeStartHoldSeconds = 30;
 
 export async function createRealtimeSession(
   userId: string,
   input: CreateRealtimeSessionRequest,
+  options: { ownerAuthSessionHash?: string } = {},
 ): Promise<CreateRealtimeSessionResponse | null> {
   const plan = await activePlanForUser(userId);
   const env = loadEnv();
@@ -26,7 +29,7 @@ export async function createRealtimeSession(
   const hold = await createUsageHold(userId, realtimeStartHoldSeconds, {
     sessionId,
     idempotencyKey: `hold:${sessionId}`,
-    note: "realtime_session_hold",
+    note: formalRealtimeRelease() ? gatewayStopHoldNote : "realtime_session_hold",
     ttlSeconds: maxDurationSeconds + 5 * 60,
   });
   if (hold.status !== "held") return null;
@@ -42,6 +45,7 @@ export async function createRealtimeSession(
     consumedSeconds: 0,
     createdAt: new Date().toISOString(),
     segments: [],
+    ...(options.ownerAuthSessionHash ? { ownerAuthSessionHash: options.ownerAuthSessionHash } : {}),
   });
 
   const realtimeToken = createRealtimeToken(

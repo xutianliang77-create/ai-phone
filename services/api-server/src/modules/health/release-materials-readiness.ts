@@ -1,9 +1,12 @@
+import { formalMaterialIssues } from "./formal-release-materials-policy.js";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { releaseDistribution } from "@translation/platform-security";
 import {
   DOMESTIC_BASELINES,
   MIN_SCREENSHOT_COUNT,
   RELEASE_MATERIALS_CHECKED_ITEMS,
+  releaseMaterialsScope,
   type ReleaseMaterialsManifest,
 } from "./release-materials-readiness-schema.js";
 import { isSupportedScreenshotImage } from "./release-materials-screenshot-image.js";
@@ -23,12 +26,17 @@ export function getReleaseMaterialsReadinessForFile(manifestPath: string) {
   const loaded = loadManifest(manifestPath);
   if (!loaded.ok) return notReady(manifestPath, [loaded.issue]);
 
-  const issues = validateManifest(loaded.manifest, loaded.manifestDir);
-  const warnings = warningNotes(loaded.manifest);
+  const distribution = releaseDistribution(process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL);
+  const issues = [...validateManifest(loaded.manifest, loaded.manifestDir),
+    ...distribution.issues, ...releaseMaterialsScope(loaded.manifest, distribution.formal).issues];
+  issues.push(...formalMaterialIssues(loaded.manifest, distribution.formal));
+  const warnings = distribution.formal ? [] : warningNotes(loaded.manifest);
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     manifestPath,
-    checkedItems: checkedItems(),
+    checkedItems: checkedItems().filter((key) =>
+      (key !== "android_screenshots" || releaseMaterialsScope(loaded.manifest).android) &&
+      (key !== "refund_policy" || releaseMaterialsScope(loaded.manifest).billing)),
     issues,
     warnings,
   };
@@ -87,6 +95,7 @@ function requiredTextIssues(manifest: ReleaseMaterialsManifest) {
     ["grayReleasePlan", "gray release plan"],
   ];
   return fields
+    .filter(([field]) => field !== "androidPackageId" || releaseMaterialsScope(manifest).android)
     .filter(([field]) => !hasText(manifest[field]))
     .map(([, label]) => `release materials missing ${label}`);
 }
@@ -99,6 +108,7 @@ function requiredUrlIssues(manifest: ReleaseMaterialsManifest) {
     ["accountDeletionUrl", "account deletion url"],
   ];
   return fields.flatMap(([field, label]) => {
+    if (field === "refundPolicyUrl" && !releaseMaterialsScope(manifest).billing) return [];
     const value = manifest[field];
     if (!hasText(value)) return [`release materials missing ${label}`];
     return isHttpsUrl(value) ? [] : [`release materials invalid ${label}`];
@@ -116,16 +126,17 @@ function requiredListIssues(
     ["androidScreenshots", "Android screenshots"],
   ];
   const issues = fields
+    .filter(([field]) => field !== "androidScreenshots" || releaseMaterialsScope(manifest).android)
     .filter(([field]) => !hasList(manifest[field]))
     .map(([, label]) => `release materials missing ${label}`);
   const screenshotIssues = [
-    ...screenshotCountIssues(manifest.androidScreenshots, "Android"),
+    ...(releaseMaterialsScope(manifest).android ? screenshotCountIssues(manifest.androidScreenshots, "Android") : []),
     ...screenshotCountIssues(iosScreenshotList(manifest), "iOS"),
-    ...screenshotPathIssues(
+    ...(releaseMaterialsScope(manifest).android ? screenshotPathIssues(
       manifest.androidScreenshots,
       manifestDir,
       "Android",
-    ),
+    ) : []),
     ...iosScreenshotPathIssues(manifest, manifestDir),
   ];
   const missingIssues = hasIosScreenshotSet(manifest)
@@ -216,6 +227,8 @@ function warningNotes(manifest: ReleaseMaterialsManifest) {
 
 function domesticBaselineIssues(manifest: ReleaseMaterialsManifest) {
   return DOMESTIC_BASELINES.flatMap(([field, label, expected]) => {
+    if (field === "androidPackageId" && !releaseMaterialsScope(manifest).android) return [];
+    if (field === "refundPolicyUrl" && !releaseMaterialsScope(manifest).billing) return [];
     const actual = manifest[field];
     if (!hasText(actual) || actual === expected) return [];
     return [`release materials ${label} must match ${expected}`];

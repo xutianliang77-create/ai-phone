@@ -2,6 +2,7 @@ import {
   endSession as endLegacySession,
   saveSessionDiagnostics as saveLegacySessionDiagnostics,
   updateConsumedSeconds as updateLegacyConsumedSeconds,
+  saveGatewayFinalizationReceipt as saveLegacyGatewayReceipt,
 } from "./sessions.repository.js";
 import {
   participantTrackSpeaker,
@@ -31,6 +32,7 @@ import type { SessionRecord } from "./session-record.js";
 export interface CompleteSessionWithUsageOptions {
   billableSeconds?: number;
   diagnostics?: RealtimeSessionDiagnosticsDto;
+  gatewayReceipt?: string;
 }
 
 export async function completeSessionWithUsage(
@@ -62,6 +64,7 @@ function completeSessionWithUsageTransaction(
   if (options.diagnostics && !result.session.diagnostics) {
     saveLegacySessionDiagnostics(sessionId, options.diagnostics);
   }
+  if (options.gatewayReceipt) saveLegacyGatewayReceipt(sessionId, options.gatewayReceipt);
 
   if (result.wasAlreadyEnded && typeof options.billableSeconds !== "number") {
     return result.session;
@@ -157,6 +160,7 @@ function completedSession(
   next.endedAt = endedAt;
   next.lastActivityAt = endedAt;
   next.consumedSeconds = billableSeconds;
+  if (options.gatewayReceipt) next.gatewayFinalizationReceipt ??= options.gatewayReceipt;
   if (options.diagnostics && !next.diagnostics) {
     next.diagnostics = options.diagnostics;
   }

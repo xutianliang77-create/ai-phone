@@ -14,6 +14,8 @@ export async function requireAccount(request: FastifyRequest, reply: FastifyRepl
 }
 
 async function testAccount() {
+  if (process.env.NODE_ENV === "production" ||
+      process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store") return null;
   const explicitlyEnabled = process.env.API_TEST_AUTO_ACCOUNT === "true";
   const vitestFallbackEnabled =
     Boolean(process.env.VITEST) &&

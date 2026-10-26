@@ -5,6 +5,7 @@ class RealtimeFinalizationTask {
     required this.segments,
     required this.billableSeconds,
     required this.createdAt,
+    this.gatewayReceipt,
   });
 
   final String sessionId;
@@ -12,12 +13,14 @@ class RealtimeFinalizationTask {
   final List<Map<String, Object?>> segments;
   final int billableSeconds;
   final DateTime createdAt;
+  final String? gatewayReceipt;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'sessionId': sessionId,
         'idempotencyKey': idempotencyKey,
         'segments': segments,
         'billableSeconds': billableSeconds,
+        if (gatewayReceipt != null) 'gatewayReceipt': gatewayReceipt,
         'createdAt': createdAt.toUtc().toIso8601String(),
       };
 
@@ -46,6 +49,7 @@ class RealtimeFinalizationTask {
       billableSeconds:
           billableSeconds.toInt() < 0 ? 0 : billableSeconds.toInt(),
       createdAt: createdAt,
+      gatewayReceipt: json['gatewayReceipt'] as String?,
     );
   }
 }

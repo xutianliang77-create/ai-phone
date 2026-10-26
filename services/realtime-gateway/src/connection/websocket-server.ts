@@ -9,7 +9,7 @@ import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
 import { domainLexiconPacksForSession, loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
-import { confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
+import { confirmSessionConnection, deleteSession, getSession } from "../sessions/session-manager.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { createRealtimeTtsOutputQueue } from "../tts/realtime-tts-output-factory.js";
 import { handleControlEvent } from "./session-control-handler.js";
@@ -23,6 +23,7 @@ import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
+import { recordProviderStartupFailure } from "./provider-startup-failure.js";
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
@@ -43,9 +44,13 @@ export function startWebSocketServer() {
     const attachment = admitRealtimeConnection(ws, request, env);
     if (!attachment) return;
     const { session, generation, resumed } = attachment;
-    let provider: RealtimeProvider;
+    let provider!: RealtimeProvider;
+    let providerDispatched = false;
+    let admissionConfirmed = !session.formalRelease;
     let providerFailureStage: "provider" | "asr" | "translation" = "provider";
     try {
+      if (session.formalRelease) await sessionEventSink.touch(session.id, "active", { fresh: !resumed });
+      admissionConfirmed = true;
       const dependencyFailure = coreDependencyFailureStage(
         dependencyReadiness.readiness(),
       );
@@ -59,6 +64,8 @@ export function startWebSocketServer() {
       const asrCorrections = asrCorrectionTermsForPacks(domainLexiconPacks);
       const asrHotwords = asrHotwordsForTerminology(terminology, asrCorrections);
       const speakerAttribution = resolveSpeakerAttribution(session.claims);
+      if (session.formalRelease) session.providerCloseConfirmed = false;
+      providerDispatched = true;
       await provider.createSession({
         sessionId: session.id,
         userId: session.userId,
@@ -75,17 +82,8 @@ export function startWebSocketServer() {
       });
       logSpeakerAttributionConfigured(env, session, speakerAttribution);
     } catch {
-      const current = getSession(session.id);
-      if (current === session && current.connectionGeneration === generation) {
-        transitionStatus(session.id, "failed");
-        await sessionEventSink.record({
-          type: "session.ended",
-          sessionId: session.id,
-          reason: "connection_error",
-          billableSeconds: sessionBillableSeconds(session),
-        }).catch(() => undefined);
-        deleteSession(session.id, session);
-      }
+      await recordProviderStartupFailure({ session, generation, provider, providerDispatched,
+        admissionConfirmed, sessionEventSink, secret: env.realtimeTokenSecret });
       sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: providerFailureStage,
@@ -144,6 +142,7 @@ export function startWebSocketServer() {
       send: sendRealtime,
       drainSessionSync: () => eventDispatcher.drain(),
       flushTracker,
+      stopReceiptSecret: env.realtimeTokenSecret,
       onError: (stage, error) => {
         realtimeLogger.warn({ error, stage, sessionId: session.id },
           "Realtime pipeline flush failed during finalization");
@@ -163,6 +162,7 @@ export function startWebSocketServer() {
         void sessionEventSink.touch(session.id, session.status).catch((error) => {
           realtimeLogger.warn({ error, sessionId: session.id },
             "Realtime session heartbeat sync failed");
+          if (session.formalRelease) void endRealtimeSession("connection_error");
         });
       }
       if (session.status !== "active" || usageTickInFlight) return;

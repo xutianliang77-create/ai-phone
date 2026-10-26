@@ -32,6 +32,7 @@ import { registerPublicEntryProtection } from
   "./infrastructure/security/public-entry-protection.js";
 import type { PublicEntryRateLimiter } from
   "./infrastructure/security/public-entry-protection.js";
+import { registerFormalReleaseScope } from "./modules/health/formal-release-scope.js";
 
 export interface BuildAppOptions {
   publicEntryRateLimiter?: PublicEntryRateLimiter;
@@ -71,6 +72,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     maxAge: 600,
   });
   registerPublicEntryProtection(app, env, options.publicEntryRateLimiter);
+  registerFormalReleaseScope(app);
   registerPlatformMetricsRoutes(app);
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);

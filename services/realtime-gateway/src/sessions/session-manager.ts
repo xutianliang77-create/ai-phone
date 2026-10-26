@@ -5,16 +5,19 @@ import {
 import type { RealtimeSession } from "./realtime-session.js";
 
 const sessions = new Map<string, RealtimeSession>();
+const closedSessions = new Map<string, { userId: string; expiresAt: number; billableSeconds: number; gatewayReceipt?: string }>();
 
 export function createSession(claims: RealtimeTokenClaims): RealtimeSession {
   const now = Date.now();
+  const formalRelease = process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store";
   const session: RealtimeSession = {
     id: claims.sessionId,
     userId: claims.userId,
     claims,
-    status: "active",
+    status: formalRelease ? "connecting" : "active",
     startedAt: now,
-    activeStartedAt: now,
+    activeStartedAt: formalRelease ? undefined : now,
+    ...(formalRelease ? { formalRelease: true } : {}),
     accumulatedActiveMs: 0,
     connectionGeneration: 1,
     billableSeconds: 0,
@@ -24,14 +27,19 @@ export function createSession(claims: RealtimeTokenClaims): RealtimeSession {
 }
 
 export function attachSession(claims: RealtimeTokenClaims) {
+  for (const [id, closed] of closedSessions) if (closed.expiresAt <= Date.now()) closedSessions.delete(id);
+  if (closedSessions.has(claims.sessionId)) return null;
   const existing = getSession(claims.sessionId);
   if (!existing) {
+    if (closedSessions.size >= 10000) return null;
     const session = createSession(claims);
     return { session, generation: session.connectionGeneration, resumed: false };
   }
   if (existing.userId !== claims.userId || existing.status !== "connecting") {
     return null;
   }
+  if (existing.formalRelease &&
+      (existing.providerCloseConfirmed !== true || (existing.disconnectDeadlineAt ?? 0) <= Date.now())) return null;
   existing.connectionGeneration += 1;
   return {
     session: existing,
@@ -100,5 +108,16 @@ export function sessionBillableSeconds(
 export function deleteSession(sessionId: string, expectedSession?: RealtimeSession) {
   const session = getSession(sessionId);
   if (!session || (expectedSession && session !== expectedSession)) return false;
+  if (session.formalRelease) {
+    if (session.providerCloseConfirmed !== true) return false;
+    closedSessions.set(sessionId, { userId: session.userId, expiresAt: session.claims.expiresAt * 1000,
+      billableSeconds: sessionBillableSeconds(session), gatewayReceipt: session.gatewayReceipt });
+  }
   return sessions.delete(sessionId);
+}
+
+export function closedSessionReceipt(sessionId: string, userId: string) {
+  const entry = closedSessions.get(sessionId);
+  if (!entry || entry.userId !== userId || entry.expiresAt <= Date.now()) return null;
+  return entry;
 }

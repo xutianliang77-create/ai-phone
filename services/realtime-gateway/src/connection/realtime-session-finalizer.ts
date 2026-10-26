@@ -13,6 +13,8 @@ import {
 import type { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { flushProviderSession } from "./session-control-handler.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
+import { signGatewayStopReceipt } from "@translation/platform-security";
+import { buildError } from "../protocol/outgoing-event-builder.js";
 
 interface RealtimeSessionFinalizerOptions {
   sessionId: string;
@@ -23,6 +25,7 @@ interface RealtimeSessionFinalizerOptions {
   drainSessionSync: () => Promise<void>;
   flushTracker: RealtimeFlushTracker;
   onError: (stage: "audio" | "provider", error: unknown) => void;
+  stopReceiptSecret?: string;
 }
 
 export class RealtimeSessionFinalizer {
@@ -73,14 +76,27 @@ export class RealtimeSessionFinalizer {
     const session = getSession(this.options.sessionId);
     if (!session) return;
     const billableSeconds = sessionBillableSeconds(session);
-    await this.runStep("provider", () =>
+    const providerClosed = session.providerCloseConfirmed === true || await this.runStep("provider", () =>
       this.options.provider.closeSession(this.options.sessionId));
+    if (session.formalRelease && !providerClosed) {
+      this.finalizePromise = undefined;
+      this.options.send(buildError("provider_unavailable", "Provider close is unconfirmed; usage remains pending", {
+        sessionId: session.id, stage: "session", retryable: true,
+      }));
+      return;
+    }
+    if (session.formalRelease) session.providerCloseConfirmed = providerClosed;
+    if (session.formalRelease) session.gatewayReceipt = signGatewayStopReceipt({
+      sessionId: session.id, userId: session.userId, billableSeconds,
+      providerClosed: true, issuedAt: Date.now(),
+    }, this.options.stopReceiptSecret ?? "");
     transitionStatus(session.id, "ended");
     this.options.send({
       type: "session.ended",
       sessionId: session.id,
       reason,
       billableSeconds,
+      ...(session.gatewayReceipt ? { gatewayReceipt: session.gatewayReceipt } : {}),
       flush,
       diagnostics: this.sessionDiagnostics ?? await this.collectDiagnostics(),
       ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),

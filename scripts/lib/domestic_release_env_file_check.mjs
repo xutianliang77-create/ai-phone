@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { releaseDistribution, releaseDeferredCapabilities, isPublicReleaseEndpoint } from "@translation/platform-security";
 import {
   checkModelRoutingConfig,
   renderModelRoutingEnv,
@@ -37,18 +38,34 @@ export function checkDomesticReleaseEnvFile(options = {}) {
   const checks = [];
   const issues = [];
   const profile = requireReleaseProfile(env, checks, issues);
+  const distribution = releaseDistribution(env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL);
+  issues.push(...distribution.issues);
+  const formalRelease = distribution.formal;
+  const deferCallLink = formalRelease && profile === "core_translation";
   const fullRelease = profile === "commercial_full";
-  requireDomesticReleaseServiceConfig({ env, checks, issues, fullRelease });
+  requireDomesticReleaseServiceConfig({ env, checks, issues, fullRelease, formalRelease, deferCallLink });
   requireFixedValues(env, checks, issues, profile);
-  if (fullRelease) {
+  if (fullRelease || formalRelease) {
     requireReleaseArtifact(root, env, checks, issues, "RELEASE_MATERIALS_FILE");
+  }
+  if (formalRelease) {
+    if (profile !== "core_translation") issues.push("Formal 1.0 requires the approved core_translation profile");
+    for (const [key, protocols] of [["API_BASE_URL", ["https:"]], ["REALTIME_WS_ENDPOINT", ["wss:"]]]) {
+      const ok = isPublicReleaseEndpoint(env[key], protocols);
+      record(checks, `${key}_public_secure`, ok);
+      if (!ok) issues.push(`App Store release requires public secure ${key}`);
+    }
+    fixedValue(env, checks, issues, "SMS_PROVIDER", "http");
+    boundedInteger(env, checks, issues, "SMS_HTTP_TIMEOUT_MS", 1000, 30000);
   }
   requireReleaseArtifact(root, env, checks, issues, "MODEL_SELECTION_FILE");
   requireReleaseArtifact(root, env, checks, issues, "MODEL_ROUTING_FILE");
   requireModelRouting(root, env, checks, issues);
   if (fullRelease) requirePstnProvider(env, checks, issues);
   requireReleaseSecurity(filePath, env, checks, issues, { fullRelease });
-  return result(filePath, checks, issues, profile);
+  return { ...result(filePath, checks, issues, profile),
+    distributionChannel: distribution.channel,
+    deferredCapabilities: releaseDeferredCapabilities(profile, distribution.channel) };
 }
 
 export function parseEnvFile(text) {
@@ -271,7 +288,13 @@ function unquote(value) {
 
 function mask(value = "") {
   if (!value) return "";
-  if (/^https?:|^wss?:/.test(value)) return value;
+  if (/^https?:|^wss?:/.test(value)) {
+    try {
+      const url = new URL(value);
+      url.username = ""; url.password = ""; url.search = ""; url.hash = "";
+      return url.toString();
+    } catch { return "invalid-url"; }
+  }
   return value.length <= 6
     ? "***"
     : `${value.slice(0, 3)}***${value.slice(-2)}`;

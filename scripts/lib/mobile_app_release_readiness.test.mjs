@@ -1,6 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { readyChineseInterface, qkxyCertificateSubject, otherCertificateSubject, makeProject, write } from "./mobile_release_test_fixtures.mjs";
+import { rmSync } from "node:fs";
 import { afterEach, describe, expect, test } from "vitest";
 import { checkMobileAppReleaseReadiness } from "./mobile_app_release_readiness.mjs";
 
@@ -12,6 +11,27 @@ afterEach(() => {
 });
 
 describe("checkMobileAppReleaseReadiness", () => {
+  test("iOS-only checks do not require deferred Android release signing", () => {
+    tempDir = makeProject({ androidApplicationId: "com.example.translation_mobile", androidReleaseSigning: false });
+    const result = checkMobileAppReleaseReadiness(tempDir, { platform: "ios", chineseInterfaceCheck: readyChineseInterface,
+      androidCertificateSubjectReader: () => { throw new Error("Android must not be probed"); } });
+    expect(result.status).toBe("ready");
+    expect(result.checks.some((r) => r.name.startsWith("android_"))).toBe(false);
+  });
+  test("formal iOS metadata cannot pass when the selected build config still uses the private plist", () => {
+    tempDir = makeProject();
+    write(tempDir, "apps/mobile/ios/Runner/Info-Formal.plist", `
+      <key>NSCameraUsageDescription</key><key>NSMicrophoneUsageDescription</key><key>NSPhotoLibraryUsageDescription</key>
+      <key>NSAllowsArbitraryLoads</key><false/><key>NSAllowsLocalNetworking</key><false/>`);
+    const options = { platform: "ios", distributionChannel: "app_store", chineseInterfaceCheck: readyChineseInterface };
+    expect(checkMobileAppReleaseReadiness(tempDir, options).status).toBe("not_ready");
+    write(tempDir, "apps/mobile/ios/Flutter/LocalIdentity.xcconfig", `
+      TRANSLATION_IOS_BUNDLE_ID=cn.publisher.translator
+      WUJIE_DISTRIBUTION_CHANNEL=app_store
+      WUJIE_PRODUCT_PROFILE=core_translation
+      WUJIE_INFO_PLIST_SUFFIX=-Formal`);
+    expect(checkMobileAppReleaseReadiness(tempDir, options).status).toBe("ready");
+  });
   test("passes release mobile metadata", () => {
     tempDir = makeProject();
 
@@ -138,197 +158,3 @@ if (_platform == TargetPlatform.android &&
     );
   });
 });
-
-function readyChineseInterface() {
-  return { status: "ready", failures: [] };
-}
-
-function qkxyCertificateSubject() {
-  return {
-    ok: true,
-    subject: "CN=北京乾坤祥云科技有限公司, O=北京乾坤祥云科技有限公司, C=CN",
-  };
-}
-
-function otherCertificateSubject() {
-  return { ok: true, subject: "CN=Other Company, O=Other Company, C=CN" };
-}
-
-function makeProject(options = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), "mobile-release-"));
-  write(root, "apps/mobile/lib/src/app/region_edition_config.dart", `
-const edition = String.fromEnvironment('REGION_EDITION', defaultValue: 'domestic');
-const dataRegion = 'cn';
-const callProviderPolicy = 'call_link_only';
-const complianceProfile = 'pipl';
-`);
-  write(root, "apps/mobile/lib/src/app/app_config.dart", `
-const sourceLanguage = String.fromEnvironment('SOURCE_LANGUAGE', defaultValue: 'auto');
-const targetLanguage = String.fromEnvironment('TARGET_LANGUAGE', defaultValue: 'zh');
-const useMockAudio = bool.fromEnvironment('USE_MOCK_AUDIO');
-`);
-  write(root, "apps/mobile/lib/src/platform/asr/android_system_asr_provider.dart",
-    options.androidSystemAsrProvider ?? `
-class AndroidSystemAsrProvider implements MobileAsrDiagnostics {
-  static const channel = 'translation_mobile/system_asr';
-  final message = 'Android system ASR ready';
-}
-`);
-  write(root, "apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_runtime_factories.dart",
-    options.realtimeRuntimeFactory ?? `
-import 'android_system_asr_provider.dart';
-Object createDefaultMobileAsrProvider(config) {
-  if (config.deviceAsrProvider == 'android_system' ||
-      config.deviceAsrProvider == 'system') {
-    return AndroidSystemAsrProvider();
-  }
-}
-`);
-  write(root, "apps/mobile/lib/src/features/compliance/data/compliance_document.dart",
-    options.complianceCenter ?? `
-const complianceDocuments = [
-  '隐私政策',
-  '用户协议',
-  '第三方 SDK 与模型服务商清单',
-  '权限用途说明',
-  '客服与账户',
-  'support@qkxy.cn',
-  '退款处理',
-  '删除账号',
-  '隐私反馈',
-  'https://app.qkxy.cn/account/delete',
-];
-`);
-  write(root, "apps/mobile/lib/src/features/billing/presentation/pages/wallet_page.dart",
-    options.walletPage ?? `
-String? _paymentProviderFor(product) {
-  if (_platform == TargetPlatform.iOS &&
-      _paymentStack.contains('apple_iap') &&
-      product.providers.contains('apple_iap')) {
-    return 'apple_iap';
-  }
-  return null;
-}
-Future<void> _restorePurchases() async {
-  await _purchaseService.restorePurchases();
-  await _purchaseService.finishTransaction('transaction');
-  _message = l10n.restoreSuccess;
-  _message = l10n.restoreEmpty;
-}
-`);
-  write(root, "apps/mobile/lib/src/platform/billing/purchase_service.dart",
-    options.purchaseService ?? `
-abstract interface class PurchaseService {
-  Future restorePurchases();
-  Future finishTransaction(String transactionId);
-}
-`);
-  write(root, "apps/mobile/ios/Runner/StoreKitBridge.swift",
-    options.storeKitBridge ?? `
-final class StoreKitBridge {
-  func handle(method: String) {
-    switch method {
-    case "restorePurchases":
-      restorePurchases()
-    default:
-      break
-    }
-  }
-  func restorePurchases() async {
-    try await AppStore.sync()
-    _ = Transaction.currentEntitlements
-    _ = Transaction.unfinished
-  }
-}
-`);
-  write(root, "apps/mobile/ios/Runner/Info.plist", `
-<key>NSCameraUsageDescription</key>
-<key>NSMicrophoneUsageDescription</key>
-<key>NSPhotoLibraryUsageDescription</key>
-<key>NSLocalNetworkUsageDescription</key>
-`);
-  write(root, "apps/mobile/ios/Runner/zh-Hans.lproj/InfoPlist.strings", `
-"NSCameraUsageDescription" = "拍照翻译需要使用相机。";
-"NSMicrophoneUsageDescription" = "实时同传需要使用麦克风。";
-"NSPhotoLibraryUsageDescription" = "拍照翻译需要读取相册。";
-"NSLocalNetworkUsageDescription" = "实时同传需要连接局域网。";
-`);
-  const iosBundleId = options.iosBundleId ?? "com.realtimeinterpreter.app";
-  write(root, "apps/mobile/ios/Flutter/Debug.xcconfig", `
-TRANSLATION_IOS_BUNDLE_ID=com.example.translationMobile
-`);
-  write(root, "apps/mobile/ios/Flutter/Release.xcconfig", `
-TRANSLATION_IOS_BUNDLE_ID=com.example.translationMobile
-`);
-  write(root, "apps/mobile/ios/Flutter/LocalIdentity.xcconfig", `
-TRANSLATION_IOS_BUNDLE_ID=${iosBundleId}
-`);
-  write(root, "apps/mobile/ios/Runner.xcodeproj/project.pbxproj", `
-PRODUCT_BUNDLE_IDENTIFIER = "$(TRANSLATION_IOS_BUNDLE_ID)";
-PRODUCT_BUNDLE_IDENTIFIER = "$(TRANSLATION_IOS_BUNDLE_ID).RunnerTests";
-`);
-  write(root, "apps/mobile/android/app/src/main/AndroidManifest.xml", `
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<uses-permission android:name="android.permission.INTERNET"/>
-<uses-permission android:name="android.permission.RECORD_AUDIO"/>
-<uses-permission android:name="android.permission.CAMERA"/>
-<application ${options.androidReleaseCleartext ? 'android:usesCleartextTraffic="true"' : ""}/>
-<queries>
-  <intent>
-    <action android:name="android.speech.RecognitionService"/>
-  </intent>
-</queries>
-</manifest>
-`);
-  write(root, "apps/mobile/android/app/src/main/kotlin/com/example/translation_mobile/AndroidSystemAsrBridge.kt",
-    options.androidSystemAsrBridge ?? `
-class AndroidSystemAsrBridge {
-  val channel = "translation_mobile/system_asr/events"
-  fun start() {
-    SpeechRecognizer.createSpeechRecognizer(null)
-    requestPermissions()
-    scheduleRestart()
-  }
-}
-class RecognitionListener
-`);
-  write(root, "apps/mobile/android/app/src/debug/AndroidManifest.xml", `
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<application android:usesCleartextTraffic="true"/>
-</manifest>
-`);
-  write(root, "apps/mobile/android/app/src/profile/AndroidManifest.xml", `
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<application android:usesCleartextTraffic="true"/>
-</manifest>
-`);
-  if (options.androidReleaseSigning !== false) {
-    write(root, "apps/mobile/android/release.jks", "fake keystore");
-    write(root, "apps/mobile/android/key.properties", `
-applicationId=${options.androidApplicationId ?? "com.realtimeinterpreter.app"}
-storeFile=release.jks
-storePassword=password
-keyAlias=domestic
-keyPassword=password
-`);
-  }
-  write(root, "apps/mobile/android/app/build.gradle.kts", `
-android {
-  defaultConfig {
-    applicationId = releaseString("applicationId", "com.example.translation_mobile")
-  }
-  buildTypes {
-    release {
-      ${options.androidReleaseDebugSigning ? 'signingConfig = signingConfigs.getByName("debug")' : ""}
-    }
-  }
-}
-`);
-  return root;
-}
-
-function write(root, relativePath, content) {
-  const file = path.join(root, relativePath);
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, content);
-}

@@ -12,6 +12,7 @@ import {
   saveSegments,
 } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
+import { formalRealtimeRelease, verifiedGatewaySettlement } from "./gateway-settlement.js";
 
 export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
   app.post("/realtime/sessions/:sessionId/finalize", async (request, reply) => {
@@ -52,9 +53,17 @@ export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
           "Session was finalized with another idempotency key");
       }
 
+      const gateway = formalRealtimeRelease() ? verifiedGatewaySettlement(existing, body.gatewayReceipt) : null;
+      // Paired formal gateway must claim created -> active before touching a provider.
+      const neverAdmitted = formalRealtimeRelease() && existing.status === "created" &&
+        !!existing.ownerAuthSessionHash;
+      if (formalRealtimeRelease() && !gateway && !neverAdmitted) {
+        return sendError(reply, 409, "gateway_settlement_pending", "Gateway stop evidence is required; usage remains pending");
+      }
       await saveSegments(params.sessionId, body.segments!);
       const session = await completeSessionWithUsage(params.sessionId, {
-        billableSeconds,
+        billableSeconds: gateway?.billableSeconds ?? (neverAdmitted ? 0 : billableSeconds),
+        ...(gateway ? { gatewayReceipt: gateway.receipt } : {}),
       });
       if (!session) {
         return sendError(reply, 404, "session_not_found", "Session not found");

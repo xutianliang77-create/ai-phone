@@ -147,7 +147,7 @@ export async function accountFromAuthorization(authorization: string | undefined
   const session = await runtime.postgres.productRecords.findByLookup<AuthSessionPrimary>(
     "authSessions", tokenHash(token),
   );
-  if (!session || session.revokedAt || Date.parse(session.expiresAt) < Date.now()) return null;
+  if (!session || session.revokedAt || !(Date.parse(session.expiresAt) > Date.now())) return null;
   const account = await runtime.postgres.productRecords.find<AccountRecord>(
     "accounts", session.userId,
   );

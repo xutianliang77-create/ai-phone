@@ -1,11 +1,12 @@
+import { releaseReadinessPolicy } from "./domestic_release_formal_policy.mjs";
 import { withDomesticLocalStack } from "./domestic_local_stack_check.mjs";
+import { releaseDeferredCapabilities, redactReleaseEndpoint } from "@translation/platform-security";
 import { appendAgentCallWorkerReadiness } from "./domestic_release_agent_call_checks.mjs";
 import { appendDiagnosticsAlertingLocalSmoke } from "./domestic_release_diagnostics_checks.mjs";
 import { appendDomesticReleaseEnvFileReadiness } from "./domestic_release_env_checks.mjs";
 import {
   checkReleaseEndpoint,
   checkServiceIdentity,
-  normalizeBaseUrl,
   normalizeIssues,
   record,
 } from "./domestic_release_http_checks.mjs";
@@ -30,18 +31,16 @@ import { markProviderChecksDeferred } from
   "./domestic_release_profile_checks.mjs";
 export async function checkDomesticReleaseReadiness(options) {
   const checks = [];
-  const issues = [];
   const actions = [];
-  const capabilityProfile = options.capabilityProfile ?? null;
-  const providerAcceptanceDeferred = capabilityProfile === "core_translation";
-  const supportedProfiles = ["core_translation", "commercial_full"];
-  if (capabilityProfile && !supportedProfiles.includes(capabilityProfile)) {
-    issues.push(`invalid domestic release capability profile ${capabilityProfile}`);
-  }
-  const apiBaseUrl = normalizeBaseUrl(options.apiBaseUrl);
-  const gatewayBaseUrl = normalizeBaseUrl(options.gatewayBaseUrl);
-  const pstnBridgeBaseUrl = normalizeBaseUrl(options.pstnBridgeBaseUrl);
+  const { issues, capabilityProfile, distribution, formalRelease, deferCallLink,
+    providerAcceptanceDeferred, apiBaseUrl, gatewayBaseUrl, pstnBridgeBaseUrl } = releaseReadinessPolicy(options);
 
+  if (issues.length) return {
+    status: "not_ready", capabilityProfile, distributionChannel: distribution.channel,
+    deferredCapabilities: releaseDeferredCapabilities(capabilityProfile, distribution.channel),
+    checks, issues, actions, apiBaseUrl: redactReleaseEndpoint(apiBaseUrl),
+    gatewayBaseUrl: redactReleaseEndpoint(gatewayBaseUrl),
+  };
   checkMobileAppRelease({
     root: options.root,
     checkFn: options.mobileAppReleaseCheckFn,
@@ -50,6 +49,8 @@ export async function checkDomesticReleaseReadiness(options) {
     actions,
     record,
     normalizeIssues,
+    platform: formalRelease ? "ios" : undefined,
+    distributionChannel: distribution.channel,
   });
   appendDomesticReleaseSecretHygiene({
     root: options.root,
@@ -79,8 +80,9 @@ export async function checkDomesticReleaseReadiness(options) {
     actions,
   });
   await appendReleaseMaterialsReadiness({
+    distributionChannel: distribution.channel,
     enabled:
-      options.checkReleaseMaterials !== false && !providerAcceptanceDeferred,
+      options.checkReleaseMaterials !== false && (!providerAcceptanceDeferred || formalRelease),
     root: options.root,
     file: options.releaseMaterialsFile,
     timeoutMs: options.timeoutMs,
@@ -101,9 +103,10 @@ export async function checkDomesticReleaseReadiness(options) {
     actions,
     record,
     normalizeIssues,
+    expectedDistributionChannel: formalRelease ? distribution.channel : undefined,
   });
   appendLiveKitSelfHostReadiness({
-    enabled: options.checkLiveKitSelfHost !== false,
+    enabled: options.checkLiveKitSelfHost !== false && !deferCallLink,
     root: options.root,
     envFile: options.liveKitSelfHostEnvFile,
     checkFn: options.checkLiveKitSelfHostFn,
@@ -128,6 +131,8 @@ export async function checkDomesticReleaseReadiness(options) {
   });
   await checkReleaseEndpoint({
     name: "api_release_ready",
+    expectedDistributionChannel: formalRelease ? distribution.channel : undefined,
+    expectedCapabilityProfile: capabilityProfile,
     url: `${apiBaseUrl}/health/release-ready`,
     missingRouteAction:
       "Restart @translation/api-server from the current workspace; /health/release-ready is missing on the running process.",
@@ -238,7 +243,7 @@ export async function checkDomesticReleaseReadiness(options) {
   await appendDiagnosticsAlertingLocalSmoke({
     enabled:
       options.checkDiagnosticsAlertingLocalSmoke !== false &&
-      !providerAcceptanceDeferred,
+      (!providerAcceptanceDeferred || formalRelease),
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkDiagnosticsAlertingLocalSmokeFn,
@@ -261,7 +266,7 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendCallLinkWorkerReadiness({
-    enabled: options.checkCallLinkWorker !== false,
+    enabled: options.checkCallLinkWorker !== false && !deferCallLink,
     apiBaseUrl,
     internalApiSecret: options.internalApiSecret,
     diagnosticsAdminToken: options.diagnosticsAdminToken,
@@ -276,7 +281,7 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendLiveKitRoomMediaReadiness({
-    enabled: options.checkLiveKitRoomMedia !== false,
+    enabled: options.checkLiveKitRoomMedia !== false && !deferCallLink,
     apiBaseUrl,
     internalApiSecret: options.internalApiSecret,
     timeoutMs: options.timeoutMs,
@@ -295,26 +300,16 @@ export async function checkDomesticReleaseReadiness(options) {
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     capabilityProfile,
-    deferredCapabilities:
-      providerAcceptanceDeferred
-        ? [
-          "livekit_sip",
-          "agent",
-          "egress",
-          "payment",
-          "sms",
-          "diagnostics_alerting",
-          "release_materials",
-        ]
-        : [],
-    apiBaseUrl,
-    gatewayBaseUrl,
-    pstnBridgeBaseUrl,
+    distributionChannel: distribution.channel,
+    deferredCapabilities: releaseDeferredCapabilities(capabilityProfile, distribution.channel),
+    apiBaseUrl: redactReleaseEndpoint(apiBaseUrl),
+    gatewayBaseUrl: redactReleaseEndpoint(gatewayBaseUrl),
+    pstnBridgeBaseUrl: redactReleaseEndpoint(pstnBridgeBaseUrl),
     modelSelectionFile: options.modelSelectionFile,
     modelRoutingFile: options.modelRoutingFile,
     releaseEnvFile: options.releaseEnvFile,
     liveKitSelfHostEnvFile: options.liveKitSelfHostEnvFile,
-    qwenBaseUrl: options.qwenBaseUrl,
+    qwenBaseUrl: redactReleaseEndpoint(options.qwenBaseUrl),
     qwenModel: options.qwenModel,
     ttsProvider: options.ttsProvider,
     ttsModel: options.ttsModel,
