@@ -5,6 +5,18 @@ import {fail,strongKey} from './protocol.mjs';
 const domain='wujie.v10-control.private-erasure.v1';
 /** Record intent before revoking authentication. A crash cannot silently drop
  * the content request. An active account's intent is never executed. */
+/** A lost deletion response can be recovered using its already revoked token.
+ * This only acknowledges an existing request for an already deleting account;
+ * it cannot authenticate a new action or disclose content/wallet details. */
+export async function erasureAcknowledgement(ctx,authorization,now){
+ const token=/^Bearer ([^\s]+)$/.exec(authorization??'')?.[1];if(!token||token.length>4096)return null;
+ const row=await ctx.store.read(sql(`SELECT a.user_id,a.app_account_token,a.status,a.created_ms,e.request_id,e.state
+  FROM account_tokens t JOIN accounts a ON a.user_id=t.user_id JOIN v10_private_erasure e ON e.owner_id=a.user_id
+  WHERE t.token_hash=? AND t.expires_ms>? AND a.status='deletion_requested'`,sha('auth-token:'+token),now));
+ if(!row)return null;
+ return {account:{id:row.user_id,appAccountToken:row.app_account_token,status:row.status,createdAt:new Date(row.created_ms).toISOString(),phoneMasked:''},
+  deletion:{status:row.state==='completed'?'content_erased_accounting_retained':'awaiting_safe_terminal',requestId:row.request_id},replayed:true};
+}
 export async function prepareErasure(ctx,actor,now){
  const id='v10-erasure:'+sha([ctx.deploymentId,actor.id]);
  const c=command(id,actor.id,'v10.private-erasure.request',{ownerId:actor.id},now);
@@ -26,7 +38,7 @@ export async function processErasure(env,ownerId){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);let code='unconfirmed';
  try{
   const url=new URL('/internal/v10/account/erase',env.V10_PROCESSING_API_BASE_URL);if(url.protocol!=='https:')fail('v10_processing_api');
-  const response=await fetch(url,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify({proof}),signal:controller.signal});
+  const response=await fetch(url,{method:'POST',redirect:'manual',headers:{'content-type':'application/json'},body:JSON.stringify({proof}),signal:controller.signal});
   const value=await response.json();
   if(!response.ok||value.requestId!==row.request_id||value.ownerId!==ownerId||value.status!=='completed')fail('v10_erasure_unconfirmed');
   await ctx.store.execute(command(row.request_id+':completed',ownerId,'v10.private-erasure.completed',{receiptHash:sha(value)},now),{

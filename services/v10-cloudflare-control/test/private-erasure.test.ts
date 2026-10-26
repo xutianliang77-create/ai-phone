@@ -1,7 +1,7 @@
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {Fixture,now} from './fixture.js';
-import {prepareErasure,processErasure} from '../src/private-erasure.mjs';
+import {prepareErasure,processErasure,erasureAcknowledgement} from '../src/private-erasure.mjs';
 const did='wujie-v10-erasure-fixture';let f:Fixture,tokenHash:string;
 const env={PUBLIC_DEPLOYMENT_ID:did,COMMERCE_WRITER_FENCE:'1',CF_RECOVERY_EPOCH:'1',INTERNAL_API_SECRET:'fixture-erasure-internal-secret-32-bytes',V10_PROCESSING_API_BASE_URL:'https://processing.beelinkdata.com'};
 beforeEach(()=>{
@@ -20,4 +20,17 @@ it('keeps an unconfirmed private request pending and retries only that new owner
  await processErasure({...env,D1_COMMERCE:f},'owner');expect(f.db.prepare('SELECT state,attempts FROM v10_private_erasure').get()).toMatchObject({state:'pending',attempts:1});
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({ownerId:'owner',requestId,status:'completed'})));
  await processErasure({...env,D1_COMMERCE:f},'owner');expect(f.db.prepare('SELECT state,attempts FROM v10_private_erasure').get()).toMatchObject({state:'completed',attempts:2});
+});
+
+it('recovers an existing deleting-account receipt without authenticating another action',async()=>{
+ const requestId=await intent();f.db.exec("UPDATE accounts SET status='deletion_requested';UPDATE account_tokens SET revoked_ms=1");
+ const ctx={store:f.store()};
+ expect(await erasureAcknowledgement(ctx,'Bearer synthetic-owner',now)).toMatchObject({replayed:true,deletion:{requestId,status:'awaiting_safe_terminal'}});
+ expect(await erasureAcknowledgement(ctx,'Bearer foreign-token',now)).toBeNull();
+});
+it('does not follow a private-service redirect or declare erasure complete',async()=>{
+ await intent();f.db.exec("UPDATE accounts SET status='deletion_requested'");
+ const outbound=vi.fn(async(_url:unknown,init:RequestInit)=>{expect(init.redirect).toBe('manual');return new Response(null,{status:302,headers:{location:'https://foreign.invalid'}});});
+ vi.stubGlobal('fetch',outbound);await processErasure({...env,D1_COMMERCE:f},'owner');expect(outbound).toHaveBeenCalledOnce();
+ expect(f.db.prepare('SELECT state FROM v10_private_erasure').get()).toMatchObject({state:'pending'});
 });

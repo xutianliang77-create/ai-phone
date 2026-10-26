@@ -1,4 +1,4 @@
-import {prepareErasure,processErasure} from './private-erasure.mjs';
+import {prepareErasure,processErasure,erasureAcknowledgement} from './private-erasure.mjs';
 import {requirePublicDocuments,publicDocumentJson,readJson,onlyKeys,D1UsageHoldsRepository,sql} from '../vendor/reused-control-core.mjs';
 import {authorize,deployment,sha} from './environment.mjs';
 import {fail} from './protocol.mjs';
@@ -17,16 +17,18 @@ export async function accountRoute(request,env,ctx,now,execution){
  }
  if(path==='/auth/logout'&&request.method==='POST'){await ctx.account.logout(authorization,now);return {status:'ok'};}
  if(path==='/account/delete'&&request.method==='POST'){
+  const prior=await erasureAcknowledgement(ctx,authorization,now);
+  if(prior){execution?.waitUntil(processErasure(env,prior.account.id));return prior;}
   const actor=await authorize(ctx,request,now);ctx.deploymentId=deployment(env);
-  await prepareErasure(ctx,actor,now);
+  const requestId=await prepareErasure(ctx,actor,now);
   const result=await ctx.account.requestDeletion(authorization,now);
   // Only the newly requested owner's revocations are processed. No global queue,
   // historical sweep, data migration, compensating grant or model call starts.
-  const rows=await ctx.store.readAll(sql("SELECT event_id FROM finance_outbox WHERE owner_id=? AND event_type='apple.revoke' AND state='pending' ORDER BY created_ms DESC LIMIT 5",result.account.id));
+  const rows=await ctx.store.readAll(sql("SELECT event_id FROM finance_outbox WHERE owner_id=? AND event_type='apple.revoke' AND state='pending' ORDER BY due_ms DESC,event_id DESC LIMIT 5",result.account.id));
   const work=(async()=>{for(const row of rows)await ctx.account.processRevocation(row.event_id,Date.now()).catch(()=>undefined);})();
   execution?.waitUntil(work);
   execution?.waitUntil(processErasure(env,result.account.id));
-  return {account:{...result.account,phoneMasked:''},deletion:{status:'awaiting_safe_terminal'}};
+  return {account:{...result.account,phoneMasked:''},deletion:{status:'awaiting_safe_terminal',requestId}};
  }
  const actor=await authorize(ctx,request,now);
  if(path==='/account/me'&&request.method==='GET')return {account:{...actor.account,phoneMasked:''}};
