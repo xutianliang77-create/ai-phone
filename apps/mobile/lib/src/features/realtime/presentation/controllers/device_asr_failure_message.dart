@@ -7,13 +7,18 @@ Future<String> deviceAsrFailureMessage(
   Object error,
 ) async {
   final baseMessage = displayRealtimeErrorMessage(error);
+  if (error.toString().contains('automatic_language_uncertain') ||
+      error.toString().contains('automatic_language_evidence_timeout')) {
+    return '无法可靠确认本句语种，已停止自动模式。请选择中文或英文继续；未输出猜测译文。';
+  }
   final inspector = provider is MobileAsrRuntimeInspector
       ? provider as MobileAsrRuntimeInspector
       : null;
   if (inspector == null) return baseMessage;
   try {
-    final diagnostic =
-        coreMlNemotronAudioDiagnostic(await inspector.nativeAvailability());
+    final diagnostic = coreMlNemotronAudioDiagnostic(
+      await inspector.nativeAvailability(),
+    );
     final issue = diagnostic?.issue;
     if (issue == null || issue == 'ok') return baseMessage;
     final processingError = diagnostic?.audio['processingError'];

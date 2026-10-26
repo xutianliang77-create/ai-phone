@@ -60,6 +60,23 @@ class AppleSpeechAsrProvider
         {};
     final effective = p['effectiveParameters'];
     final expected = arguments(c);
+    final locales =
+        (p['locales'] as List?)
+            ?.whereType<String>()
+            .map((v) => v.toLowerCase())
+            .toList() ??
+        const <String>[];
+    final languageMatches = c.language == 'auto'
+        ? p['automaticLanguageImplemented'] == true &&
+              p['languagePolicy'] == 'apple-dual-zh-en-confidence-r1' &&
+              const [
+                'zh',
+                'en',
+              ].every((l) => locales.any((v) => v.startsWith(l)))
+        : const ['zh', 'en'].contains(c.language) &&
+              (p['locale'] as String? ?? '').toLowerCase().startsWith(
+                c.language,
+              );
     final matches =
         effective is Map &&
         const [
@@ -73,8 +90,7 @@ class AppleSpeechAsrProvider
         ].every((k) => expected[k] == effective[k]) &&
         effective['sampleRate'] == 16000 &&
         effective['vadFrameSamples'] == 4096 &&
-        const ['zh', 'en'].contains(c.language) &&
-        (p['locale'] as String? ?? '').toLowerCase().startsWith(c.language) &&
+        languageMatches &&
         RegExp(
           r'^[a-f0-9]{64}$',
         ).hasMatch(p['configurationFingerprint'] as String? ?? '');
@@ -110,7 +126,9 @@ class AppleSpeechAsrProvider
   @override
   Future<void> start(MobileAsrConfig c) async {
     _capture = 'capture-${DateTime.now().microsecondsSinceEpoch}';
-    _policy = 'fixed-${c.language}';
+    _policy = c.language == 'auto'
+        ? 'apple-dual-zh-en-confidence-r1'
+        : 'fixed-${c.language}';
     await _method.invokeMethod<void>('start', {
       ...arguments(c),
       'captureId': _capture,

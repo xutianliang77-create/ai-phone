@@ -39,6 +39,20 @@ enum AppleSpeechResources {
   static func availability(language: String,
                            configuration: AppleSpeechConfiguration,
                            requiresMicrophone: Bool = true) async -> [String: Any] {
+    if language=="auto" {
+      var observations=[[String:Any]]()
+      for value in AppleSpeechLanguageRouter.languages {
+        observations.append(await availability(language:value,configuration:configuration,requiresMicrophone:requiresMicrophone))
+      }
+      let ready=observations.allSatisfy{$0["canStart"] as? Bool==true}
+      let preparable=observations.allSatisfy{$0["canStart"] as? Bool==true || $0["canPrepareLocally"] as? Bool==true}
+      return ["canStart":ready,"canPrepareLocally":preparable,"resourcesInstalled":ready,"locale":"auto",
+        "locales":observations.compactMap{$0["locale"] as? String},"resourceSnapshots":observations,
+        "provider":"apple_speech_transcriber","automaticLanguageImplemented":true,"automaticLanguageQualified":false,
+        "languagePolicy":AppleSpeechLanguageRouter.version,"qualityQualified":false,
+        "reason":ready ? "ready":"automatic_language_resources_missing",
+        "effectiveParameters":configuration.parameters,"configurationFingerprint":configuration.fingerprint]
+    }
     do {
       guard SpeechTranscriber.isAvailable else { throw AppleSpeechFailure.unsupportedLanguage }
       let locale = try await locale(language)

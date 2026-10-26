@@ -151,7 +151,7 @@ const onDeviceComplianceDocuments = <ComplianceDocument>[
       ComplianceSection(
         title: '本机组件',
         body:
-            'Apple SpeechTranscriber识别、iOS系统翻译、系统TTS和Vision OCR。所需系统语言资源须真实就绪；本版不使用云端模型或自有模型服务器。自动语种切换尚未合格，请手动选中文或英文。',
+            'Apple SpeechTranscriber识别、iOS系统翻译、系统TTS和Vision OCR。所需系统语言资源须真实就绪；不使用云端或自有模型服务器。自动语种候选已接入中英双路识别，仍待实机验收；无法可靠确认时停止，可手动选中英继续。',
       ),
       ComplianceSection(
         title: '控制服务',
@@ -162,7 +162,7 @@ const onDeviceComplianceDocuments = <ComplianceDocument>[
       ComplianceSection(
         title: 'On-device components',
         body:
-            'Apple SpeechTranscriber, iOS Translation, system TTS and Vision OCR. OS resources must be installed. No cloud or self-hosted model server is used. Select Chinese or English explicitly; automatic speech-language switching is not qualified.',
+            'Apple SpeechTranscriber, iOS Translation, system TTS and Vision OCR run on-device. OS resources must be installed. Automatic routing uses Chinese/English candidates and still awaits device qualification. Uncertain turns stop without a guessed translation; select a language explicitly to continue.',
       ),
       ComplianceSection(
         title: 'Control plane',

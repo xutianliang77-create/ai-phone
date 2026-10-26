@@ -142,6 +142,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
 
   bool _shouldRecoverDeviceAsr() {
     return _usesDeviceAsr &&
+        !(_config.onDeviceOnly && _config.sourceLanguage == 'auto') &&
         _status == RealtimeStatus.active &&
         _session != null &&
         !_stopInFlight &&
@@ -152,6 +153,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
 
   bool _shouldRetryDeviceAsrStartup() {
     return _usesDeviceAsr &&
+        !(_config.onDeviceOnly && _config.sourceLanguage == 'auto') &&
         _status == RealtimeStatus.connecting &&
         _session != null &&
         !_stopInFlight &&

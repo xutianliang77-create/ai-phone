@@ -35,7 +35,7 @@
 
 App 原生 Info 配置为 `WujieExecutionMode`、`WujiePublicDeploymentId`、`WujieAppAttestEnvironment`、`WujieV10LicenseKeys`（kid→base64 x963公钥）及 `WujieV10SubscriptionProductId`。它们必须和 Dart/Worker 的同一候选相符；本地测试密钥和 fixture SKU 不得晋级。
 
-系统资源由 iOS 管理；仅真实 installed 可就绪。现有识别实现需要 iOS26并明确选中英，`auto` 会显式拒绝，自动语种仍是发布缺口。控制面联网不能代表手机模型质量、取消时延、耗电或十台实机通过。
+系统资源由iOS管理；仅真实installed可就绪。识别实现需要iOS26；自动模式共用一次采音，由中英两个SpeechTranscriber候选及VAD/模型时间轴裁决。缺置信度、接近分数或缺少一条实际完成水印时不猜测；两秒内缺证据则停止。不绕过系统并行资源限制。自动模式已接入，真实置信度可用性、质量、延迟与能耗仍未实机签收，不能据此放行正式发布。
 
 ## 本地证据
 

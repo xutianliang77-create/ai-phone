@@ -71,6 +71,50 @@ void main() {
     expect((await p.availability(config)).canStart, false);
   });
   test(
+    'automatic mode requires both locale snapshots and the exact native routing policy',
+    () async {
+      final provider = AppleSpeechAsrProvider(channel: method);
+      messenger.setMockMethodCallHandler(method, (c) async {
+        final args = Map<String, Object?>.from(c.arguments as Map);
+        if (c.method == 'start') {
+          expect(args['languagePolicyKey'], 'apple-dual-zh-en-confidence-r1');
+          return null;
+        }
+        return {
+          'canStart': true,
+          'reason': 'ready',
+          'locale': 'auto',
+          'locales': ['zh-CN', 'en-US'],
+          'automaticLanguageImplemented': true,
+          'automaticLanguageQualified': false,
+          'languagePolicy': 'apple-dual-zh-en-confidence-r1',
+          'configurationFingerprint': 'a' * 64,
+          'effectiveParameters': {
+            ...args,
+            'sampleRate': 16000,
+            'vadFrameSamples': 4096,
+          },
+        };
+      });
+      const auto = MobileAsrConfig(language: 'auto');
+      final observed = await provider.availability(auto);
+      expect(observed.canStart, true);
+      expect(observed.details['automaticLanguageQualified'], false);
+      await provider.start(auto);
+      messenger.setMockMethodCallHandler(
+        method,
+        (_) async => {
+          'canStart': true,
+          'locale': 'auto',
+          'locales': ['zh-CN'],
+          'automaticLanguageImplemented': true,
+          'languagePolicy': 'apple-dual-zh-en-confidence-r1',
+        },
+      );
+      expect((await provider.availability(auto)).canStart, false);
+    },
+  );
+  test(
     'system translation failure cannot invoke another provider; unavailable voice blocks readiness',
     () async {
       var mtCalls = 0;

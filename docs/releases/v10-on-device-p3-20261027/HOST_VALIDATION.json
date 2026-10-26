@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-27",
+  "candidateBuild": "2026102701",
+  "evidenceLevel": "SOURCE_AND_HOST",
+  "controlRegression": { "passed": 32, "failed": 0 },
+  "automaticLanguagePolicySynthetic": { "passed": 22, "failed": 0 },
+  "formalFlutterContract": { "passed": 41, "failed": 0 },
+  "relatedAsrFlutter": { "passed": 21, "failed": 0 },
+  "overlappingMatricesAreNotSummed": true,
+  "flutterAnalysis": { "errors": 0, "warnings": 0, "existingStyleInfo": 1 },
+  "realModelCalls": 0,
+  "automaticLanguageQualityQualified": false,
+  "deviceTests": false,
+  "deployed": false,
+  "installed": false,
+  "released": false,
+  "notes": [
+    "Synthetic routing hypotheses do not establish recognition accuracy or cross-language confidence calibration.",
+    "Fixed Chinese/English remains the candidate default pending approved device acceptance.",
+    "Native SDK linking and package/signing receipts are recorded separately after the source commit."
+  ]
+}

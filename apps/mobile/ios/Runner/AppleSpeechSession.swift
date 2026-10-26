@@ -29,6 +29,10 @@ final class AppleSpeechSession {
   private var fedSamples = 0
   private var language = ""
   private var resolvedLocale = ""
+  private var automaticRouter = AppleSpeechLanguageRouter()
+  private var lanes = [AppleSpeechRecognitionLane]()
+  private var automaticStart: Int?
+  private var routingDeadline: Task<Void,Never>?
   private var captureId = ""
   private var languagePolicyKey = ""
   private var resultRevision = 0
@@ -52,6 +56,7 @@ final class AppleSpeechSession {
 
   private func requireStarting() throws {
     try authorizationCheck?()
+    if let failed {throw failed}
     guard open, !stopping, !Task.isCancelled else { throw AppleSpeechFailure.cancelled }
   }
 
@@ -68,19 +73,19 @@ final class AppleSpeechSession {
     speechActivity = AppleSpeechActivityGate(preRollSamples: configuration.preRollSamples,
       evidenceWaitSamples: configuration.preRollSamples + configuration.minSpeechSamples + 4096)
     #if canImport(FluidAudio)
-    let locale = try await AppleSpeechResources.locale(language)
-    resolvedLocale = locale.identifier
-    try requireStarting()
-    let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
-    let resources = await AppleSpeechResources.snapshot(language: language,
-      locale: locale, transcriber: transcriber, stage: "start")
-    // Resource preparation is explicit; capture must never initiate a download.
-    try resources.requireReady()
+    let languages=language=="auto" ? AppleSpeechLanguageRouter.languages:[language]
+    for value in languages {
+      let locale=try await AppleSpeechResources.locale(value)
+      let lane=AppleSpeechRecognitionLane(language:value,locale:locale,automatic:language=="auto")
+      let resources=await AppleSpeechResources.snapshot(language:value,locale:locale,transcriber:lane.transcriber,stage:"start")
+      try resources.requireReady();lanes.append(lane)
+    }
+    resolvedLocale=lanes.map{$0.language}.joined(separator:",")
     try requireStarting()
     let modelConfiguration = MLModelConfiguration(); modelConfiguration.computeUnits = .cpuAndNeuralEngine
     let model = try MLModel(contentsOf: AppleSpeechResources.sileroURL(), configuration: modelConfiguration)
     vad = VadManager(config: VadConfig(defaultThreshold: Float(configuration.threshold), computeUnits: .cpuAndNeuralEngine), vadModel: model)
-    let analyzer = SpeechAnalyzer(modules: [transcriber], options: .init(priority: .userInitiated, modelRetention: .whileInUse))
+    let analyzer = SpeechAnalyzer(modules: lanes.map{$0.transcriber}, options: .init(priority: .userInitiated, modelRetention: .whileInUse))
     self.analyzer = analyzer
     let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
     try await analyzer.prepareToAnalyze(in: format)
@@ -89,23 +94,11 @@ final class AppleSpeechSession {
     feed = pair.continuation
     reader = Task { [self] in
       do {
-        for try await result in transcriber.results {
-          guard open else { break }
-          rawResultCount += 1
-          try authorizationCheck?()
-          let start = CMTimeGetSeconds(result.range.start)
-          let end = CMTimeGetSeconds(result.range.end)
-          guard start.isFinite, end.isFinite, start >= 0, end >= start,
-                end <= Double(fedSamples) / 16000 + 0.1 else { rejectedRangeCount += 1; continue }
-          let text = String(result.text.characters)
-          let startSample = Int((start * 16000).rounded()), endSample = Int((end * 16000).rounded())
-          let watermark = CMTimeGetSeconds(result.resultsFinalizationTime)
-          let updates = try hypotheses.accept(text: text, start: startSample, end: endSample,
-            final: result.isFinal, finalizedThrough: watermark.isFinite && watermark >= 0
-              ? min(fedSamples, Int((watermark * 16000).rounded())) : 0)
-          try enqueueSpeechResults(updates)
+        try await withThrowingTaskGroup(of:Void.self) { group in
+          for lane in lanes {group.addTask {try await self.read(lane)}}
+          try await group.waitForAll()
         }
-      } catch { fail(error); throw error }
+      } catch {fail(error);throw error}
     }
     analysis = Task { [self] in
       do { try await analyzer.start(inputSequence: pair.stream) }
@@ -182,6 +175,17 @@ final class AppleSpeechSession {
       : boundary.shouldFinalize ? (false, max(0, offset + valid - boundary.trailingSilenceSamples)) : nil
     speechActivity.advance(through: offset + valid, speechEvent: speechEvent)
     flushTranscriptsWithSpeechEvidence()
+    if language=="auto" {
+      if let event=speechEvent,event.start {automaticStart=max(automaticRouter.completedThrough,event.sample)}
+      let end=speechEvent?.start==false ? speechEvent!.sample:offset+valid
+      if let start=automaticStart,end>start,speechEvent?.start==false {
+        try automaticRouter.endTurn(start:start,end:end,now:V10DeviceLicenseGuard.continuousSeconds())
+        automaticStart=nil
+        armAutomaticDeadline()
+        if !stopping,let analyzer {try await appleSpeechWithDeadline {try await analyzer.finalize(through:CMTime(value:Int64(end),timescale:16000))}}
+        try drainAutomatic()
+      }
+    }
     if let event = speechEvent {
       let end = event.sample
       emit(["type": "vad.boundary", "sessionId": id,
@@ -190,13 +194,52 @@ final class AppleSpeechSession {
             "preRollSamples": configuration.preRollSamples,
             "configurationFingerprint": configuration.fingerprint])
       // Keep PCM continuous; finalized text remains the sole downstream commit.
-      if !event.start, !stopping, let analyzer {
+      if language != "auto", !event.start, !stopping, let analyzer {
         try await appleSpeechWithDeadline {
           try await analyzer.finalize(through: CMTime(value: Int64(end), timescale: 16000))
         }
       }
     }
     #endif
+  }
+
+  private func read(_ lane:AppleSpeechRecognitionLane) async throws {
+    for try await result in lane.transcriber.results {
+      guard open else{break};try authorizationCheck?();rawResultCount+=1
+      if language=="auto" {
+        let (updates,through)=try lane.accept(result,fedSamples:fedSamples)
+        try automaticRouter.observeFinalization(language:lane.language,through:through)
+        for c in updates {try automaticRouter.accept(c,finalizedThrough:through)}
+        try drainAutomatic()
+      } else {
+        let start=CMTimeGetSeconds(result.range.start),end=CMTimeGetSeconds(result.range.end)
+        guard start.isFinite,end.isFinite,start>=0,end>=start,end<=Double(fedSamples)/16000+0.1 else {rejectedRangeCount+=1;continue}
+        let watermark=CMTimeGetSeconds(result.resultsFinalizationTime)
+        let updates=try hypotheses.accept(text:String(result.text.characters),start:Int((start*16000).rounded()),end:Int((end*16000).rounded()),final:result.isFinal,
+          finalizedThrough:watermark.isFinite && watermark>=0 ? min(fedSamples,Int((watermark*16000).rounded())):0)
+        try enqueueSpeechResults(updates)
+      }
+    }
+  }
+  private func drainAutomatic(now:Double=V10DeviceLicenseGuard.continuousSeconds()) throws {
+    try authorizationCheck?()
+    for d in try automaticRouter.drain(now:now) {
+      guard let selected=d.language,let text=d.text else {throw NSError(domain:d.reason,code:1)}
+      resultRevision+=1
+      var p=AppleSpeechHypothesis(key:d.turn,start:d.start,end:d.end,text:text,final:true)
+        .payload(sessionId:id,captureId:captureId,policy:languagePolicyKey,language:selected,revision:resultRevision)
+      p["languageEvidence"]=AppleSpeechLanguageRouter.version;p["confidence"]=d.confidence
+      emittedSegmentCount+=1;emit(p)
+    }
+    for lane in lanes {lane.discard(through:automaticRouter.completedThrough)}
+    if automaticRouter.pendingTurnCount==0 {routingDeadline?.cancel();routingDeadline=nil}
+  }
+  private func armAutomaticDeadline() {
+    guard routingDeadline==nil else{return}
+    routingDeadline=Task { @MainActor [weak self] in
+      do{try await Task.sleep(nanoseconds:2_050_000_000);guard let self,self.open else{return};self.routingDeadline=nil;try self.drainAutomatic();if self.automaticRouter.pendingTurnCount>0{self.armAutomaticDeadline()}}
+      catch is CancellationError {} catch {self?.fail(error)}
+    }
   }
 
   func diagnostics() -> [String: Any] {
@@ -213,6 +256,8 @@ final class AppleSpeechSession {
     result["rejectedRangeCount"] = rejectedRangeCount
     result["emittedSegmentCount"] = emittedSegmentCount
     result["pendingTranscriptCount"] = pendingTranscripts.count
+    result["recognitionModuleCount"]=lanes.count
+    if language=="auto" {result["automaticRouting"]=automaticRouter.diagnostics}
     if let failed {
       let failure = failed as NSError
       result["lastFailureDomain"] = failure.domain.range(of:"^[A-Za-z0-9._-]{1,120}$",options:.regularExpression) != nil
@@ -238,7 +283,10 @@ final class AppleSpeechSession {
         if let failed { throw failed }
         let counts = queue.snapshot()
         guard !counts.overflow, counts.accepted == fedSamples else { throw AppleSpeechFailure.queueOverflow }
-        try enqueueSpeechResults(hypotheses.finalize(through: fedSamples))
+        if language=="auto" {
+          if let start=automaticStart,fedSamples>start {try automaticRouter.endTurn(start:start,end:fedSamples,now:V10DeviceLicenseGuard.continuousSeconds());automaticStart=nil}
+          try drainAutomatic(now:V10DeviceLicenseGuard.continuousSeconds()+2)
+        } else {try enqueueSpeechResults(hypotheses.finalize(through:fedSamples))}
         open = false
       } catch { invalidate(); throw error }
     }
@@ -247,7 +295,7 @@ final class AppleSpeechSession {
   }
 
   func invalidate() {
-    open = false; stopping = true
+    open = false; stopping = true; routingDeadline?.cancel()
     _ = source?.stop(); queue.finish(); feed?.finish()
     consumer?.cancel(); analysis?.cancel(); reader?.cancel()
     pendingTranscripts.removeAll()

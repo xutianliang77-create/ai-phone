@@ -36,7 +36,7 @@ class _OnDeviceResourcesPageState extends State<OnDeviceResourcesPage> {
           ),
         if (busy) TextButton(onPressed: _cancel, child: const Text('取消准备')),
         if (_message != null) Text(_message!),
-        const Text('自动语种切换尚未通过验证；同传请明确选择中文或英文。声音缺失时请在 iOS 设置中安装对应的系统声音后重新检查。'),
+        const Text('自动模式使用中英两个本机识别候选，当前仍待实机验收。不确定时会停止而不输出猜测译文，可手动选择中文或英文继续。声音缺失时请在 iOS 设置中安装对应声音。'),
       ],
     ),
   );

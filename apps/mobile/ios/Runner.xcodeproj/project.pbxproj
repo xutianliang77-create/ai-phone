@@ -51,6 +51,8 @@
 		3CE8F4C32043E0DC2BE84D41 /* V10DeviceLicenseBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6152DE6BACA66751D53CD52 /* V10DeviceLicenseBridge.swift */; };
 		C3A7A11B999BE9821F08F04B /* V10DeviceLicenseGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAFBF31F312D7968C66E3BB4 /* V10DeviceLicenseGuard.swift */; };
 		6086B7F5DDD3A12C7A8BACAC /* V10SubscriptionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC61EB6E2243920A11A1A30F /* V10SubscriptionBridge.swift */; };
+		E2273FC4383885496BD76006 /* AppleSpeechLanguageRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D113365F0E20A04B0B14A01 /* AppleSpeechLanguageRouter.swift */; };
+		D52113F1E8CB542CCF1338D8 /* AppleSpeechRecognitionLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5D9FCBE8814262E76EEEC7 /* AppleSpeechRecognitionLane.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +137,8 @@
 		C6152DE6BACA66751D53CD52 /* V10DeviceLicenseBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V10DeviceLicenseBridge.swift; sourceTree = "<group>"; };
 		AAFBF31F312D7968C66E3BB4 /* V10DeviceLicenseGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V10DeviceLicenseGuard.swift; sourceTree = "<group>"; };
 		BC61EB6E2243920A11A1A30F /* V10SubscriptionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V10SubscriptionBridge.swift; sourceTree = "<group>"; };
+		2D113365F0E20A04B0B14A01 /* AppleSpeechLanguageRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechLanguageRouter.swift; sourceTree = "<group>"; };
+		7A5D9FCBE8814262E76EEEC7 /* AppleSpeechRecognitionLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechRecognitionLane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -250,6 +254,8 @@
 				A10000060000000000000006 /* CoreMlNemotronModelStore.swift */,
 				A1000011000000000000011 /* CoreMlNemotronRuntimeOptions.swift */,
 				A1000013000000000000013 /* OnDeviceTranslationBridge.swift */,
+				7A5D9FCBE8814262E76EEEC7 /* AppleSpeechRecognitionLane.swift */,
+				2D113365F0E20A04B0B14A01 /* AppleSpeechLanguageRouter.swift */,
 				BC61EB6E2243920A11A1A30F /* V10SubscriptionBridge.swift */,
 				AAFBF31F312D7968C66E3BB4 /* V10DeviceLicenseGuard.swift */,
 				C6152DE6BACA66751D53CD52 /* V10DeviceLicenseBridge.swift */,
@@ -509,6 +515,8 @@
 				A10000030000000000000003 /* CoreMlNemotronModelStore.swift in Sources */,
 				A100000F00000000000000F /* CoreMlNemotronRuntimeOptions.swift in Sources */,
 				A1000012000000000000012 /* OnDeviceTranslationBridge.swift in Sources */,
+				D52113F1E8CB542CCF1338D8 /* AppleSpeechRecognitionLane.swift in Sources */,
+				E2273FC4383885496BD76006 /* AppleSpeechLanguageRouter.swift in Sources */,
 				6086B7F5DDD3A12C7A8BACAC /* V10SubscriptionBridge.swift in Sources */,
 				C3A7A11B999BE9821F08F04B /* V10DeviceLicenseGuard.swift in Sources */,
 				3CE8F4C32043E0DC2BE84D41 /* V10DeviceLicenseBridge.swift in Sources */,
