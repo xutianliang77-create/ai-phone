@@ -8,10 +8,11 @@ void main() {
       String url = 'https://api.publisher.cn',
       String profile = 'core_translation',
       bool mock = false,
-      bool deviceAsr = false,
-      bool local = false,
-      bool onDeviceTranslation = false}) {
+      bool deviceAsr = true,
+      bool local = true,
+      bool onDeviceTranslation = true}) {
     validateAppReleaseEnvironment(
+        executionMode: 'on_device', deviceAsrProvider: 'apple_speech_transcriber', translationRequired: true,
         channel: channel,
         apiBaseUrl: Uri.parse(url),
         productProfile: profile,
@@ -30,7 +31,7 @@ void main() {
             profile: 'full'),
         returnsNormally);
   });
-  test('formal 1.0 accepts the selected online core configuration', () {
+  test('formal 1.0 accepts the confirmed on-device core configuration', () {
     expect(() => validate(), returnsNormally);
   });
   for (final url in [
@@ -53,26 +54,27 @@ void main() {
     expect(() => validate(profile: 'full'), throwsStateError);
   });
   test(
-      'the formal configuration cannot silently select mock or local inference',
+      'the formal configuration requires all local components and cannot silently select mock or server inference',
       () {
     expect(() => validate(mock: true), throwsStateError);
-    expect(() => validate(deviceAsr: true), throwsStateError);
-    expect(() => validate(local: true), throwsStateError);
-    expect(() => validate(onDeviceTranslation: true), throwsStateError);
+    expect(() => validate(deviceAsr: false), throwsStateError);
+    expect(() => validate(local: false), throwsStateError);
+    expect(() => validate(onDeviceTranslation: false), throwsStateError);
   });
   test('saved settings and copyWith cannot bypass the formal route scope', () {
     final config = AppConfig(
+        executionMode: 'on_device', useLocalSessions: true, useOnDeviceTranslation: true, onDeviceTranslationRequired: true,
         apiBaseUrl: Uri.parse('https://api.publisher.cn'),
         distributionChannel: 'app_store',
         productProfile: 'core_translation',
         useMockAudio: false,
-        useDeviceAsr: false,
-        deviceAsrProvider: 'coreml_nemotron',
+        useDeviceAsr: true,
+        deviceAsrProvider: 'apple_speech_transcriber',
         deviceAsrLanguage: 'auto',
         deviceAsrAutoDownloadModel: false,
         deviceAsrModelChunkMs: 2240,
-        serverOwnedHistory: true);
-    expect(() => config.copyWith(useDeviceAsr: true), throwsStateError);
+        serverOwnedHistory: false);
+    expect(() => config.copyWith(useDeviceAsr: false), throwsStateError);
     expect(() => config.copyWith(targetLanguage: 'fr'), throwsStateError);
     expect(() => config.copyWith(realtimeVoiceOutputMode: 'my_voice'),
         throwsStateError);

@@ -1,3 +1,4 @@
+import '../../../account/data/account_session_store.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
@@ -55,6 +56,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
               ),
               ButtonSegment<RealtimeProcessingMode>(
                 value: RealtimeProcessingMode.online,
+                enabled: !onDeviceExecution,
                 icon: const Icon(Icons.cloud_outlined),
                 label: Text(l10n.onlineModeLabel),
               ),
@@ -106,7 +108,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
           const SizedBox(height: 6),
           _VoiceOutputSelector(
             settings: settings,
-            allowMyVoice: !onlineCoreOnly,
+            allowMyVoice: !onlineCoreOnly && !onDeviceExecution,
             enabled: enabled && autoSpeakSupported,
             onChanged: onChanged,
             voicePresets: voicePresets,

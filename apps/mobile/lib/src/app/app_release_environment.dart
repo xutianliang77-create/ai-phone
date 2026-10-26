@@ -1,4 +1,9 @@
 void validateAppReleaseEnvironment({
+  String executionMode = 'server',
+  bool serverOwnedHistory = false,
+  String deviceAsrProvider = 'coreml_nemotron',
+  String translationProvider = 'ios_system',
+  bool translationRequired = false,
   required String channel,
   required Uri apiBaseUrl,
   required String productProfile,
@@ -22,11 +27,11 @@ void validateAppReleaseEnvironment({
     throw StateError(
         'Formal 1.0 requires a public HTTPS API without credentials');
   }
-  if (useMockAudio ||
-      useDeviceAsr ||
-      useLocalSessions ||
-      useOnDeviceTranslation) {
-    throw StateError('Formal 1.0 must use the existing online inference chain');
+  if (executionMode != 'on_device' || useMockAudio || !useDeviceAsr ||
+      !useLocalSessions || !useOnDeviceTranslation || serverOwnedHistory ||
+      deviceAsrProvider != 'apple_speech_transcriber' ||
+      translationProvider != 'ios_system' || !translationRequired) {
+    throw StateError('Formal 1.0 requires the complete on-device execution contract');
   }
   if (!const {'auto', 'zh', 'en'}.contains(sourceLanguage) ||
       !const {'zh', 'en'}.contains(targetLanguage) ||

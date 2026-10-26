@@ -52,7 +52,8 @@ class IosSystemTranslationProvider
       );
     } on MissingPluginException {
       return _fallback?.translate(text, config);
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      if (const ['expired','authorization_required','device_component_scope','device_account_required'].contains(error.code)) rethrow;
       return _fallback?.translate(text, config);
     }
   }

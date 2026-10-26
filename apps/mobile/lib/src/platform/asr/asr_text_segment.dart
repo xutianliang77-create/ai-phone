@@ -5,6 +5,7 @@ class AsrTextSegment {
     required this.language,
     this.isFinal = true,
     this.confidence,
+    this.isRetraction = false,
   });
 
   final String id;
@@ -12,6 +13,7 @@ class AsrTextSegment {
   final String language;
   final bool isFinal;
   final double? confidence;
+  final bool isRetraction;
 
   factory AsrTextSegment.fromJson(Map<String, Object?> json) {
     final segment = AsrTextSegment.tryFromJson(json);
@@ -23,7 +25,7 @@ class AsrTextSegment {
 
   static AsrTextSegment? tryFromJson(Map<String, Object?> json) {
     final text = json['text'];
-    if (text is! String || text.trim().isEmpty) return null;
+    if (text is! String || (text.trim().isEmpty && json['isRetraction'] != true)) return null;
     final id = json['id'];
     final language = json['language'];
     return AsrTextSegment(
@@ -36,6 +38,7 @@ class AsrTextSegment {
           : 'auto',
       isFinal: _boolValue(json['isFinal']) ?? true,
       confidence: (json['confidence'] as num?)?.toDouble(),
+      isRetraction: json['isRetraction'] == true,
     );
   }
 }

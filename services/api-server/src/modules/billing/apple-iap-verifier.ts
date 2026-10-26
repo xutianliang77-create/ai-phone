@@ -132,7 +132,9 @@ function verifyJwsSignature(signingInput: string, signature: Buffer, leaf: X509C
   return verifySignature(
     "sha256",
     Buffer.from(signingInput),
-    { key: leaf.publicKey, dsaEncoding: "ieee-p1363" },
+    // PEM also works in workerd, whose nested options.key adapter does not
+    // accept Node's PublicKeyObject. Preserve explicit P1363 signature format.
+    { key: leaf.publicKey.export({ type: "spki", format: "pem" }), dsaEncoding: "ieee-p1363" },
     signature,
   );
 }

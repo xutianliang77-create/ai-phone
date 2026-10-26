@@ -1,3 +1,11 @@
+# Selected 1.0 on-device resources
+
+The on-device 1.0 route bundles only the pinned Silero VAD files under `vad/` (MIT; see `vad/LICENSE-SILERO.txt` and `vad/NOTICE-SILERO.json`). Apple speech/translation and system voices are OS-managed resources and must pass installed-state checks. No Nemotron/Hy/Whisper runtime or automatic model download is selected for this route.
+
+The native resource loader verifies all five VAD SHA-256 hashes before use. They are explicitly tracked; other large model folders remain ignored.
+
+## Legacy model staging reference (not the selected on-device route)
+
 # iOS Core ML Nemotron ASR Model
 
 Place one compiled Core ML model bundle here only for local device builds.

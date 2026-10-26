@@ -62,7 +62,7 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
                 children: <Widget>[
                   RealtimeSettingsPanel(
                     settings: _settings!,
-                    onlineCoreOnly: _config.isFormalRelease,
+                    onlineCoreOnly: _config.isFormalRelease && !_config.onDeviceOnly,
                     enabled: true,
                     onChanged: _save,
                     voicePresets: _presets,
@@ -93,7 +93,7 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
       _settings = unsupported
           ? RealtimeRuntimeSettings.fromConfig(config)
           : saved ?? RealtimeRuntimeSettings.fromConfig(config);
-      if (unsupported) _scopeMessage = '此版本支持中英在线翻译。原设置已保留，请选择支持的模式和语言。';
+      if (unsupported) _scopeMessage = '原设置已保留，请选择此版本支持的中英模式和系统声音。';
     });
     try {
       final catalog = await _voiceClient.load();
@@ -113,7 +113,7 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
 
   Future<void> _save(RealtimeRuntimeSettings settings) async {
     if (!settings.isSupportedIn(_config)) {
-      setState(() => _scopeMessage = '此版本支持中英在线翻译，原设置未修改。');
+      setState(() => _scopeMessage = '此模式暂不受支持，原设置未修改。');
       return;
     }
     setState(() {

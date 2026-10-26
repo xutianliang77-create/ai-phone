@@ -4,6 +4,7 @@ import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/text_language_detector.dart';
+import '../../../../platform/license/license_failure_text.dart';
 import '../../domain/scan_translation_entity_protector.dart';
 
 enum ScanImageSource { camera, gallery }
@@ -158,9 +159,10 @@ class ScanTranslationController extends ChangeNotifier {
       recognizedBlocks = (result?.blocks ?? const <MobileOcrBlock>[])
           .map(_normalizeOcrBlock)
           .toList(growable: false);
-    } on Object {
+    } on Object catch (error) {
       status = ScanTranslationStatus.failed;
       message = 'scan_ocr_failed';
+      message = deviceLicenseFailureText(error) ?? message;
       notifyListeners();
       return;
     }
@@ -220,9 +222,10 @@ class ScanTranslationController extends ChangeNotifier {
         translatedBlocks = List<ScanTranslatedBlock>.unmodifiable(blocks);
         translatedText = blocks.map((block) => block.translation).join('\n');
       }
-    } on Object {
+    } on Object catch (error) {
       status = ScanTranslationStatus.recognized;
       message = 'scan_translation_unavailable';
+      message = deviceLicenseFailureText(error) ?? message;
       notifyListeners();
       return;
     }

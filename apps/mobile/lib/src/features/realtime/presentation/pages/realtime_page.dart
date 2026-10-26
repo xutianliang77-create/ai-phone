@@ -24,6 +24,8 @@ import '../widgets/realtime_online_recovery_actions.dart';
 import '../widgets/realtime_settings_sheet_launcher.dart';
 import '../widgets/realtime_status_bar.dart';
 import '../widgets/subtitle_timeline.dart';
+import 'on_device_resources_page.dart';
+import '../../../../platform/license/on_device_license.dart';
 
 part 'realtime_page_online_helpers.dart';
 part 'realtime_page_settings_helpers.dart';
@@ -109,6 +111,7 @@ class _RealtimePageState extends State<RealtimePage>
   Future<void> _handleLifecycleState(AppLifecycleState state) async {
     final current = controller;
     if (state == AppLifecycleState.resumed) {
+      if (_config.onDeviceOnly) unawaited(OnDeviceLicenseClient.shared.reconcileOnline());
       await current.recoverPendingFinalizations();
     }
     await current.handleLifecycleState(state);
@@ -140,6 +143,9 @@ class _RealtimePageState extends State<RealtimePage>
           ),
         ),
         actions: <Widget>[
+          if (_config.onDeviceOnly) IconButton(tooltip: '离线语言资源',
+            onPressed: _canChangeSettings ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => OnDeviceResourcesPage(config: _config))) : null,
+            icon: const Icon(Icons.download_for_offline_outlined)),
           RealtimeLanguageMenu(
             locale: languageScope.locale,
             onLocaleChanged: languageScope.onChanged,

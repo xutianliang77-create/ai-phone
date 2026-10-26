@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../../platform/license/license_failure_text.dart';
 
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
@@ -21,9 +22,9 @@ class TypeToSpeakController extends ChangeNotifier {
     required MobileTranslationProvider translationProvider,
     required SpeechOutputProvider speechOutputProvider,
     required SessionHistoryRepository historyRepository,
-  })  : _translationProvider = translationProvider,
-        _speechOutputProvider = speechOutputProvider,
-        _historyRepository = historyRepository;
+  }) : _translationProvider = translationProvider,
+       _speechOutputProvider = speechOutputProvider,
+       _historyRepository = historyRepository;
 
   final MobileTranslationProvider _translationProvider;
   final SpeechOutputProvider _speechOutputProvider;
@@ -56,13 +57,23 @@ class TypeToSpeakController extends ChangeNotifier {
     status = TypeToSpeakStatus.translating;
     notifyListeners();
 
-    final result = await _translationProvider.translate(
-      trimmed,
-      MobileTranslationConfig(
-        sourceLanguage: sourceLanguage,
-        targetLanguage: targetLanguage,
-      ),
-    );
+    MobileTranslationResult? result;
+    try {
+      result = await _translationProvider.translate(
+        trimmed,
+        MobileTranslationConfig(
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
+        ),
+      );
+    } catch (error) {
+      status = TypeToSpeakStatus.failed;
+      message =
+          deviceLicenseFailureText(error) ??
+          'type_to_speak_translation_unavailable';
+      notifyListeners();
+      return;
+    }
     if (result == null || result.text.trim().isEmpty) {
       status = TypeToSpeakStatus.failed;
       message = 'type_to_speak_translation_unavailable';

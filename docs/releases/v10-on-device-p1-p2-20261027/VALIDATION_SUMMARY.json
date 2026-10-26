@@ -1,0 +1,50 @@
+{
+  "status": "P1_P2_LOCAL_MAINLINE_VERIFIED_WITH_DECLARED_GAPS",
+  "scope": "SOURCE/HOST only; no formal release acceptance",
+  "sourceClosureSha256": "743d8ff532e5e618b182aff541906147237f18aa45ce2dbad60a0d6d38526f2f",
+  "nodePassed": 32,
+  "swiftGuardPassed": 28,
+  "nativeSwiftFilesTypechecked": 32,
+  "nativeWarnings": 34,
+  "workerProductionEntryRequests": 24,
+  "analysis": {
+    "errors": 0,
+    "warnings": 0,
+    "existingInfos": 1,
+    "log": "flutter-analyze-final.log",
+    "mode": "--no-fatal-infos; not a zero-info claim"
+  },
+  "lineAndDiffChecks": "PASS",
+  "protectedSourceFiles": 10110,
+  "protectedSealedArtifacts": 3,
+  "openImplementationGap": "Automatic ASR language routing not implemented/qualified; fixed zh/en only",
+  "externalQualificationPending": true,
+  "actions": {
+    "modelCalls": 0,
+    "realAppleCalls": 0,
+    "phoneOperations": 0,
+    "deployments": 0,
+    "remoteMigrations": 0,
+    "realPurchasesOrTrials": 0,
+    "recharges": 0,
+    "grants": 0,
+    "freeQuotaQueries": 0,
+    "serviceWindows": 0,
+    "installs": 0,
+    "releases": 0
+  },
+  "flutter": {
+    "formalOnDevice": {
+      "counts": {
+        "success": 40
+      },
+      "complete": true
+    },
+    "relatedRegression": {
+      "counts": {
+        "success": 97
+      },
+      "complete": true
+    }
+  }
+}

@@ -14,15 +14,16 @@ void main() {
       (tester) async {
     final config = AppConfig(
         apiBaseUrl: Uri.parse('https://api.publisher.cn'),
+        executionMode: 'on_device', useLocalSessions: true, useOnDeviceTranslation: true, onDeviceTranslationRequired: true,
         distributionChannel: 'app_store',
         productProfile: 'core_translation',
         useMockAudio: false,
-        useDeviceAsr: false,
-        deviceAsrProvider: 'coreml_nemotron',
+        useDeviceAsr: true,
+        deviceAsrProvider: 'apple_speech_transcriber',
         deviceAsrLanguage: 'auto',
         deviceAsrAutoDownloadModel: false,
         deviceAsrModelChunkMs: 2240,
-        serverOwnedHistory: true);
+        serverOwnedHistory: false);
     await tester.pumpWidget(_app(CallHomePage(config: config)));
     await tester.pumpAndSettle();
     expect(

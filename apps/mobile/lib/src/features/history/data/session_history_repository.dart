@@ -5,6 +5,7 @@ import '../../../platform/sharing/file_share_service.dart';
 import '../../../platform/sharing/local_file_share_service.dart';
 import '../../realtime/domain/entities/subtitle_segment.dart';
 import 'local_session_store.dart';
+import 'owned_local_session_store.dart';
 import 'session_history_api_client.dart';
 import 'session_history_models.dart';
 
@@ -22,7 +23,7 @@ class SessionHistoryRepository {
   factory SessionHistoryRepository.fromConfig(AppConfig config) {
     if (config.useLocalSessions) {
       return SessionHistoryRepository(
-        localStore: LocalSessionStore(),
+        localStore: config.onDeviceOnly ? OwnedLocalSessionStore() : LocalSessionStore(),
         shareService: LocalFileShareService(),
       );
     }
@@ -96,6 +97,7 @@ class SessionHistoryRepository {
           sourceLanguage: sourceLanguage,
           targetLanguage: targetLanguage,
           stage: 'translation',
+          provider: sourceKind,
         ),
       ],
     );

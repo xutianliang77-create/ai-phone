@@ -9,7 +9,7 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     enabled: () => state._canChangeSettings,
     modeEnabled: () => state._canChangeMode,
     autoSpeakSupported: () => state._realtimeAutoSpeakSupported,
-    onlineCoreOnly: state._config.isFormalRelease,
+    onlineCoreOnly: state._config.isFormalRelease && !state._config.onDeviceOnly,
     onRealtimeModeChanged: state._changeRealtimeMode,
     onSettingsChanged: state._changeSettings,
     onEndRequested: () {
@@ -100,7 +100,7 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
     final supported = settings.isSupportedIn(_config);
     if (!supported) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('此版本支持中英在线翻译。原设置已保留，请选择支持的模式和语言。')));
+          const SnackBar(content: Text('请选择此版本支持的中英模式。原设置已保留。')));
     }
     return !supported;
   }

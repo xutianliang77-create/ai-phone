@@ -67,6 +67,7 @@ class RealtimeApiClient {
   void setVoiceOutputMode(String mode) => _voiceOutputMode = mode;
 
   Future<RealtimeSession> createSession() async {
+    if(onDeviceExecution)throw StateError('Server realtime creation is forbidden in on-device execution');
     if (selfHostedAccountEnabled) {
       if (_creating != null) return _creating!;
       final running = _createBoundSession();
@@ -94,8 +95,9 @@ class RealtimeApiClient {
         )
         .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (!selfHostedAccountEnabled)
+      if (!selfHostedAccountEnabled) {
         throw RealtimeApiException('Create session failed: ${response.body}');
+      }
       Object? value;
       try {
         value = jsonDecode(response.body);

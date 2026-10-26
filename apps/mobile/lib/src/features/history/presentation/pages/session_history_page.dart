@@ -8,6 +8,7 @@ import '../../data/session_history_models.dart';
 import '../../data/session_history_repository.dart';
 import '../widgets/session_history_sections.dart';
 import 'session_detail_page.dart';
+import 'legacy_local_history_page.dart';
 
 class SessionHistoryPage extends StatefulWidget {
   const SessionHistoryPage({this.repository, super.key});
@@ -45,6 +46,8 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
       appBar: AppBar(
         title: Text(context.l10n.history),
         actions: <Widget>[
+          if (AppConfig.fromEnvironment().onDeviceOnly) IconButton(tooltip: '本机旧记录', icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LegacyLocalHistoryPage()))),
           IconButton(
             onPressed: _toggleSearch,
             icon: Icon(_showSearch ? Icons.close : Icons.search),

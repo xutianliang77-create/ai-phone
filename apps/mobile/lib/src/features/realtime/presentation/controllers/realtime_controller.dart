@@ -1,8 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
-
 import '../../../../app/app_config.dart';
 import '../../../../platform/audio/audio_capture.dart';
 import '../../../../platform/audio/audio_frame.dart';
@@ -31,7 +29,7 @@ import 'realtime_session_state.dart';
 import 'segment_draft.dart';
 import 'speech_capture_gate.dart';
 import 'translation_text_protection.dart';
-
+import 'speech_backlog_policy.dart';
 export 'realtime_session_state.dart';
 
 part 'realtime_controller_gateway_events.dart';
@@ -107,7 +105,7 @@ class RealtimeController extends ChangeNotifier {
   StreamSubscription<AsrTextSegment>? _asrSubscription;
   StreamSubscription<AudioSessionEvent>? _audioSessionSubscription;
   RealtimeSession? _session;
-  Timer? _sessionTimeoutTimer;
+  Timer? _sessionTimeoutTimer, _speechBacklogTimer;
   String? _message;
   int? _remainingSeconds;
   bool _lowBalance = false;
@@ -119,6 +117,7 @@ class RealtimeController extends ChangeNotifier {
   bool _captureInvalidated = false;
   int _startGeneration = 0;
   Future<void>? _failureCleanup;
+  final _speechBacklog = SpeechBacklogPolicy();
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
   final _activeTimeClock = RealtimeActiveTimeClock();
@@ -333,6 +332,7 @@ class RealtimeController extends ChangeNotifier {
 
   void _startSessionTimeout(RealtimeSession session) {
     _sessionTimeoutTimer?.cancel();
+    if (_config.onDeviceOnly) return; // Native monotonic license owns cutoff.
     _sessionTimeoutTimer = Timer(
       Duration(seconds: session.maxDurationSeconds),
       () async {

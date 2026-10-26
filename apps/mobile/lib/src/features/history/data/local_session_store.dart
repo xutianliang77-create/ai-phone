@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -48,6 +49,7 @@ class LocalSessionStore {
     required DateTime createdAt,
     required List<SubtitleSegment> segments,
   }) async {
+    return _writeSerial(() async {
     final file = await _storageFile();
     final sessions = await _loadSessions();
     final endedAt = _now();
@@ -90,9 +92,10 @@ class LocalSessionStore {
       ...sessions.where((session) => session.sessionId != sessionId),
     ];
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode({
+    await _persist(file, {
       'sessions': next.map(_detailToJson).toList(),
-    }));
+    });
+    });
   }
 
   Future<SessionExport> exportSession(
@@ -108,14 +111,16 @@ class LocalSessionStore {
   }
 
   Future<void> deleteSession(String sessionId) async {
+    return _writeSerial(() async {
     final file = await _storageFile();
     final sessions = await _loadSessions();
-    await file.writeAsString(jsonEncode({
+    await _persist(file, {
       'sessions': sessions
           .where((session) => session.sessionId != sessionId)
           .map(_detailToJson)
           .toList(),
-    }));
+    });
+    });
   }
 
   Future<SessionDetail> renameSpeaker(
@@ -123,6 +128,7 @@ class LocalSessionStore {
     String speakerId,
     String displayName,
   ) async {
+    return _writeSerial(() async {
     final file = await _storageFile();
     final sessions = await _loadSessions();
     final index = sessions.indexWhere((item) => item.sessionId == sessionId);
@@ -140,10 +146,11 @@ class LocalSessionStore {
       ));
     }).toList());
     sessions[index] = updated;
-    await file.writeAsString(jsonEncode({
+    await _persist(file, {
       'sessions': sessions.map(_detailToJson).toList(),
-    }));
+    });
     return updated;
+    });
   }
 
   Future<SessionDetail> updateActionItem(
@@ -151,6 +158,7 @@ class LocalSessionStore {
     int actionIndex,
     bool completed,
   ) async {
+    return _writeSerial(() async {
     final file = await _storageFile();
     final sessions = await _loadSessions();
     final index = sessions.indexWhere((item) => item.sessionId == sessionId);
@@ -169,10 +177,27 @@ class LocalSessionStore {
       'actionItems': actionItems,
     });
     sessions[index] = updated;
-    await file.writeAsString(jsonEncode({
+    await _persist(file, {
       'sessions': sessions.map(_detailToJson).toList(),
-    }));
+    });
     return updated;
+    });
+  }
+
+  static final _writeQueues = <String, Future<void>>{};
+  Future<T> _writeSerial<T>(Future<T> Function() action) async {
+    final file = await _storageFile();
+    final previous = _writeQueues[file.path] ?? Future<void>.value();
+    final done = Completer<void>(); _writeQueues[file.path] = done.future;
+    await previous.catchError((Object _) {});
+    try { return await action(); }
+    finally { done.complete(); if (identical(_writeQueues[file.path], done.future)) _writeQueues.remove(file.path); }
+  }
+  Future<void> _persist(File file, Map<String, Object?> value) async {
+    await file.parent.create(recursive: true);
+    final temporary = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    try { await temporary.writeAsString(jsonEncode(value), flush: true); await temporary.rename(file.path); }
+    finally { if (await temporary.exists()) await temporary.delete(); }
   }
 
   Future<File> _storageFile() async {

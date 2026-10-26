@@ -9,8 +9,7 @@ import 'device_control_http_client.dart';
 
 http.Client createDevicePermitHttpClient(Uri baseUrl) {
   if (Platform.isIOS &&
-      const String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') ==
-          'self_hosted' &&
+      const {'self_hosted', 'cloudflare'}.contains(configuredAccountBackend) &&
       (baseUrl.origin == Uri.parse(configuredAccountApiBaseUrl).origin ||
           baseUrl.origin == Uri.parse(configuredProcessingApiBaseUrl).origin)) {
     return attachPublicDeploymentIdentity(
@@ -34,8 +33,7 @@ FoundationHttpClient _nativePublicClient() {
 /// their origin, identity, redirect, account-generation and deadline checks.
 http.Client createPublicHttpClient(Uri baseUrl) {
   if (Platform.isIOS &&
-      const String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') ==
-          'self_hosted' &&
+      const {'self_hosted', 'cloudflare'}.contains(configuredAccountBackend) &&
       (baseUrl.origin == Uri.parse(configuredAccountApiBaseUrl).origin ||
           baseUrl.origin == Uri.parse(configuredProcessingApiBaseUrl).origin)) {
     return attachPublicDeploymentIdentity(

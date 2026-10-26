@@ -36,6 +36,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       _config = _config.copyWith(realtimeVoiceOutputMode: mode);
       _repository.configureVoiceOutput(mode);
       _autoSpeakTranslation = enabled;
+      if (enabled) _speechBacklog.resume();
       _message = null;
       return true;
     } catch (error) {
@@ -78,10 +79,35 @@ extension RealtimeControllerSpeech on RealtimeController {
     final normalizedText =
         normalizeSpeechOutputText(speechText, targetLanguage);
     final generation = _speechGeneration;
+    final backlogId = _config.onDeviceOnly ? _speechBacklog.enqueue(normalizedText, targetLanguage) : null;
+    _armSpeechBacklog();
+    if (_config.onDeviceOnly && backlogId == null) {
+      _message = '朗读等待超过8秒，已暂停自动朗读，字幕已保留。关闭后重新开启朗读可从当前继续。'; _notify(); return;
+    }
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
-      if (generation != _speechGeneration) return null;
-      return _speakWithTimeout(speaker, normalizedText, targetLanguage);
+      if (generation != _speechGeneration) { if (backlogId != null) _speechBacklog.discard(backlogId); return null; }
+      if (backlogId != null && !_speechBacklog.begin(backlogId)) {
+        _message = '朗读等待超过8秒，已暂停自动朗读，字幕已保留。'; _notify(); return null;
+      }
+      _armSpeechBacklog();
+      final elapsed = Stopwatch()..start();
+      return _speakWithTimeout(speaker, normalizedText, targetLanguage).whenComplete(() {
+        if (backlogId != null) _speechBacklog.finish(backlogId, speakingMs: elapsed.elapsedMilliseconds.toDouble());
+        _armSpeechBacklog();
+      });
     }).then<void>((_) {});
+  }
+
+  void _armSpeechBacklog() {
+    _speechBacklogTimer?.cancel();
+    if (!_config.onDeviceOnly) return;
+    final delay = _speechBacklog.nextExpiryMs;
+    if (delay == null) return;
+    _speechBacklogTimer = Timer(Duration(milliseconds: delay), () {
+      if (_speechBacklog.pauseExpired()) {
+        _message = '朗读等待超过8秒，已暂停自动朗读，字幕已保留。'; _notify();
+      } else { _armSpeechBacklog(); }
+    });
   }
 
   Future<void> _speakWithTimeout(
@@ -141,7 +167,9 @@ extension RealtimeControllerSpeech on RealtimeController {
   }
 
   Future<void> _stopSpeaking() async {
+    _speechBacklogTimer?.cancel();
     _speechGeneration += 1;
+    _speechBacklog.clear(); _speechChain = Future<void>.value();
     await _recordDeviceAsrDiagnosticEvent(
       'tts.stop_requested',
       payload: <String, Object?>{

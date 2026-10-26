@@ -172,7 +172,7 @@ class _AccountPageState extends State<AccountPage> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('确认注销账号'),
-            content: const Text('注销会影响余额、历史记录、术语库和 AI Agent 任务归属。'),
+            content: const Text(onDeviceExecution ? '注销后此账号不能继续领取授权，请先导出所需记录。注销不会取消 Apple 自动续期订阅，请在 Apple 订阅管理中另行取消。本机记录会保留，不会自动归属其他账号。' : '注销会影响余额、历史记录、术语库和 AI Agent 任务归属。'),
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),

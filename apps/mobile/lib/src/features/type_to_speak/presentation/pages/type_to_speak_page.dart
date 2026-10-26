@@ -4,6 +4,7 @@ import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
+import '../../../../platform/license/licensed_local_providers.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
@@ -33,7 +34,7 @@ class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
   late final TypeToSpeakController _controller = TypeToSpeakController(
     translationProvider: widget.translationProvider ?? _defaultTranslator(),
     speechOutputProvider:
-        widget.speechOutputProvider ?? SystemSpeechOutputProvider(),
+        widget.speechOutputProvider ?? (AppConfig.fromEnvironment().onDeviceOnly ? LicensedLocalSpeech(SystemSpeechOutputProvider()) : SystemSpeechOutputProvider()),
     historyRepository: _historyRepository,
   );
 
@@ -155,6 +156,7 @@ class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
   }
 
   MobileTranslationProvider _defaultTranslator() {
+    if (AppConfig.fromEnvironment().onDeviceOnly) return LicensedLocalTranslation(IosSystemTranslationProvider());
     return IosSystemTranslationProvider(
       fallback: PhrasebookTranslationProvider(),
     );

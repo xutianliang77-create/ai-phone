@@ -3,6 +3,11 @@ import Flutter
 import Foundation
 
 final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
+    var authorizationCheck: ((String) throws -> Void)?
+    func stopForLicense(){
+      finishPendingSpeech(error:speechError("speech_cancelled","授权已停止"))
+      synthesizer.stopSpeaking(at:.immediate)
+    }
     private let audioSessionCoordinator: AudioSessionCoordinator
     private let audioSessionOwner = "system_tts"
     private let methodChannelName = "translation_mobile/speech_output"
@@ -32,6 +37,9 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
 
     private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "availability", "prepare":
+            let a=call.arguments as? [String:Any] ?? [:],language=a["language"] as? String ?? ""
+            result(SystemSpeechVoiceCatalog.payload(language:language,voice:SystemSpeechVoiceCatalog.resolve(language:language)))
         case "speak":
             speak(call: call, result: result)
         case "stop":
@@ -59,7 +67,8 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         let language = (stringArgument("language", from: call) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "_", with: "-")
-        guard !language.isEmpty, let voice = AVSpeechSynthesisVoice(language: language) else {
+        do{try authorizationCheck?(language)}catch{result(speechError("authorization_required","请联网更新本机授权"));return}
+        guard !language.isEmpty, let voice = SystemSpeechVoiceCatalog.resolve(language: language) else {
             result(speechError("speech_language_unavailable", "No system voice is available for \(language)."))
             return
         }
@@ -97,6 +106,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         didFinish utterance: AVSpeechUtterance
     ) {
         guard pendingUtterance === utterance else { return }
+        do{try authorizationCheck?(pendingResponse?["language"] ?? "")}catch{finishPendingSpeech(error:speechError("authorization_required","本机授权已停止"));return}
         finishPendingSpeech()
     }
 
@@ -180,6 +190,9 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     }
 
     private func playPcm(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if Bundle.main.object(forInfoDictionaryKey:"WujieExecutionMode") as? String == "on_device" {
+          result(FlutterError(code:"on_device_pcm_not_supported",message:"本版仅使用本机系统朗读",details:nil));return
+        }
         guard let arguments = call.arguments as? [String: Any],
               let format = arguments["format"] as? String,
               format == "pcm16",

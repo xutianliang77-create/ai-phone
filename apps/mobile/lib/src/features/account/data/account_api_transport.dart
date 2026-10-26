@@ -1,7 +1,13 @@
 part of 'account_api_client.dart';
 
 extension _AccountApiTransport on AccountApiClient {
+  Future<ScopedAccountOperation> _currentToken(String token) async {
+    final op = await ScopedAccountOperation.capture(createSessionStore());
+    if (op.original.token != token) throw const AccountAuthRequiredException();
+    return op;
+  }
   Future<Map<String, Object?>> _get(String path, String token) async {
+    final operation = onDeviceExecution ? await _currentToken(token) : null;
     final response = await _send(path, (deadline) async {
       if (deploymentId.isNotEmpty) {
         await _verifyIdentity(path, 'GET', deadline.remaining);
@@ -17,6 +23,7 @@ extension _AccountApiTransport on AccountApiClient {
         headers: {'authorization': 'Bearer $token'},
       );
     });
+    await operation?.check();
     return _decode(response, path);
   }
 
@@ -25,6 +32,7 @@ extension _AccountApiTransport on AccountApiClient {
     Map<String, Object?> body, {
     String? token,
   }) async {
+    final operation = onDeviceExecution && token != null && path != '/auth/logout' ? await _currentToken(token) : null;
     final response = await _send(path, (deadline) async {
       if (deploymentId.isNotEmpty) {
         await _verifyIdentity(path, 'POST', deadline.remaining);
@@ -58,6 +66,7 @@ extension _AccountApiTransport on AccountApiClient {
         }),
       );
     });
+    await operation?.check();
     return _decode(response, path);
   }
 
@@ -65,6 +74,7 @@ extension _AccountApiTransport on AccountApiClient {
     String path,
     Future<http.Response> Function(_AccountRequestDeadline deadline) request,
   ) async {
+    requireOnDeviceControlRequest(baseUrl, 'GET', baseUrl.resolve(path), null);
     final deadline = _AccountRequestDeadline();
     try {
       return await request(deadline).timeout(AccountApiClient.requestTimeout);
@@ -92,6 +102,7 @@ extension _AccountApiTransport on AccountApiClient {
     String? body,
     required _AccountRequestDeadline deadline,
   }) async {
+    requireOnDeviceControlRequest(baseUrl, 'POST', baseUrl.resolve(path), jsonEncode(body));
     deadline.requireOpen();
     final request = http.AbortableRequest(
       method,

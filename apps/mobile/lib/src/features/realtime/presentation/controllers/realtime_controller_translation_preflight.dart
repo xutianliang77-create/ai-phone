@@ -22,6 +22,11 @@ extension RealtimeControllerTranslationPreflight on RealtimeController {
       }
     }
     _message = 'On-device translation ready';
+    if (_config.onDeviceOnly && _autoSpeakTranslation) {
+      final speech = _speechOutputProvider;
+      if (speech is! SpeechOutputPreparation) throw StateError('本机系统声音未就绪');
+      for (final language in const ['zh', 'en']) { await (speech as SpeechOutputPreparation).prepareVoice(language); }
+    }
     _notify();
   }
 }

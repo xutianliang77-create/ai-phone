@@ -9,6 +9,7 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/ocr/platform_ocr_provider.dart';
+import '../../../../platform/license/licensed_local_providers.dart';
 import '../../../../platform/translation/api_translation_provider.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
@@ -42,7 +43,7 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
       widget.historyRepository ??
           SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
   late final ScanTranslationController _controller = ScanTranslationController(
-    ocrProvider: widget.ocrProvider ?? PlatformOcrProvider(),
+    ocrProvider: widget.ocrProvider ?? (AppConfig.fromEnvironment().onDeviceOnly ? LicensedLocalOcr(PlatformOcrProvider()) : PlatformOcrProvider()),
     translationProvider: widget.translationProvider ?? _defaultTranslator(),
     pickImagePath: widget.pickImagePath ?? _pickImagePath,
     historyRepository: _historyRepository,
@@ -220,6 +221,7 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
 
   MobileTranslationProvider _defaultTranslator() {
     final config = AppConfig.fromEnvironment();
+    if(config.onDeviceOnly)return LicensedLocalTranslation(IosSystemTranslationProvider());
     return IosSystemTranslationProvider(
       fallback: ApiTranslationProvider(
         baseUrl: config.apiBaseUrl,

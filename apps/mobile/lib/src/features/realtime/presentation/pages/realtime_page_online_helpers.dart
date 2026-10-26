@@ -1,7 +1,7 @@
 part of 'realtime_page.dart';
 
 Future<bool> _ensureRealtimeStartAllowed(_RealtimePageState state) async {
-  if (state._settings.processingMode != RealtimeProcessingMode.online) {
+  if (!state._config.onDeviceOnly && state._settings.processingMode != RealtimeProcessingMode.online) {
     return true;
   }
   final session = await state._accountSessionStore.load();
@@ -10,6 +10,7 @@ Future<bool> _ensureRealtimeStartAllowed(_RealtimePageState state) async {
     await openAccountLoginPage(state.context);
     return false;
   }
+  if (state._config.onDeviceOnly) return true;
   return ensureVoiceProcessingConsent(
     context: state.context,
     store: state._voiceConsentStore,
@@ -18,7 +19,7 @@ Future<bool> _ensureRealtimeStartAllowed(_RealtimePageState state) async {
 }
 
 bool _shouldShowRealtimeAccountRequiredPanel(_RealtimePageState state) {
-  return state._settings.processingMode == RealtimeProcessingMode.online &&
+  return (state._config.onDeviceOnly || state._settings.processingMode == RealtimeProcessingMode.online) &&
       isAccountAuthRequiredError(state.controller.message);
 }
 

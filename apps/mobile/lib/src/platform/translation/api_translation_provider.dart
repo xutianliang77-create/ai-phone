@@ -33,6 +33,7 @@ class ApiTranslationProvider implements MobileTranslationProvider {
     String text,
     MobileTranslationConfig config,
   ) async {
+    if(onDeviceExecution)throw StateError('Server translation is forbidden in on-device execution');
     try {
       final response = await _client.post(
         _baseUrl.resolve('/translation/text'),

@@ -3,6 +3,8 @@ import '../../../../platform/audio/audio_capture.dart';
 import '../../../../platform/audio/mock_audio_capture.dart';
 import '../../../../platform/audio/record_audio_capture.dart';
 import '../../../../platform/asr/android_system_asr_provider.dart';
+import '../../../../platform/asr/apple_speech_asr_provider.dart';
+import '../../../../platform/license/on_device_license.dart';
 import '../../../../platform/asr/core_ml_nemotron_asr_provider.dart';
 import '../../../../platform/asr/mobile_asr_provider.dart';
 import '../../../../platform/asr/unavailable_system_asr_provider.dart';
@@ -12,6 +14,7 @@ import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../../../history/data/local_session_store.dart';
+import '../../../history/data/owned_local_session_store.dart';
 import '../../data/local_realtime_repository.dart';
 import '../../data/realtime_repository.dart';
 
@@ -22,13 +25,15 @@ AudioCapture createDefaultAudioCapture(AppConfig config) {
 
 RealtimeRepository createDefaultRealtimeRepository(AppConfig config) {
   if (config.useLocalSessions) {
-    return LocalRealtimeRepository(store: LocalSessionStore());
+    return LocalRealtimeRepository(store: config.onDeviceOnly ? OwnedLocalSessionStore() : LocalSessionStore(),
+      license: config.onDeviceOnly ? OnDeviceLicenseClient.shared : null);
   }
   return RealtimeRepository.fromConfig(config);
 }
 
 MobileAsrProvider? createDefaultMobileAsrProvider(AppConfig config) {
   if (!config.useDeviceAsr) return null;
+  if (config.onDeviceOnly || config.deviceAsrProvider == 'apple_speech_transcriber') return AppleSpeechAsrProvider();
   if (config.deviceAsrProvider == 'coreml_nemotron') {
     return CoreMlNemotronAsrProvider();
   }
@@ -43,6 +48,7 @@ MobileTranslationProvider? createDefaultMobileTranslationProvider(
   AppConfig config,
 ) {
   if (!config.useOnDeviceTranslation) return null;
+  if (config.onDeviceOnly) return IosSystemTranslationProvider();
   if (config.onDeviceTranslationProvider == 'phrasebook') {
     return PhrasebookTranslationProvider();
   }
@@ -91,7 +97,7 @@ MobileAsrConfig createDeviceAsrConfig(
   String? diagnosticSessionId,
 }) {
   return MobileAsrConfig(
-    language: config.deviceAsrLanguage,
+    language: config.onDeviceOnly ? config.sourceLanguage : config.deviceAsrLanguage,
     chunkDurationMs: config.deviceAsrChunkDurationMs,
     modelChunkMs: config.deviceAsrModelChunkMs,
     autoDownloadModel: config.deviceAsrAutoDownloadModel,

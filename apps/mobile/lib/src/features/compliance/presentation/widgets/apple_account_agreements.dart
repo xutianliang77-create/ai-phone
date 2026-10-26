@@ -4,8 +4,8 @@ import '../../../account/data/account_session_store.dart';
 import '../pages/compliance_document_page.dart';
 
 Future<bool> confirmAppleAgreements(BuildContext context) async {
-  if (configuredPrivacyVersion != selfHostedPrivacyVersion ||
-      configuredTermsVersion != selfHostedTermsVersion) {
+  if (configuredPrivacyVersion != (onDeviceExecution ? onDevicePrivacyVersion : selfHostedPrivacyVersion) ||
+      configuredTermsVersion != (onDeviceExecution ? onDeviceTermsVersion : selfHostedTermsVersion)) {
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(

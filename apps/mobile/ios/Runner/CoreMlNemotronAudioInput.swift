@@ -2,7 +2,7 @@ import AVFoundation
 
 final class CoreMlNemotronAudioInput {
   private let audioSessionCoordinator: AudioSessionCoordinator
-  private let audioSessionOwner = "coreml_nemotron_asr"
+  private let audioSessionOwner: String
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "translation_mobile.coreml_nemotron.audio")
   private var pendingSamples: [Float] = []
@@ -29,8 +29,9 @@ final class CoreMlNemotronAudioInput {
   private var runtimeErrorEmitted = false
   private let targetSampleRate = 16_000.0
 
-  init(audioSessionCoordinator: AudioSessionCoordinator) {
+  init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr") {
     self.audioSessionCoordinator = audioSessionCoordinator
+    self.audioSessionOwner = owner
   }
 
   func start(

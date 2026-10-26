@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../account/data/account_session_store.dart';
 
 class HelpFeedbackPage extends StatelessWidget {
   const HelpFeedbackPage({super.key});
@@ -14,12 +15,12 @@ class HelpFeedbackPage extends StatelessWidget {
             _HelpItem(
               icon: Icons.mic_none,
               title: '同传没有字幕',
-              body: '检查麦克风权限和网络状态；在线模式需保持无界 AI 服务可用。',
+              body: onDeviceExecution ? '先准备中英离线语言资源并允许麦克风和识别权限。首次授权及授权更新需要联网，识别和翻译在手机上完成。' : '检查麦克风权限和网络状态；在线模式需保持无界 AI 服务可用。',
             ),
             _HelpItem(
               icon: Icons.call_outlined,
-              title: '翻译通话没有声音',
-              body: '确认双方已进入房间，并检查静音、扬声器和蓝牙音频路由。',
+              title: onDeviceExecution ? '朗读没有声音' : '翻译通话没有声音',
+              body: onDeviceExecution ? '确认已开启朗读并准备好中英系统声音，检查手机静音、扬声器和蓝牙音频路由。' : '确认双方已进入房间，并检查静音、扬声器和蓝牙音频路由。',
             ),
             _HelpItem(
               icon: Icons.document_scanner_outlined,

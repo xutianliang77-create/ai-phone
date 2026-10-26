@@ -49,6 +49,9 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
         (_status != RealtimeStatus.active && !_stopInFlight)) {
       return;
     }
+    if (segment.isRetraction) {
+      _localPartialFlush.clearIfSameId(segment.id); _removeSegment(segment.id); return;
+    }
     final isPlaybackEcho = _speechCaptureGate.shouldDropDeviceAsr(
       text: segment.text,
       language: segment.language,

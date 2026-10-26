@@ -3,6 +3,12 @@ import UIKit
 import Vision
 
 final class OcrBridge: NSObject {
+  var authorizationCheck: ((String?) throws -> Void)?
+  var currentLicense: (() throws -> String)?
+  private let requestLock=NSLock()
+  private var activeRequests=[UUID:VNRequest]()
+  func stopForLicense(){requestLock.lock();let requests=Array(activeRequests.values);activeRequests.removeAll();requestLock.unlock();for r in requests{r.cancel()}}
+
   private static let channelName = "translation_mobile/ocr"
 
   func register(messenger: FlutterBinaryMessenger) {
@@ -20,6 +26,8 @@ final class OcrBridge: NSObject {
   }
 
   private func recognizeImage(arguments: Any?, result: @escaping FlutterResult) {
+    let boundLease:String?
+    do{boundLease=try currentLicense?();try authorizationCheck?(boundLease)}catch{result(FlutterError(code:"authorization_required",message:"请联网更新本机授权",details:nil));return}
     guard let args = arguments as? [String: Any],
           let imagePath = args["imagePath"] as? String,
           !imagePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -47,6 +55,7 @@ final class OcrBridge: NSObject {
         cgImage: cgImage,
         orientation: orientation,
         scripts: scripts,
+        boundLease: boundLease,
         result: result
       )
     }
@@ -56,12 +65,15 @@ final class OcrBridge: NSObject {
     cgImage: CGImage,
     orientation: CGImagePropertyOrientation,
     scripts: [String],
+    boundLease: String?,
     result: @escaping FlutterResult
   ) {
+    let id=UUID(),replyLock=NSLock();var replied=false
+    func finish(_ value:Any?){replyLock.lock();guard !replied else{replyLock.unlock();return};replied=true;replyLock.unlock();result(value)}
     let request = VNRecognizeTextRequest { request, error in
       if let error {
         DispatchQueue.main.async {
-          result(FlutterError(
+          finish(FlutterError(
             code: "ocr_failed",
             message: error.localizedDescription,
             details: nil
@@ -74,7 +86,8 @@ final class OcrBridge: NSObject {
         .sorted(by: self.readingOrder)
         .compactMap(self.resultBlock)
       DispatchQueue.main.async {
-        result([
+        do{try self.authorizationCheck?(boundLease)}catch{finish(FlutterError(code:"authorization_required",message:"本机授权已停止",details:nil));return}
+        finish([
           "text": blocks.compactMap { $0["text"] as? String }.joined(separator: "\n"),
           "provider": "ios_vision",
           "scripts": scripts,
@@ -85,6 +98,10 @@ final class OcrBridge: NSObject {
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = true
     request.recognitionLanguages = recognitionLanguages(for: scripts)
+    requestLock.lock();activeRequests[id]=request;requestLock.unlock()
+    defer{requestLock.lock();activeRequests.removeValue(forKey:id);requestLock.unlock()}
+    let authorized=DispatchQueue.main.sync { () -> Bool in do{try self.authorizationCheck?(boundLease);return true}catch{return false} }
+    if !authorized{DispatchQueue.main.async{finish(FlutterError(code:"authorization_required",message:"本机授权已停止",details:nil))};return}
 
     do {
       try VNImageRequestHandler(
@@ -94,7 +111,7 @@ final class OcrBridge: NSObject {
       ).perform([request])
     } catch {
       DispatchQueue.main.async {
-        result(FlutterError(
+        finish(FlutterError(
           code: "ocr_failed",
           message: error.localizedDescription,
           details: nil

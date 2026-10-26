@@ -1,3 +1,4 @@
+import 'on_device_egress.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../features/account/data/account_session_store.dart';
@@ -22,6 +23,7 @@ class AccountBoundHttpClient extends http.BaseClient {
         request.url.hasFragment) {
       throw const FormatException('account_origin_mismatch');
     }
+    requireOnDeviceControlRequest(base,request.method,request.url,null);
     final hasAuth = request.headers.containsKey('authorization');
     final op = hasAuth ? await ScopedAccountOperation.capture(store) : null;
     if (hasAuth &&

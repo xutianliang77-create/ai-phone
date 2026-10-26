@@ -8,6 +8,8 @@ import 'keychain_account_session_store.dart';
 
 part 'deployment_account_session_store.dart';
 
+const configuredExecutionMode = String.fromEnvironment('WUJIE_EXECUTION_MODE', defaultValue:'server');
+const onDeviceExecution = configuredExecutionMode=='on_device';
 const configuredAccountBackend = String.fromEnvironment(
   'ACCOUNT_CONTROL_BACKEND',
 );

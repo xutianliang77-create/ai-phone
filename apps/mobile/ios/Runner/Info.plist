@@ -97,6 +97,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>WujieExecutionMode</key>
+	<string>$(WUJIE_EXECUTION_MODE)</string>
+	<key>WujieV10LicenseKeys</key>
+	<string>$(WUJIE_V10_LICENSE_KEYS)</string>
+	<key>WujieV10SubscriptionProductId</key>
+	<string>$(WUJIE_V10_SUBSCRIPTION_PRODUCT_ID)</string>
 	<key>WujiePublicDeploymentId</key>
 	<string>$(WUJIE_CONTROL_DEPLOYMENT_ID)</string>
 	<key>WujieAppAttestEnvironment</key>

@@ -96,9 +96,9 @@ class RealtimeRuntimeSettings {
       sourceLanguage: sourceLanguage,
       targetLanguage: concreteTarget,
       autoReverseTargetLanguage: autoReverseTargetLanguage,
-      useDeviceAsr: processingMode == RealtimeProcessingMode.onDevice,
-      useLocalSessions: processingMode == RealtimeProcessingMode.onDevice,
-      useOnDeviceTranslation: processingMode == RealtimeProcessingMode.onDevice,
+      useDeviceAsr: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
+      useLocalSessions: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
+      useOnDeviceTranslation: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
       realtimeVoiceOutputMode: realtimeVoiceOutputModeToString(
         voiceOutputMode,
       ),
@@ -109,7 +109,7 @@ class RealtimeRuntimeSettings {
 
   bool isSupportedIn(AppConfig config) =>
       !config.isFormalRelease ||
-      (processingMode == RealtimeProcessingMode.online &&
+      (processingMode == (config.onDeviceOnly ? RealtimeProcessingMode.onDevice : RealtimeProcessingMode.online) &&
           const {'auto', 'zh', 'en'}.contains(sourceLanguage) &&
           const {'auto_reverse', 'zh', 'en'}.contains(targetLanguage) &&
           voiceOutputMode != RealtimeVoiceOutputMode.myVoice);

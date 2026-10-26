@@ -1,3 +1,4 @@
+import '../../../platform/http/on_device_egress.dart';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'account_api_client.dart' show AccountApiClient, verifyAccountDeployment;
@@ -49,11 +50,12 @@ Future<http.Response> scopedAccountRequest(
   ScopedAccountOperation? operation,
   Duration requestTimeout = AccountApiClient.requestTimeout,
 }) async {
+  requireOnDeviceControlRequest(baseUrl,method,uri,body);
   await operation?.check();
   final issuer = Uri.parse(configuredAccountApiBaseUrl);
   requireAccountOrigin(issuer, configuredPublicDeploymentId);
   final processing =
-      configuredAccountBackend == 'cloudflare' &&
+      configuredAccountBackend == 'cloudflare' && !onDeviceExecution &&
       baseUrl.toString().replaceFirst(RegExp(r'/+$'), '') ==
           configuredProcessingApiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
   if ((baseUrl.origin != issuer.origin && !processing) ||

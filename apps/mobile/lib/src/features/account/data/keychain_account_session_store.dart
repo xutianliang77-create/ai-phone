@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'account_session_store.dart';
+import 'account_session_events.dart';
 
 /// No implicit migration from private 1.0 or QA file credentials. One atomic
 /// Keychain item binds the selected owner and credential to deployment+origin.
@@ -61,7 +62,9 @@ class KeychainAccountSessionStore
     }
     final epoch = generation + 1;
     _epochs[_key] = epoch;
+    AccountSessionEvents.changed();
     _blocked.add(_key);
+    await _invalidateLicense();
     await _serialize(() async {
       if (epoch != generation) return;
       await _channel.invokeMethod<void>('credentialWrite', {
@@ -75,12 +78,22 @@ class KeychainAccountSessionStore
   @override
   Future<void> clear() async {
     _epochs[_key] = generation + 1;
+    AccountSessionEvents.changed();
     _blocked.add(
       _key,
     ); // Immediately invalidate outstanding authorization work.
+    await _invalidateLicense();
     await _serialize(() async {
       await _channel.invokeMethod<void>('credentialDelete', {'key': _key});
     });
+  }
+
+  Future<void> _invalidateLicense() async {
+    if (!onDeviceExecution) return;
+    // Failure remains blocked; never leave business processing authorized after
+    // the local account generation changed.
+    await const MethodChannel('translation_mobile/v10_device_license')
+        .invokeMethod<void>('invalidate', {'reason': 'account_changed'});
   }
 
   Future<void> _serialize(Future<void> Function() action) async {

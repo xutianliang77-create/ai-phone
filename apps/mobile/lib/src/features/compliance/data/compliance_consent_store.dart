@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 const complianceConsentVersion =
+    String.fromEnvironment('WUJIE_EXECUTION_MODE') == 'on_device' ? 'v10-device-initial-consent-r1' :
     (String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'self_hosted' ||
         String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'cloudflare')
     ? 'v10-selfhosted-initial-consent-r1'

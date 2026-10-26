@@ -5,6 +5,8 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../../platform/billing/purchase_service.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../data/billing_api_client.dart';
+import '../../../account/data/account_session_store.dart';
+import 'subscription_page.dart';
 class WalletPage extends StatefulWidget {
   const WalletPage({
     this.client,
@@ -45,6 +47,7 @@ class _WalletPageState extends State<WalletPage> {
   }
   @override
   Widget build(BuildContext context) {
+    if (onDeviceExecution) return const SubscriptionPage();
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.walletTitle)),
@@ -137,7 +140,6 @@ class _WalletPageState extends State<WalletPage> {
       ledger: results[2] as List<BillingLedgerEntry>,
     );
   }
-
   Future<void> _refresh() async {
     setState(() {
       _future = _load();

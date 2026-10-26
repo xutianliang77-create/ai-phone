@@ -5,6 +5,9 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     String sessionId,
     AsrTextSegment segment,
   ) async {
+    if (segment.isRetraction) {
+      _localPartialFlush.clearIfSameId(segment.id); _removeSegment(segment.id); return;
+    }
     final cleanText = _cleanRealtimeText(segment.text);
     if (cleanText == null) return;
     final cleanSegment = cleanText == segment.text

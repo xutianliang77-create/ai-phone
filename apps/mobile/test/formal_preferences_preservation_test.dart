@@ -23,15 +23,16 @@ void main() {
     final store = MemoryRealtimeSettingsStore(saved);
     final config = AppConfig(
         apiBaseUrl: Uri.parse('https://api.publisher.cn'),
+        executionMode: 'on_device', useLocalSessions: true, useOnDeviceTranslation: true, onDeviceTranslationRequired: true,
         distributionChannel: 'app_store',
         productProfile: 'core_translation',
         useMockAudio: false,
-        useDeviceAsr: false,
-        deviceAsrProvider: 'coreml_nemotron',
+        useDeviceAsr: true,
+        deviceAsrProvider: 'apple_speech_transcriber',
         deviceAsrLanguage: 'auto',
         deviceAsrAutoDownloadModel: false,
         deviceAsrModelChunkMs: 2240,
-        serverOwnedHistory: true);
+        serverOwnedHistory: false);
     final catalog = VoicePresetClient(
         baseUrl: config.apiBaseUrl,
         client: MockClient((_) async => http.Response('{"presets":[]}', 200)));
@@ -52,8 +53,8 @@ void main() {
     expect((await store.load())?.toJson(), saved.toJson());
     final panel = tester
         .widget<RealtimeSettingsPanel>(find.byType(RealtimeSettingsPanel));
-    expect(panel.onlineCoreOnly, isTrue);
-    expect(panel.settings.processingMode, RealtimeProcessingMode.online);
+    expect(panel.onlineCoreOnly, isFalse);
+    expect(panel.settings.processingMode, RealtimeProcessingMode.onDevice);
     panel.onChanged(saved);
     await tester.pumpAndSettle();
     expect((await store.load())?.toJson(), saved.toJson());

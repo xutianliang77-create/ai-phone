@@ -1,0 +1,11 @@
+import {generateKeyPairSync} from 'node:crypto';
+import {writeFileSync} from 'node:fs';
+import {signLicense} from '../src/license-signing.mjs';
+import {PROFILE,MAX_LEASE_MS} from '../src/common.mjs';
+import {IMPLEMENTATION_HASH} from '../src/component-profile.mjs';
+const pair=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),key=pair.privateKey.export({type:'pkcs8',format:'pem'}).toString(),jwk=pair.publicKey.export({format:'jwk'});
+const publicKey=Buffer.concat([Buffer.from([4]),Buffer.from(jwk.x,'base64url'),Buffer.from(jwk.y,'base64url')]).toString('base64');
+const now=1800000000000,claims={version:1,purpose:'wujie-v10-device-license',execution:'on_device',leaseId:'lease-fixture',ownerId:'alice',deploymentId:'wujie-v10-device-fixture',bundleId:'cn.qkxy.wujieai.public',deviceKeyHash:'a'.repeat(64),launchNonce:'launch-fixture',requestNonce:'1'.repeat(64),sequence:1,issuedAtMs:now,notBeforeMs:now,expiresAtMs:now+MAX_LEASE_MS,entitlementKey:'fixture-tx',entitlementRevision:'b'.repeat(64),componentProfile:PROFILE,implementationHash:IMPLEMENTATION_HASH,allowedLanguages:['zh','en']};
+const token=(patch={})=>signLicense({...claims,...patch},'fixture',key);
+const rejects=[['owner',{ownerId:'bob'}],['deployment',{deploymentId:'other'}],['bundle',{bundleId:'other'}],['device',{deviceKeyHash:'b'.repeat(64)}],['launch',{launchNonce:'other'}],['request',{requestNonce:'2'.repeat(64)}],['profile',{componentProfile:'hy-legacy'}],['implementation',{implementationHash:'0'.repeat(64)}],['purpose',{purpose:'model-gateway'}],['execution',{execution:'server'}],['languages',{allowedLanguages:['zh','fr']}],['ttl',{expiresAtMs:now+MAX_LEASE_MS+1}],['sequence',{sequence:2}]].map(([name,patch])=>({name,token:token(patch)}));
+writeFileSync(process.argv[2],JSON.stringify({publicKey,valid:token(),rejects,renewal:token({sequence:2,requestNonce:'2'.repeat(64),issuedAtMs:now+1740000,notBeforeMs:now+1740000,expiresAtMs:now+3540000})},null,2));

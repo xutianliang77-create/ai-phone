@@ -1,6 +1,8 @@
 import 'dart:async';
+import '../../../../platform/license/license_failure_text.dart';
 
 String displayRealtimeErrorMessage(Object error) {
+  final license = deviceLicenseFailureText(error); if (license != null) return license;
   if (error is TimeoutException) return 'Realtime request timed out';
   final message = error.toString();
   if (message.contains('TimeoutException') ||

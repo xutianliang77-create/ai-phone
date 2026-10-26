@@ -8,8 +8,13 @@ import '../../../platform/diagnostics/apple_login_failure.dart';
 import '../../../platform/http/deployment_identity_cache.dart';
 import '../../../platform/diagnostics/public_control_request_trace.dart';
 import 'account_session_store.dart';
+import 'account_scoped_http.dart';
+import 'account_auth_headers.dart';
 import 'apple_identity_client.dart';
 import '../../../platform/http/account_bound_http_client.dart';
+import '../../../platform/http/on_device_egress.dart';
+import '../../history/data/owned_local_session_store.dart';
+import '../../../platform/sharing/local_file_share_service.dart';
 
 part 'account_api_transport.dart';
 part 'account_api_models.dart';
@@ -195,9 +200,25 @@ class AccountApiClient {
   }
 
   Future<AccountExportData> exportData(String token) async {
+    final operation = onDeviceExecution ? await _currentToken(token) : null;
     final control = await _get('/account/export', token);
-    if (configuredAccountBackend != 'cloudflare')
+    if (onDeviceExecution) {
+      final store = OwnedLocalSessionStore(account: createSessionStore());
+      final sessions = await store.listSessions(), details = <Object?>[];
+      for (final s in sessions) {
+        details.add(jsonDecode((await store.exportSession(s.sessionId, format: 'json')).content));
+      }
+      final payload = {...control, 'sessions': details, 'contentLocation': 'device'};
+      await operation?.check();
+      final sharing = LocalFileShareService();
+      final file = await sharing.saveExportFile(utf8.encode(jsonEncode(payload)), 'wujie-account-export.json');
+      await operation?.check();
+      await sharing.shareFile(file, mimeType: 'application/json');
+      return AccountExportData.fromJson(payload);
+    }
+    if (configuredAccountBackend != 'cloudflare') {
       return AccountExportData.fromJson(control);
+    }
     final processing = Uri.parse(configuredProcessingApiBaseUrl),
         store = createSessionStore();
     final transport = AccountBoundHttpClient(processing, store);
@@ -206,8 +227,9 @@ class AccountApiClient {
         processing.resolve('/account/export'),
         headers: {'authorization': 'Bearer $token'},
       );
-      if (result.statusCode != 200)
+      if (result.statusCode != 200) {
         throw const FormatException('private_data_export_unconfirmed');
+      }
       return AccountExportData.fromJson({
         ...control,
         ...(jsonDecode(result.body) as Map<String, Object?>),

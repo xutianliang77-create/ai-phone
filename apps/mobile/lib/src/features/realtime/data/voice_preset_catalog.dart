@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import '../../account/data/account_session_store.dart';
 
 const defaultRealtimeVoicePresetId = 'zh_female_natural';
 
@@ -91,6 +92,10 @@ class VoicePresetClient {
   final http.Client _client;
 
   Future<VoicePresetCatalog> load() async {
+    if (onDeviceExecution) { return const VoicePresetCatalog(version: 'system-voice-v1',
+      defaultPresetId: defaultRealtimeVoicePresetId, presets: [VoicePreset(
+        id: defaultRealtimeVoicePresetId, zhLabel: '系统声音', enLabel: 'System voice',
+        gender: 'neutral', tone: 'natural', scenario: 'conversation', accent: 'system', languages: ['zh', 'en'])]); }
     final response = await _client
         .get(_baseUrl.resolve('/voice-presets'))
         .timeout(const Duration(seconds: 8));

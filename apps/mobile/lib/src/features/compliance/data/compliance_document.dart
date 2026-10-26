@@ -1,5 +1,6 @@
 part 'self_hosted_compliance_documents.dart';
 part 'legacy_compliance_documents.dart';
+part 'on_device_compliance_documents.dart';
 
 enum ComplianceDocumentKind { privacy, terms, account, providers, permissions }
 
@@ -46,6 +47,7 @@ class ComplianceSection {
 }
 
 const complianceDocuments =
+    String.fromEnvironment('WUJIE_EXECUTION_MODE') == 'on_device' ? onDeviceComplianceDocuments :
     (String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'self_hosted' ||
         String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'cloudflare')
     ? selfHostedComplianceDocuments

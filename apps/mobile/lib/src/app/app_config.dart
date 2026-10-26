@@ -5,9 +5,12 @@ import '../platform/translation/supported_translation_language.dart'
     show autoReverseTargetLanguageCode;
 import '../features/realtime/data/voice_preset_catalog.dart';
 import '../features/realtime/data/domain_lexicon_pack.dart';
+part 'app_config_environment.dart';
+
 class AppConfig {
   AppConfig({
     required this.apiBaseUrl,
+    this.executionMode = 'server',
     required this.useMockAudio,
     required this.useDeviceAsr,
     required this.deviceAsrProvider,
@@ -23,9 +26,9 @@ class AppConfig {
     this.voiceAgentDeliveryCoordinatorEnabled = false,
     this.appVersion = '0.1.0',
     this.buildNumber = '1',
-    this.deviceAsrChunkDurationMs = 320,
-    this.deviceAsrEndpointMinSpeechMs = 600,
-    this.deviceAsrEndpointSilenceMs = 900,
+    int? deviceAsrChunkDurationMs,
+    int? deviceAsrEndpointMinSpeechMs,
+    int? deviceAsrEndpointSilenceMs,
     this.deviceAsrEndpointSpeechThresholdRms = 0.006,
     this.deviceAsrVadProvider = 'fluidaudio_silero',
     this.deviceAsrVadThreshold = 0.6,
@@ -44,7 +47,16 @@ class AppConfig {
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
-  }) : realtimeVoiceOutputMode = normalizeConfigRealtimeVoiceOutputMode(
+  }) : deviceAsrChunkDurationMs =
+           deviceAsrChunkDurationMs ??
+           (deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320),
+       deviceAsrEndpointMinSpeechMs =
+           deviceAsrEndpointMinSpeechMs ??
+           (deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600),
+       deviceAsrEndpointSilenceMs =
+           deviceAsrEndpointSilenceMs ??
+           (deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900),
+       realtimeVoiceOutputMode = normalizeConfigRealtimeVoiceOutputMode(
          realtimeVoiceOutputMode,
        ),
        sourceLanguage = normalizeConfigSourceLanguage(sourceLanguage),
@@ -56,6 +68,7 @@ class AppConfig {
        realtimeMode = normalizeConfigRealtimeMode(realtimeMode),
        region = region ?? const RegionEditionConfig.domestic() {
     validateAppReleaseEnvironment(
+      executionMode: executionMode,
       channel: distributionChannel,
       apiBaseUrl: apiBaseUrl,
       productProfile: productProfile,
@@ -63,16 +76,23 @@ class AppConfig {
       useDeviceAsr: useDeviceAsr,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: useOnDeviceTranslation,
+      serverOwnedHistory: serverOwnedHistory,
+      deviceAsrProvider: deviceAsrProvider,
+      translationProvider: onDeviceTranslationProvider,
+      translationRequired: onDeviceTranslationRequired,
       sourceLanguage: this.sourceLanguage,
       targetLanguage: this.targetLanguage,
       voiceOutputMode: this.realtimeVoiceOutputMode,
     );
   }
   final Uri apiBaseUrl;
+  final String executionMode;
+  bool get onDeviceOnly => executionMode == 'on_device';
   Uri get accountApiBaseUrl {
     const control = String.fromEnvironment('CONTROL_API_BASE_URL');
     return control.isEmpty ? apiBaseUrl : Uri.parse(control);
   }
+
   final String distributionChannel;
   final String productProfile;
   bool get isFormalRelease => distributionChannel == 'app_store';
@@ -110,182 +130,7 @@ class AppConfig {
   final String appVersion;
   final String buildNumber;
   final RegionEditionConfig region;
-  static AppConfig fromEnvironment() {
-    const distributionChannel = String.fromEnvironment(
-      'WUJIE_DISTRIBUTION_CHANNEL',
-      defaultValue: 'restricted_instance',
-    );
-    const productProfile = String.fromEnvironment(
-      'WUJIE_PRODUCT_PROFILE',
-      defaultValue: 'full',
-    );
-    final region = RegionEditionConfig.fromEnvironment();
-    const apiBaseUrl = String.fromEnvironment(
-      'API_BASE_URL',
-      defaultValue: 'http://127.0.0.1:3100',
-    );
-    const useMockAudio = bool.fromEnvironment('USE_MOCK_AUDIO');
-    const useDeviceAsr = bool.fromEnvironment('USE_DEVICE_ASR');
-    const sourceLanguage = String.fromEnvironment(
-      'SOURCE_LANGUAGE',
-      defaultValue: 'auto',
-    );
-    const realtimeMode = String.fromEnvironment(
-      'REALTIME_MODE',
-      defaultValue: 'conversation',
-    );
-    const targetLanguage = String.fromEnvironment(
-      'TARGET_LANGUAGE',
-      defaultValue: 'zh',
-    );
-    const autoReverseTargetLanguage = bool.fromEnvironment(
-      'AUTO_REVERSE_TARGET_LANGUAGE',
-      defaultValue: true,
-    );
-    const deviceAsrProvider = String.fromEnvironment(
-      'DEVICE_ASR_PROVIDER',
-      defaultValue: 'coreml_nemotron',
-    );
-    const deviceAsrLanguage = String.fromEnvironment(
-      'DEVICE_ASR_LANGUAGE',
-      defaultValue: 'auto',
-    );
-    const deviceAsrAutoDownloadModel = bool.fromEnvironment(
-      'DEVICE_ASR_AUTO_DOWNLOAD_MODEL',
-    );
-    const deviceAsrModelChunkMs = int.fromEnvironment(
-      'DEVICE_ASR_MODEL_CHUNK_MS',
-      defaultValue: 2240,
-    );
-    const deviceAsrChunkDurationMs = int.fromEnvironment(
-      'DEVICE_ASR_CHUNK_DURATION_MS',
-      defaultValue: 320,
-    );
-    const deviceAsrEndpointMinSpeechMs = int.fromEnvironment(
-      'DEVICE_ASR_ENDPOINT_MIN_SPEECH_MS',
-      defaultValue: 600,
-    );
-    const deviceAsrEndpointSilenceMs = int.fromEnvironment(
-      'DEVICE_ASR_ENDPOINT_SILENCE_MS',
-      defaultValue: 900,
-    );
-    const deviceAsrEndpointSpeechThresholdRmsRaw = String.fromEnvironment(
-      'DEVICE_ASR_ENDPOINT_SPEECH_THRESHOLD_RMS',
-      defaultValue: '0.006',
-    );
-    final deviceAsrEndpointSpeechThresholdRms =
-        double.tryParse(deviceAsrEndpointSpeechThresholdRmsRaw) ?? 0.006;
-    const deviceAsrVadProvider = String.fromEnvironment(
-      'DEVICE_ASR_VAD_PROVIDER',
-      defaultValue: 'fluidaudio_silero',
-    );
-    const deviceAsrVadThresholdRaw = String.fromEnvironment(
-      'DEVICE_ASR_VAD_THRESHOLD',
-      defaultValue: '0.6',
-    );
-    final deviceAsrVadThreshold =
-        double.tryParse(deviceAsrVadThresholdRaw) ?? 0.6;
-    const deviceAsrVadNegativeThresholdRaw = String.fromEnvironment(
-      'DEVICE_ASR_VAD_NEGATIVE_THRESHOLD',
-      defaultValue: '0.35',
-    );
-    final deviceAsrVadNegativeThreshold =
-        double.tryParse(deviceAsrVadNegativeThresholdRaw) ?? 0.35;
-    const deviceAsrVadPreRollMs = int.fromEnvironment(
-      'DEVICE_ASR_VAD_PRE_ROLL_MS',
-      defaultValue: 800,
-    );
-    const deviceAsrDiagnosticCaptureEnabled = bool.fromEnvironment(
-      'DEVICE_ASR_DIAGNOSTIC_CAPTURE',
-    );
-    const useOnDeviceTranslation = bool.fromEnvironment(
-      'USE_ON_DEVICE_TRANSLATION',
-    );
-    const useLocalSessions = bool.fromEnvironment('USE_LOCAL_SESSIONS');
-    const onDeviceTranslationProvider = String.fromEnvironment(
-      'ON_DEVICE_TRANSLATION_PROVIDER',
-      defaultValue: 'ios_system',
-    );
-    const onDeviceTranslationRequired = bool.fromEnvironment(
-      'ON_DEVICE_TRANSLATION_REQUIRED',
-    );
-    const serverOwnedHistory = bool.fromEnvironment('SERVER_OWNED_HISTORY');
-    const appErrorReportingEnabled = bool.fromEnvironment(
-      'APP_ERROR_REPORTING_ENABLED',
-      defaultValue: true,
-    );
-    const voiceAgentBackgroundWorkEnabled = bool.fromEnvironment(
-      'VOICE_AGENT_BACKGROUND_WORK_ENABLED',
-    );
-    const voiceAgentOwnershipEnabled = bool.fromEnvironment(
-      'VOICE_AGENT_OWNERSHIP_ENABLED',
-    );
-    const voiceAgentDeliveryCoordinatorEnabled = bool.fromEnvironment(
-      'VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED',
-    );
-    const realtimeVoiceOutputMode = String.fromEnvironment(
-      'REALTIME_VOICE_OUTPUT_MODE',
-      defaultValue: 'off',
-    );
-    const realtimeVoicePresetId = String.fromEnvironment(
-      'REALTIME_VOICE_PRESET_ID',
-      defaultValue: defaultRealtimeVoicePresetId,
-    );
-    const domainLexiconPack = String.fromEnvironment(
-      'DOMAIN_LEXICON_PACK',
-      defaultValue: defaultDomainLexiconPack,
-    );
-    const appVersion = String.fromEnvironment(
-      'APP_VERSION',
-      defaultValue: '0.1.0',
-    );
-    const buildNumber = String.fromEnvironment(
-      'BUILD_NUMBER',
-      defaultValue: '1',
-    );
-    return AppConfig(
-      distributionChannel: distributionChannel,
-      productProfile: productProfile,
-      apiBaseUrl: Uri.parse(apiBaseUrl),
-      useMockAudio: useMockAudio,
-      useDeviceAsr: useDeviceAsr,
-      realtimeMode: realtimeMode,
-      sourceLanguage: sourceLanguage,
-      targetLanguage: targetLanguage,
-      deviceAsrProvider: deviceAsrProvider,
-      deviceAsrLanguage: deviceAsrLanguage,
-      deviceAsrAutoDownloadModel: deviceAsrAutoDownloadModel,
-      deviceAsrModelChunkMs: deviceAsrModelChunkMs,
-      deviceAsrChunkDurationMs: deviceAsrChunkDurationMs,
-      deviceAsrEndpointMinSpeechMs: deviceAsrEndpointMinSpeechMs,
-      deviceAsrEndpointSilenceMs: deviceAsrEndpointSilenceMs,
-      deviceAsrEndpointSpeechThresholdRms: deviceAsrEndpointSpeechThresholdRms,
-      deviceAsrVadProvider: deviceAsrVadProvider,
-      deviceAsrVadThreshold: deviceAsrVadThreshold,
-      deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
-      deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
-      deviceAsrDiagnosticCaptureEnabled: deviceAsrDiagnosticCaptureEnabled,
-      useLocalSessions: useLocalSessions,
-      useOnDeviceTranslation: useOnDeviceTranslation,
-      onDeviceTranslationProvider: onDeviceTranslationProvider,
-      onDeviceTranslationRequired: onDeviceTranslationRequired,
-      autoReverseTargetLanguage:
-          autoReverseTargetLanguage ||
-          targetLanguage == autoReverseTargetLanguageCode,
-      realtimeVoiceOutputMode: realtimeVoiceOutputMode,
-      realtimeVoicePresetId: realtimeVoicePresetId,
-      domainLexiconPack: domainLexiconPack,
-      serverOwnedHistory: serverOwnedHistory,
-      appErrorReportingEnabled: appErrorReportingEnabled,
-      voiceAgentBackgroundWorkEnabled: voiceAgentBackgroundWorkEnabled,
-      voiceAgentOwnershipEnabled: voiceAgentOwnershipEnabled,
-      voiceAgentDeliveryCoordinatorEnabled:
-          voiceAgentDeliveryCoordinatorEnabled,
-      appVersion: appVersion,
-      buildNumber: buildNumber,
-      region: region,
-    );
-  }
+  static AppConfig fromEnvironment() => _readAppConfigEnvironment();
   AppConfig copyWith({
     String? realtimeMode,
     String? sourceLanguage,
@@ -299,6 +144,7 @@ class AppConfig {
     String? domainLexiconPack,
   }) {
     return AppConfig(
+      executionMode: executionMode,
       distributionChannel: distributionChannel,
       productProfile: productProfile,
       apiBaseUrl: apiBaseUrl,

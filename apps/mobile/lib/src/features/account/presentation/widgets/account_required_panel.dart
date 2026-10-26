@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/account_auth_headers.dart';
+import '../../data/account_session_store.dart';
 import '../pages/account_page.dart';
 
 bool isAccountAuthRequiredError(Object? error) {
@@ -50,13 +51,13 @@ class AccountRequiredPanel extends StatelessWidget {
                 Icon(Icons.account_circle_outlined, color: colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '登录后使用在线服务',
+                  onDeviceExecution ? '登录并核对订阅' : '登录后使用在线服务',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(message ?? '在线同传、通话链接、钱包和 AI 代打电话需要先登录账号。'),
+            Text(message ?? (onDeviceExecution ? '登录用于订阅与本机授权，业务内容保存在手机。' : '在线同传、通话链接、钱包和 AI 代打电话需要先登录账号。')),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: () => openAccountLoginPage(

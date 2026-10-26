@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../../account/data/account_session_events.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
@@ -19,6 +21,17 @@ class _MainShellPageState extends State<MainShellPage> {
   late final AppConfig _config = AppConfig.fromEnvironment();
   int _selectedIndex = 0;
   final Set<int> _builtTabs = <int>{0};
+  StreamSubscription<void>? _accountChanges;
+  int _accountRevision = 0;
+  @override
+  void initState() {
+    super.initState();
+    if (_config.onDeviceOnly) { _accountChanges = AccountSessionEvents.changes.listen((_) {
+      if (mounted) setState(() { _accountRevision++; _builtTabs..clear()..add(_selectedIndex); });
+    }); }
+  }
+  @override
+  void dispose() { _accountChanges?.cancel(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -64,13 +77,14 @@ class _MainShellPageState extends State<MainShellPage> {
 
   Widget _buildTab(int index) {
     if (!_builtTabs.contains(index)) return const SizedBox.shrink();
-    return switch (index) {
+    final page = switch (index) {
       0 => const RealtimePage(),
       1 => const CallHomePage(),
       2 => const ScanTranslationPage(),
       3 => const SessionHistoryPage(),
       _ => SettingsHomePage(config: _config),
     };
+    return KeyedSubtree(key: ValueKey('$index-$_accountRevision'), child: page);
   }
 
   void _selectTab(int index) {

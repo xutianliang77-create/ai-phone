@@ -37,6 +37,14 @@ final class SharedControlIdentity {
     }
   }
   func sign(_ data: Data) throws -> String { try signingKey.signature(for: data).rawRepresentation.base64EncodedString() }
+  func deviceLicenseOutbox() throws -> [[String:Any]] {
+    guard let d=try Self.read(service:service,key:"v10-license-close-outbox") else{return []}
+    guard let rows=try JSONSerialization.jsonObject(with:d) as? [[String:Any]],rows.count<=256 else{throw SharedControlFailure("device_receipt_store_invalid")};return rows
+  }
+  func saveDeviceLicenseOutbox(_ rows:[[String:Any]]) throws {
+    guard rows.count<=256 else{throw SharedControlFailure("device_receipt_store_full")}
+    try Self.write(service:service,key:"v10-license-close-outbox",data:try JSONSerialization.data(withJSONObject:rows,options:[.sortedKeys]))
+  }
   func attest(_ data: Data, registered: Bool, expectedKeyId: String?) async throws -> [String: Any] {
     var keyId: String
     if registered, let expectedKeyId, Data(base64Encoded:expectedKeyId)?.count == 32 {

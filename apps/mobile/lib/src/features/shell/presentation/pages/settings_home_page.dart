@@ -95,10 +95,10 @@ class SettingsHomePage extends StatelessWidget {
               title: '隐私与安全',
               onTap: () => _open(context, const ComplianceCenterPage()),
             ),
-            if (profile.showBilling)
+            if (profile.showBilling || config.onDeviceOnly)
               _SettingsAction(
                 icon: Icons.account_balance_wallet_outlined,
-                title: '订阅与用量',
+                title: config.onDeviceOnly ? '订阅与试用' : '订阅与用量',
                 onTap: () => _open(context, const WalletPage()),
               ),
             _SettingsAction(
@@ -206,7 +206,7 @@ class _AccountHeaderState extends State<_AccountHeader> {
             signedIn ? '已登录' : '登录无界 AI',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          subtitle: Text(signedIn ? '个人版' : '同步记录、用量和在线服务'),
+          subtitle: Text(signedIn ? '个人版' : onDeviceExecution ? '登录并查看订阅，本机记录保存在手机' : '同步记录、用量和在线服务'),
           trailing: const Icon(Icons.chevron_right),
           onTap: _openAccount,
         );

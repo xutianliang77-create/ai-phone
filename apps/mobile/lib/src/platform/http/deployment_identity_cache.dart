@@ -152,7 +152,8 @@ class DeploymentIdentityCache {
             (decoded is! Map ||
                 decoded['backend'] != configuredAccountBackend ||
                 decoded['bundleId'] != configuredPublicBundleId ||
-                (configuredAccountBackend == 'cloudflare' &&
+                (onDeviceExecution && (decoded['execution'] != 'on_device' || decoded['controlContract'] != 'v10-device-license-v1')) ||
+                (configuredAccountBackend == 'cloudflare' && !onDeviceExecution &&
                     decoded['processingApiBaseUrl'] !=
                         configuredProcessingApiBaseUrl)))) {
       throw DeploymentIdentityFailure({

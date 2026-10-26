@@ -18,14 +18,24 @@ abstract class SpeechOutputProvider {
 
   Future<void> stop();
 }
+abstract interface class SpeechOutputPreparation {
+  Future<void> prepareVoice(String language);
+}
 
-class SystemSpeechOutputProvider implements SpeechOutputProvider {
+class SystemSpeechOutputProvider implements SpeechOutputProvider, SpeechOutputPreparation {
   SystemSpeechOutputProvider({MethodChannel? channel})
       : _channel = channel ?? const MethodChannel(_channelName);
 
   static const _channelName = 'translation_mobile/speech_output';
 
   final MethodChannel _channel;
+  @override
+  Future<void> prepareVoice(String language) async {
+    final p = await _channel.invokeMapMethod<String, Object?>('prepare', {'language': language});
+    if (p?['canSpeak'] != true || p?['availableOnDevice'] != true) {
+      throw StateError('本机系统声音未就绪，请先准备语言资源。');
+    }
+  }
 
   @override
   Future<SpeechOutputResult> speak({
