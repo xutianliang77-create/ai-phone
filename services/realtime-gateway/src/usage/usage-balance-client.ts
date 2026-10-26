@@ -21,6 +21,7 @@ class ApiUsageBalanceClient implements UsageBalanceClient {
   }) {}
 
   async getBalance(userId: string): Promise<UsageBalanceSnapshot | null> {
+    if(process.env.V10_CONTROL_AUTHORITY==='cloudflare')return null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {

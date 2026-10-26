@@ -1,3 +1,4 @@
+import type {AppleState} from "../../modules/account/apple/apple-state.js";
 import type {
   AccountConsentRecord,
   AccountRecord,
@@ -53,6 +54,7 @@ export interface AppStoreSnapshot {
   sessions: SessionRecord[];
   usageBalances: Record<string, number>;
   accounts: AccountRecord[];
+  appleAuthStates: AppleState[];
   authSessions: AuthSessionRecord[];
   smsOtpChallenges: SmsOtpChallengeRecord[];
   accountConsentRecords: AccountConsentRecord[];
@@ -90,6 +92,7 @@ const defaultSnapshot: AppStoreSnapshot = {
   sessions: [],
   usageBalances: {},
   accounts: [],
+  appleAuthStates: [],
   authSessions: [],
   smsOtpChallenges: [],
   accountConsentRecords: [],
@@ -134,6 +137,7 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
   return {
     sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
     usageBalances: raw.usageBalances ?? {},
+    appleAuthStates: Array.isArray(raw.appleAuthStates) ? raw.appleAuthStates : [],
     accounts: Array.isArray(raw.accounts) ? raw.accounts : [],
     authSessions: Array.isArray(raw.authSessions) ? raw.authSessions : [],
     smsOtpChallenges: Array.isArray(raw.smsOtpChallenges)

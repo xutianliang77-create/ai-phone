@@ -18,15 +18,15 @@ class AccountConsentAuditUploader implements ConsentAuditUploader {
   AccountConsentAuditUploader({
     required AccountApiClient accountApiClient,
     required AccountSessionStore accountSessionStore,
-  })  : _accountApiClient = accountApiClient,
-        _accountSessionStore = accountSessionStore;
+  }) : _accountApiClient = accountApiClient,
+       _accountSessionStore = accountSessionStore;
 
   factory AccountConsentAuditUploader.fromEnvironment() {
     return AccountConsentAuditUploader(
       accountApiClient: AccountApiClient(
-        baseUrl: AppConfig.fromEnvironment().apiBaseUrl,
+        baseUrl: AppConfig.fromEnvironment().accountApiBaseUrl,
       ),
-      accountSessionStore: const FileAccountSessionStore(),
+      accountSessionStore: defaultAccountSessionStore(),
     );
   }
 

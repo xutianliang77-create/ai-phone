@@ -1,3 +1,4 @@
+import {sessionBillableSeconds} from '../sessions/session-manager.js';
 import type { SessionEndReason, UsageTickEvent } from "@translation/contracts";
 import type { RealtimeSession } from "../sessions/realtime-session.js";
 
@@ -26,7 +27,7 @@ export function createUsageTickDecision(
   session: RealtimeSession,
   balance?: UsageBalanceSnapshot | null,
 ): UsageTickDecision {
-  const nextBillableSeconds = session.billableSeconds + USAGE_TICK_SECONDS;
+  const nextBillableSeconds = session.claims.control?sessionBillableSeconds(session):session.billableSeconds + USAGE_TICK_SECONDS;
   const balanceSeconds = effectiveBalanceSeconds(session, balance);
   const billableSeconds =
     balanceSeconds === null

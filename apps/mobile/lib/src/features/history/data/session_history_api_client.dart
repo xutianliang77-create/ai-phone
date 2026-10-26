@@ -1,3 +1,4 @@
+import '../../../platform/http/account_bound_http_client.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -10,10 +11,15 @@ class SessionHistoryApiClient {
   SessionHistoryApiClient({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
-  })  : _baseUrl = baseUrl,
-        _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore;
+    AccountSessionStore? accountSessionStore,
+  }) : _baseUrl = baseUrl,
+       _client = accountBoundClient(
+         baseUrl,
+         accountSessionStore ?? defaultAccountSessionStore(),
+         client,
+       ),
+       _accountSessionStore =
+           accountSessionStore ?? defaultAccountSessionStore();
 
   final Uri _baseUrl;
   final http.Client _client;
@@ -40,7 +46,8 @@ class SessionHistoryApiClient {
     );
     _ensureOk(response);
     return SessionDetail.fromJson(
-        jsonDecode(response.body) as Map<String, Object?>);
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<SessionDetail> saveTypeToSpeakSession({
@@ -78,7 +85,8 @@ class SessionHistoryApiClient {
     );
     _ensureOk(response);
     return SessionDetail.fromJson(
-        jsonDecode(response.body) as Map<String, Object?>);
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<SessionExport> exportSession(
@@ -91,7 +99,8 @@ class SessionHistoryApiClient {
     );
     _ensureOk(response);
     return SessionExport.fromJson(
-        jsonDecode(response.body) as Map<String, Object?>);
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<SessionDetail> generateReview(String sessionId) async {
@@ -101,7 +110,8 @@ class SessionHistoryApiClient {
     );
     _ensureOk(response);
     return SessionDetail.fromJson(
-        jsonDecode(response.body) as Map<String, Object?>);
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<SessionDetail> updateActionItem(

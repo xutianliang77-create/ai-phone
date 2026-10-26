@@ -1,4 +1,7 @@
 import {
+  findSession,
+} from './sessions-runtime.repository.js';
+import {
   endSession as endLegacySession,
   saveSessionDiagnostics as saveLegacySessionDiagnostics,
   updateConsumedSeconds as updateLegacyConsumedSeconds,
@@ -39,6 +42,9 @@ export async function completeSessionWithUsage(
   sessionId: string,
   options: CompleteSessionWithUsageOptions = {},
 ) {
+  if ((await findSession(sessionId))?.billingAuthority === 'cloudflare_v10') {
+    throw new Error('Cloudflare-controlled sessions cannot use the local wallet');
+  }
   const runtime = getRepositoryRuntime();
   if (runtime.driver === "postgres") {
     return completePostgresSessionWithUsage(sessionId, options);

@@ -2,17 +2,178 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
+import '../../../platform/http/public_http_client.dart';
+import '../../../platform/diagnostics/apple_login_failure.dart';
+import '../../../platform/http/deployment_identity_cache.dart';
+import '../../../platform/diagnostics/public_control_request_trace.dart';
+import 'account_session_store.dart';
+import 'apple_identity_client.dart';
+import '../../../platform/http/account_bound_http_client.dart';
+
+part 'account_api_transport.dart';
+part 'account_api_models.dart';
 
 class AccountApiClient {
-  AccountApiClient({required this.baseUrl, http.Client? client})
-      : _client = client ?? http.Client();
+  AccountApiClient({
+    required this.baseUrl,
+    http.Client? client,
+    this.deploymentId = configuredPublicDeploymentId,
+  }) : _client = client ?? createPublicHttpClient(baseUrl) {
+    if (deploymentId.isNotEmpty) {
+      AccountRequestScope(
+        deploymentId: deploymentId,
+        ownerId: 'login',
+        apiBaseUrl: baseUrl,
+      );
+    }
+  }
 
   final Uri baseUrl;
+  final String deploymentId;
+  AccountSessionStore createSessionStore() =>
+      accountStoreForDeployment(baseUrl, deploymentId: deploymentId);
+  AccountSession sessionFromLogin(AccountLoginResult result) => AccountSession(
+    token: result.token,
+    expiresAtIso: result.expiresAt.toUtc().toIso8601String(),
+    deploymentId: deploymentId.isEmpty ? null : deploymentId,
+    ownerId: deploymentId.isEmpty ? null : result.account.id,
+    issuerOrigin: deploymentId.isEmpty ? null : baseUrl.origin,
+  );
+  bool sessionMatches(AccountSession session) =>
+      deploymentId.isEmpty ||
+      session.ownerId != null &&
+          AccountRequestScope(
+            deploymentId: deploymentId,
+            ownerId: session.ownerId!,
+            apiBaseUrl: baseUrl,
+          ).matches(session) &&
+          (DateTime.tryParse(session.expiresAtIso)?.isAfter(DateTime.now()) ??
+              false);
   final http.Client _client;
-  static const _requestTimeout = Duration(seconds: 8);
+  // Includes deployment verification and the following account request. A
+  // fresh device connection can exceed eight seconds before login is sent.
+  static const requestTimeout = Duration(seconds: 30);
+
+  Future<Map<String, Object?>> appleChallenge() async {
+    requireAccountOrigin(baseUrl, deploymentId);
+    return _captureAppleFailure(
+      'challenge_request',
+      () => _post('/auth/apple/request', {
+        'deploymentId': deploymentId,
+        'action': 'login',
+      }),
+    );
+  }
+
+  Future<AccountLoginResult> loginWithApple(
+    Map<String, Object?> challenge, {
+    required bool privacyAccepted,
+    required bool termsAccepted,
+    AppleIdentityClient identity = const AppleIdentityClient(),
+  }) async {
+    requireAccountOrigin(baseUrl, deploymentId);
+    if (challenge['deploymentId'] != deploymentId ||
+        !privacyAccepted ||
+        !termsAccepted ||
+        configuredPublicBundleId.isEmpty ||
+        configuredPrivacyVersion.isEmpty ||
+        configuredTermsVersion.isEmpty ||
+        challenge['privacyVersion'] != configuredPrivacyVersion ||
+        challenge['termsVersion'] != configuredTermsVersion ||
+        [
+          'challengeId',
+          'nonce',
+          'state',
+          'bindingSecret',
+          'privacyVersion',
+          'termsVersion',
+        ].any((k) => challenge[k] is! String)) {
+      await recordAppleLoginClientFailure(
+        stage: 'validate_agreements',
+        errorType: 'AccountApiException',
+        code: 'account_agreements_required',
+        durationMs: 0,
+      );
+      throw const AccountApiException('请确认当前隐私政策与服务协议', {});
+    }
+    final proof = await _captureAppleFailure(
+      'system_authorization',
+      () => identity.signIn(
+        nonce: challenge['nonce'] as String,
+        state: challenge['state'] as String,
+        bundleId: configuredPublicBundleId,
+      ),
+    );
+    final response = await _captureAppleFailure(
+      'login_submit',
+      () => _post('/auth/apple/login', {
+        'deploymentId': deploymentId,
+        'challengeId': challenge['challengeId'],
+        'state': proof['state'],
+        'bindingSecret': challenge['bindingSecret'],
+        'identityToken': proof['identityToken'],
+        'authorizationCode': proof['authorizationCode'],
+        'agreements': {
+          'privacyAccepted': true,
+          'termsAccepted': true,
+          'privacyVersion': challenge['privacyVersion'],
+          'termsVersion': challenge['termsVersion'],
+        },
+      }),
+    );
+    return _captureAppleFailure('login_response', () async {
+      _checkDeployment(response);
+      return AccountLoginResult.fromJson(response);
+    });
+  }
+
+  Future<T> _captureAppleFailure<T>(
+    String stage,
+    Future<T> Function() action,
+  ) async {
+    final watch = Stopwatch()..start();
+    try {
+      final value = await action();
+      unawaited(
+        recordAppleLoginStage(
+          stage: stage,
+          outcome: 'completed',
+          durationMs: watch.elapsedMilliseconds,
+        ),
+      );
+      return value;
+    } catch (error) {
+      unawaited(
+        recordAppleLoginStage(
+          stage: stage,
+          outcome: 'failed',
+          durationMs: watch.elapsedMilliseconds,
+        ),
+      );
+      final data = error is AccountApiException ? error.body['error'] : null;
+      final details = error is PlatformException && error.details is Map
+          ? error.details as Map
+          : null;
+      await recordAppleLoginClientFailure(
+        stage: stage,
+        errorType: error.runtimeType.toString(),
+        code: error is PlatformException
+            ? error.code
+            : data is Map
+            ? data['code']
+            : null,
+        nativeDomain: details?['nativeErrorDomain'],
+        nativeCode: details?['nativeErrorCode'],
+        durationMs: watch.elapsedMilliseconds,
+      );
+      rethrow;
+    }
+  }
 
   Future<PhoneCodeChallenge> requestPhoneCode(String phone) async {
     final response = await _post('/auth/phone/request-code', {'phone': phone});
+    _checkDeployment(response);
     return PhoneCodeChallenge.fromJson(response);
   }
 
@@ -24,6 +185,7 @@ class AccountApiClient {
       'phone': phone,
       'code': code,
     });
+    _checkDeployment(response);
     return AccountLoginResult.fromJson(response);
   }
 
@@ -33,7 +195,26 @@ class AccountApiClient {
   }
 
   Future<AccountExportData> exportData(String token) async {
-    return AccountExportData.fromJson(await _get('/account/export', token));
+    final control = await _get('/account/export', token);
+    if (configuredAccountBackend != 'cloudflare')
+      return AccountExportData.fromJson(control);
+    final processing = Uri.parse(configuredProcessingApiBaseUrl),
+        store = createSessionStore();
+    final transport = AccountBoundHttpClient(processing, store);
+    try {
+      final result = await transport.get(
+        processing.resolve('/account/export'),
+        headers: {'authorization': 'Bearer $token'},
+      );
+      if (result.statusCode != 200)
+        throw const FormatException('private_data_export_unconfirmed');
+      return AccountExportData.fromJson({
+        ...control,
+        ...(jsonDecode(result.body) as Map<String, Object?>),
+      });
+    } finally {
+      transport.close();
+    }
   }
 
   Future<AccountProfile> requestDeletion(String token) async {
@@ -50,17 +231,14 @@ class AccountApiClient {
     String source = 'mobile',
     String? locale,
   }) async {
-    await _post(
-        '/account/consents',
-        {
-          'consentType': consentType,
-          'version': version,
-          'acceptedAt': acceptedAtIso,
-          'source': source,
-          if (scene != null) 'scene': scene,
-          if (locale != null) 'locale': locale,
-        },
-        token: token);
+    await _post('/account/consents', {
+      'consentType': consentType,
+      'version': version,
+      'acceptedAt': acceptedAtIso,
+      'source': source,
+      if (scene != null) 'scene': scene,
+      if (locale != null) 'locale': locale,
+    }, token: token);
   }
 
   Future<void> logout(String token) async {
@@ -69,161 +247,9 @@ class AccountApiClient {
 
   void close() => _client.close();
 
-  Future<Map<String, Object?>> _get(String path, String token) async {
-    final response = await _send(path, () {
-      return _client.get(
-        baseUrl.resolve(path),
-        headers: {'authorization': 'Bearer $token'},
-      );
-    });
-    return _decode(response, path);
-  }
-
-  Future<Map<String, Object?>> _post(
-    String path,
-    Map<String, Object?> body, {
-    String? token,
-  }) async {
-    final response = await _send(path, () {
-      return _client.post(
-        baseUrl.resolve(path),
-        headers: <String, String>{
-          'content-type': 'application/json',
-          if (token != null) 'authorization': 'Bearer $token',
-        },
-        body: jsonEncode(body),
-      );
-    });
-    return _decode(response, path);
-  }
-
-  Future<http.Response> _send(
-    String path,
-    Future<http.Response> Function() request,
-  ) async {
-    try {
-      return await request().timeout(_requestTimeout);
-    } on TimeoutException {
-      throw AccountApiException('$path timed out after 8s', const {
-        'error': {'code': 'network_timeout'},
-      });
-    } catch (error) {
-      throw AccountApiException('$path network error: $error', const {
-        'error': {'code': 'network_error'},
-      });
+  void _checkDeployment(Map<String, Object?> response) {
+    if (deploymentId.isNotEmpty && response['deploymentId'] != deploymentId) {
+      throw const AccountApiException('Public login deployment mismatch', {});
     }
-  }
-
-  Map<String, Object?> _decode(http.Response response, String path) {
-    final json = jsonDecode(response.body) as Map<String, Object?>;
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AccountApiException('$path failed: ${response.statusCode}', json);
-    }
-    return json;
-  }
-}
-
-class AccountApiException implements Exception {
-  const AccountApiException(this.message, this.body);
-
-  final String message;
-  final Map<String, Object?> body;
-
-  @override
-  String toString() => message;
-}
-
-class PhoneCodeChallenge {
-  const PhoneCodeChallenge({
-    required this.challengeId,
-    required this.phoneMasked,
-    required this.expiresAt,
-    this.debugCode,
-  });
-
-  final String challengeId;
-  final String phoneMasked;
-  final DateTime expiresAt;
-  final String? debugCode;
-
-  factory PhoneCodeChallenge.fromJson(Map<String, Object?> json) {
-    return PhoneCodeChallenge(
-      challengeId: json['challengeId'] as String,
-      phoneMasked: json['phoneMasked'] as String,
-      expiresAt: DateTime.parse(json['expiresAt'] as String),
-      debugCode: json['debugCode'] as String?,
-    );
-  }
-}
-
-class AccountLoginResult {
-  const AccountLoginResult({
-    required this.token,
-    required this.expiresAt,
-    required this.account,
-  });
-
-  final String token;
-  final DateTime expiresAt;
-  final AccountProfile account;
-
-  factory AccountLoginResult.fromJson(Map<String, Object?> json) {
-    return AccountLoginResult(
-      token: json['token'] as String,
-      expiresAt: DateTime.parse(json['expiresAt'] as String),
-      account: AccountProfile.fromJson(json['account'] as Map<String, Object?>),
-    );
-  }
-}
-
-class AccountProfile {
-  const AccountProfile({
-    required this.id,
-    required this.phoneMasked,
-    required this.status,
-    required this.createdAt,
-  });
-
-  final String id;
-  final String phoneMasked;
-  final String status;
-  final DateTime createdAt;
-
-  factory AccountProfile.fromJson(Map<String, Object?> json) {
-    return AccountProfile(
-      id: json['id'] as String,
-      phoneMasked: json['phoneMasked'] as String,
-      status: json['status'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-    );
-  }
-}
-
-class AccountExportData {
-  const AccountExportData({
-    required this.exportedAt,
-    required this.sessionCount,
-    required this.ledgerCount,
-    required this.termCount,
-    required this.agentCallCount,
-    required this.consentCount,
-  });
-
-  final DateTime exportedAt;
-  final int sessionCount;
-  final int ledgerCount;
-  final int termCount;
-  final int agentCallCount;
-  final int consentCount;
-
-  factory AccountExportData.fromJson(Map<String, Object?> json) {
-    return AccountExportData(
-      exportedAt: DateTime.parse(json['exportedAt'] as String),
-      sessionCount: (json['sessions'] as List<dynamic>).length,
-      ledgerCount: (json['billingLedger'] as List<dynamic>).length,
-      termCount: (json['termbaseTerms'] as List<dynamic>).length,
-      agentCallCount: (json['agentCalls'] as List<dynamic>).length,
-      consentCount: (json['consents'] as List<dynamic>? ?? const []).length,
-    );
   }
 }

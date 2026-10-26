@@ -1,3 +1,4 @@
+import type {CreateRealtimeSessionResponse} from "@translation/contracts";
 import type {
   PersistedRealtimeSessionState,
   CallPlaybackDto,
@@ -32,7 +33,11 @@ export interface SessionRecord {
   finalizationIdempotencyKey?: string;
   finalizedAt?: string;
   gatewayFinalizationReceipt?: string;
+  billingAuthority?: "cloudflare_v10";
+  controlBindingHash?: string;
   ownerAuthSessionHash?: string;
+  creationRequestHash?: string;
+  creationResponse?: CreateRealtimeSessionResponse;
   homeRegion?: string;
   homeCellId?: string;
   routingGeneration?: number;

@@ -1,3 +1,4 @@
+import {usesSharedControl,sharedControlClient} from '../account/shared-control-client.js';
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
@@ -15,11 +16,12 @@ import { handleDomesticPaymentNotification } from
   "./domestic-payment-notifications-runtime.js";
 
 export async function registerBillingRoutes(app: FastifyInstance) {
-  app.get("/billing/products", async () => getBillingProducts());
+  app.get("/billing/products", async () => usesSharedControl()?{products:[]}:getBillingProducts());
 
   app.get("/billing/ledger", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;
+    if(usesSharedControl())return sharedControlClient().request('/billing/ledger','GET',undefined,request.headers.authorization);
     return await getBillingLedger(account.id);
   });
 

@@ -2,6 +2,12 @@ const redacted = "[REDACTED]";
 
 const sensitiveKeys = new Set([
   "accesstoken",
+  "identitytoken",
+  "authorizationcode",
+  "bindingsecret",
+  "privatekeypem",
+  "clientsecret",
+  "realtimetoken",
   "apikey",
   "authorization",
   "audio",

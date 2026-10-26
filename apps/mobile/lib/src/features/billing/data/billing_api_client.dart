@@ -1,3 +1,4 @@
+import '../../../platform/http/account_bound_http_client.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -113,10 +114,15 @@ class BillingApiClient {
   BillingApiClient({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
-  })  : _baseUrl = baseUrl,
-        _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore;
+    AccountSessionStore? accountSessionStore,
+  }) : _baseUrl = baseUrl,
+       _client = accountBoundClient(
+         baseUrl,
+         accountSessionStore ?? defaultAccountSessionStore(),
+         client,
+       ),
+       _accountSessionStore =
+           accountSessionStore ?? defaultAccountSessionStore();
 
   final Uri _baseUrl;
   final http.Client _client;
@@ -145,14 +151,10 @@ class BillingApiClient {
     required String productId,
     required String provider,
   }) async {
-    final json = await _postJson(
-      '/billing/orders',
-      <String, Object?>{
-        'productId': productId,
-        'provider': provider,
-      },
-      authenticated: true,
-    );
+    final json = await _postJson('/billing/orders', <String, Object?>{
+      'productId': productId,
+      'provider': provider,
+    }, authenticated: true);
     return PaymentOrder.fromJson(_objectMap(json['order']));
   }
 
@@ -161,15 +163,12 @@ class BillingApiClient {
     required String transactionId,
     String? signedTransactionInfo,
   }) async {
-    final json = await _postJson(
-      '/billing/orders/$orderId/confirm',
-      <String, Object?>{
-        'transactionId': transactionId,
-        if (signedTransactionInfo != null)
-          'signedTransactionInfo': signedTransactionInfo,
-      },
-      authenticated: true,
-    );
+    final json =
+        await _postJson('/billing/orders/$orderId/confirm', <String, Object?>{
+          'transactionId': transactionId,
+          if (signedTransactionInfo != null)
+            'signedTransactionInfo': signedTransactionInfo,
+        }, authenticated: true);
     return PaymentOrder.fromJson(_objectMap(json['order']));
   }
 

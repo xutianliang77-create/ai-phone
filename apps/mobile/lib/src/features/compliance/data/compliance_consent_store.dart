@@ -3,7 +3,11 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-const complianceConsentVersion = 'domestic-initial-consent-v1';
+const complianceConsentVersion =
+    (String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'self_hosted' ||
+        String.fromEnvironment('ACCOUNT_CONTROL_BACKEND') == 'cloudflare')
+    ? 'v10-selfhosted-initial-consent-r1'
+    : 'domestic-initial-consent-v1';
 
 class ComplianceConsentRecord {
   const ComplianceConsentRecord({
@@ -15,9 +19,9 @@ class ComplianceConsentRecord {
   final String acceptedAtIso;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'version': version,
-        'acceptedAtIso': acceptedAtIso,
-      };
+    'version': version,
+    'acceptedAtIso': acceptedAtIso,
+  };
 
   static ComplianceConsentRecord? fromJson(Object? json) {
     if (json is! Map<String, Object?>) return null;
@@ -73,10 +77,10 @@ class MemoryComplianceConsentStore implements ComplianceConsentStore {
   MemoryComplianceConsentStore([this._record]);
 
   MemoryComplianceConsentStore.accepted()
-      : _record = ComplianceConsentRecord(
-          version: complianceConsentVersion,
-          acceptedAtIso: DateTime.utc(2026).toIso8601String(),
-        );
+    : _record = ComplianceConsentRecord(
+        version: complianceConsentVersion,
+        acceptedAtIso: DateTime.utc(2026).toIso8601String(),
+      );
 
   ComplianceConsentRecord? _record;
 

@@ -1,3 +1,4 @@
+import {selfHostedAdmission,selfHostedOwnerAllowed} from "@translation/platform-security";
 import type { WebSocket } from "ws";
 import type { RealtimeEnv } from "../config/env.js";
 import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
@@ -19,7 +20,10 @@ export function admitRealtimeConnection(
   request: IncomingMessage,
   env: RealtimeEnv,
 ) {
-  if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" &&
+  if(!selfHostedAdmission().open){
+    sendRealtimeEvent(ws,buildError('provider_unavailable','Service admission is closed',{stage:'connection',retryable:true}));ws.close();return null;
+  }
+  if ((process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" || (process.env.AUTH_PROVIDER === "apple" || process.env.V10_CONTROL_AUTHORITY === "cloudflare")) &&
       (env.sessionEventSink !== "api" || env.realtimeTokenSecret.length < 32 || /dev-secret|replace-with|changeme/i.test(env.realtimeTokenSecret))) {
     sendRealtimeEvent(ws, buildError("provider_unavailable", "Gateway signing configuration is unavailable", { stage: "connection", retryable: true }));
     ws.close(); return null;
@@ -31,7 +35,7 @@ export function admitRealtimeConnection(
   const claims = token ? verifyRealtimeToken(
     token, env.realtimeTokenSecret, canResumeExpiredToken,
   ) : null;
-  if (!claims) {
+  if (!claims || (process.env.V10_CONTROL_AUTHORITY==='cloudflare'&&!claims.control) || !selfHostedOwnerAllowed(claims.userId)) {
     sendRealtimeEvent(ws, buildError("invalid_token", "Invalid realtime token", {
       stage: "connection",
       retryable: false,

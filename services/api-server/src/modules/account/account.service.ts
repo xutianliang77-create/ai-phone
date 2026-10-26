@@ -134,7 +134,7 @@ export function accountFromAuthorization(authorization: string | undefined) {
   const token = parseBearerToken(authorization);
   if (!token) return null;
   const store = getStoreSnapshot();
-  const session = store.authSessions.find((item) => item.token === token);
+  const session = store.authSessions.find((item) => matchesStoredToken(item.token,token));
   if (
     !session ||
     session.revokedAt ||
@@ -151,7 +151,7 @@ export function logout(authorization: string | undefined) {
   const token = parseBearerToken(authorization);
   if (!token) return false;
   const session = getStoreSnapshot().authSessions.find(
-    (item) => item.token === token && !item.revokedAt,
+    (item) => matchesStoredToken(item.token,token) && !item.revokedAt,
   );
   if (!session) return false;
   session.revokedAt = new Date().toISOString();
@@ -319,4 +319,8 @@ function parseBearerToken(authorization: string | undefined) {
   if (!authorization?.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length).trim();
   return token.length > 0 ? token : null;
+}
+
+export function matchesStoredToken(stored:string,token:string){
+ return stored.startsWith("hash-v1:") ? stored.slice(8)===createHash("sha256").update("auth-token:"+token).digest("hex") : stored===token;
 }

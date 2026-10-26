@@ -1,3 +1,5 @@
+import {usesSharedControl} from './shared-control-client.js';
+import {controlDataExport} from './control-data-export.js';
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import {
@@ -62,6 +64,7 @@ export async function registerAccountRoutes(app: FastifyInstance) {
   app.get("/account/export", async (request, reply) => {
     const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
+    if(usesSharedControl())return controlDataExport(account.id);
     return await exportAccountData(account);
   });
 

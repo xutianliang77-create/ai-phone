@@ -3,7 +3,7 @@ import { loadEnv } from "../../config/env.js";
 import type { SessionRecord } from "../sessions/session-record.js";
 
 export function formalRealtimeRelease() {
-  return process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store";
+  return process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" || (process.env.AUTH_PROVIDER === "apple" || process.env.V10_CONTROL_AUTHORITY === "cloudflare");
 }
 
 export function verifiedGatewaySettlement(session: SessionRecord, supplied: unknown) {

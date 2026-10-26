@@ -20,12 +20,12 @@ const realtimeStartHoldSeconds = 30;
 export async function createRealtimeSession(
   userId: string,
   input: CreateRealtimeSessionRequest,
-  options: { ownerAuthSessionHash?: string } = {},
+  options: { ownerAuthSessionHash?: string;sessionId?:string;creationRequestHash?:string } = {},
 ): Promise<CreateRealtimeSessionResponse | null> {
   const plan = await activePlanForUser(userId);
   const env = loadEnv();
   const maxDurationSeconds = realtimeMaxSessionSeconds();
-  const sessionId = randomUUID();
+  const sessionId = options.sessionId??randomUUID();
   const hold = await createUsageHold(userId, realtimeStartHoldSeconds, {
     sessionId,
     idempotencyKey: `hold:${sessionId}`,
@@ -37,16 +37,6 @@ export async function createRealtimeSession(
   const expiresAt = now + 5 * 60;
   const voice = await resolveRealtimeVoice(userId, input);
 
-  await createSession({
-    id: sessionId,
-    userId,
-    mode: input.mode,
-    status: "created",
-    consumedSeconds: 0,
-    createdAt: new Date().toISOString(),
-    segments: [],
-    ...(options.ownerAuthSessionHash ? { ownerAuthSessionHash: options.ownerAuthSessionHash } : {}),
-  });
 
   const realtimeToken = createRealtimeToken(
     {
@@ -77,7 +67,7 @@ export async function createRealtimeSession(
     env.realtimeTokenSecret,
   );
 
-  return {
+  const response:CreateRealtimeSessionResponse = {
     sessionId,
     realtimeToken,
     endpoint: env.realtimeWsEndpoint,
@@ -90,6 +80,19 @@ export async function createRealtimeSession(
         }
       : {}),
   };
+  const saved=await createSession({
+    id: sessionId,
+    userId,
+    mode: input.mode,
+    status: "created",
+    consumedSeconds: 0,
+    createdAt: new Date().toISOString(),
+    segments: [],
+    ...(options.creationRequestHash?{creationRequestHash:options.creationRequestHash,creationResponse:response}:{}),
+    ...(options.ownerAuthSessionHash ? { ownerAuthSessionHash: options.ownerAuthSessionHash } : {}),
+  });
+
+  return options.creationRequestHash?saved.creationResponse??response:response;
 }
 
 function endpointModeForRealtimeMode(

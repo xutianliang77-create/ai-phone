@@ -73,10 +73,11 @@ class _RealtimePageState extends State<RealtimePage>
     _voiceConsentStore =
         widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
     _accountSessionStore =
-        widget.accountSessionStore ?? const FileAccountSessionStore();
+        widget.accountSessionStore ?? defaultAccountSessionStore();
     final baseConfig = widget.config ?? AppConfig.fromEnvironment();
     _ownsVoicePresetClient = widget.voicePresetClient == null;
-    _voicePresetClient = widget.voicePresetClient ??
+    _voicePresetClient =
+        widget.voicePresetClient ??
         VoicePresetClient(baseUrl: baseConfig.apiBaseUrl);
     _settings = RealtimeRuntimeSettings.fromConfig(baseConfig);
     _config = _settings.applyTo(baseConfig);
@@ -302,8 +303,10 @@ class _RealtimePageState extends State<RealtimePage>
     _replaceConfig(settings.applyTo(_config), settings: settings);
   }
 
-  void _replaceConfig(AppConfig nextConfig,
-      {RealtimeRuntimeSettings? settings}) {
+  void _replaceConfig(
+    AppConfig nextConfig, {
+    RealtimeRuntimeSettings? settings,
+  }) {
     final previousController = controller;
     setState(() {
       if (settings != null) _settings = settings;

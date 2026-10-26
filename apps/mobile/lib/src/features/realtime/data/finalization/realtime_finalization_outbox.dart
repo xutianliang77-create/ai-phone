@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -19,7 +20,8 @@ abstract class RealtimeFinalizationOutbox {
 }
 
 class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
-  FileRealtimeFinalizationOutbox({File? file}) : _file = file;
+  FileRealtimeFinalizationOutbox({File? file, this.scope}) : _file = file;
+  final String? scope;
 
   static final Map<String, Future<void>> _writes = <String, Future<void>>{};
 
@@ -69,16 +71,18 @@ class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
     await _serialized(file, () async {
       final state = await _read(file);
       final existing = state.tasks.cast<RealtimeFinalizationTask?>().firstWhere(
-            (item) => item?.sessionId == task.sessionId,
-            orElse: () => null,
-          );
+        (item) => item?.sessionId == task.sessionId,
+        orElse: () => null,
+      );
       final merged = existing == null
           ? task
           : RealtimeFinalizationTask(
               sessionId: task.sessionId,
+              ownerId: task.ownerId ?? existing.ownerId,
               idempotencyKey: task.idempotencyKey,
-              segments:
-                  task.segments.isEmpty ? existing.segments : task.segments,
+              segments: task.segments.isEmpty
+                  ? existing.segments
+                  : task.segments,
               billableSeconds: task.billableSeconds > existing.billableSeconds
                   ? task.billableSeconds
                   : existing.billableSeconds,
@@ -87,10 +91,12 @@ class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
             );
       await _write(
         file,
-        state.copyWith(tasks: <RealtimeFinalizationTask>[
-          ...state.tasks.where((item) => item.sessionId != task.sessionId),
-          merged,
-        ]),
+        state.copyWith(
+          tasks: <RealtimeFinalizationTask>[
+            ...state.tasks.where((item) => item.sessionId != task.sessionId),
+            merged,
+          ],
+        ),
       );
     });
   }
@@ -130,8 +136,9 @@ class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
               .where((item) => item.sessionId != task.sessionId)
               .toList(growable: false),
           quarantined: <RealtimeFinalizationQuarantineRecord>[
-            ...state.quarantined
-                .where((item) => item.task.sessionId != task.sessionId),
+            ...state.quarantined.where(
+              (item) => item.task.sessionId != task.sessionId,
+            ),
             record,
           ],
         ),
@@ -139,25 +146,28 @@ class FileRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
     });
   }
 
-  Future<void> _write(
-    File file,
-    _RealtimeFinalizationOutboxState state,
-  ) async {
+  Future<void> _write(File file, _RealtimeFinalizationOutboxState state) async {
     await file.parent.create(recursive: true);
     final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(jsonEncode(<String, Object?>{
-      'version': 2,
-      'tasks': state.tasks.map((task) => task.toJson()).toList(),
-      'quarantinedTasks':
-          state.quarantined.map((record) => record.toJson()).toList(),
-    }));
+    await temporary.writeAsString(
+      jsonEncode(<String, Object?>{
+        'version': 2,
+        'tasks': state.tasks.map((task) => task.toJson()).toList(),
+        'quarantinedTasks': state.quarantined
+            .map((record) => record.toJson())
+            .toList(),
+      }),
+    );
     await temporary.rename(file.path);
   }
 
   Future<File> _storageFile() async {
     if (_file != null) return _file;
     final directory = await getApplicationSupportDirectory();
-    return File('${directory.path}/realtime_finalization_outbox.json');
+    final suffix = scope == null
+        ? ''
+        : '_${sha256.convert(utf8.encode(scope!))}';
+    return File('${directory.path}/realtime_finalization_outbox$suffix.json');
   }
 
   Future<T> _serialized<T>(File file, Future<T> Function() operation) async {
@@ -196,6 +206,7 @@ class MemoryRealtimeFinalizationOutbox implements RealtimeFinalizationOutbox {
         ? task
         : RealtimeFinalizationTask(
             sessionId: task.sessionId,
+            ownerId: task.ownerId ?? existing.ownerId,
             idempotencyKey: task.idempotencyKey,
             segments: task.segments.isEmpty ? existing.segments : task.segments,
             billableSeconds: task.billableSeconds > existing.billableSeconds

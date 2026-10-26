@@ -15,9 +15,16 @@ class ComplianceCenterPage extends StatelessWidget {
       body: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          itemCount: complianceDocuments.length,
+          itemCount: complianceDocuments.length + 1,
           separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (context, index) {
+            if (index == complianceDocuments.length)
+              return ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(isChinese ? '开源许可' : 'Open source licenses'),
+                onTap: () =>
+                    showLicensePage(context: context, applicationName: '无界 AI'),
+              );
             final document = complianceDocuments[index];
             return ListTile(
               leading: Icon(_iconFor(document.kind)),

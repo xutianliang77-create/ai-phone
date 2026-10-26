@@ -10,13 +10,15 @@ export function verifyRealtimeToken(
   secret: string,
   canResumeExpired?: (claims: RealtimeTokenClaims) => boolean,
 ) {
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra || token.length>32768) return null;
   const expected = signPayload(payload, secret);
   if (signature.length !== expected.length) return null;
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   const json = Buffer.from(payload, "base64url").toString("utf8");
-  const claims = JSON.parse(json) as RealtimeTokenClaims;
+  let claims:RealtimeTokenClaims;
+  try{claims=JSON.parse(json) as RealtimeTokenClaims;}catch{return null;}
+  if(!claims||typeof claims.userId!=='string'||typeof claims.sessionId!=='string'||!Number.isSafeInteger(claims.expiresAt))return null;
   if (claims.expiresAt <= Math.floor(Date.now() / 1000) &&
       canResumeExpired?.(claims) !== true) return null;
   return claims;

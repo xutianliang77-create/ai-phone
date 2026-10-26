@@ -14,6 +14,7 @@ interface CollectionSpec {
 const collectionSpecs: CollectionSpec[] = [
   spec("sessions", "id"),
   spec("accounts", "id"),
+  spec("appleAuthStates", "id"),
   spec("authSessions", "token"),
   spec("smsOtpChallenges", "id"),
   spec("accountConsentRecords", "id"),

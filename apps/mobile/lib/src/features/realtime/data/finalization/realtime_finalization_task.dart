@@ -6,9 +6,11 @@ class RealtimeFinalizationTask {
     required this.billableSeconds,
     required this.createdAt,
     this.gatewayReceipt,
+    this.ownerId,
   });
 
   final String sessionId;
+  final String? ownerId;
   final String idempotencyKey;
   final List<Map<String, Object?>> segments;
   final int billableSeconds;
@@ -16,13 +18,14 @@ class RealtimeFinalizationTask {
   final String? gatewayReceipt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'sessionId': sessionId,
-        'idempotencyKey': idempotencyKey,
-        'segments': segments,
-        'billableSeconds': billableSeconds,
-        if (gatewayReceipt != null) 'gatewayReceipt': gatewayReceipt,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-      };
+    'sessionId': sessionId,
+    if (ownerId != null) 'ownerId': ownerId,
+    'idempotencyKey': idempotencyKey,
+    'segments': segments,
+    'billableSeconds': billableSeconds,
+    if (gatewayReceipt != null) 'gatewayReceipt': gatewayReceipt,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
 
   static RealtimeFinalizationTask? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -41,13 +44,15 @@ class RealtimeFinalizationTask {
     }
     return RealtimeFinalizationTask(
       sessionId: sessionId,
+      ownerId: json['ownerId'] as String?,
       idempotencyKey: idempotencyKey,
       segments: segments
           .whereType<Map>()
           .map((item) => Map<String, Object?>.from(item))
           .toList(growable: false),
-      billableSeconds:
-          billableSeconds.toInt() < 0 ? 0 : billableSeconds.toInt(),
+      billableSeconds: billableSeconds.toInt() < 0
+          ? 0
+          : billableSeconds.toInt(),
       createdAt: createdAt,
       gatewayReceipt: json['gatewayReceipt'] as String?,
     );
@@ -66,18 +71,19 @@ class RealtimeFinalizationQuarantineRecord {
   final DateTime quarantinedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'task': task.toJson(),
-        'reason': reason,
-        'quarantinedAt': quarantinedAt.toUtc().toIso8601String(),
-      };
+    'task': task.toJson(),
+    'reason': reason,
+    'quarantinedAt': quarantinedAt.toUtc().toIso8601String(),
+  };
 
   static RealtimeFinalizationQuarantineRecord? fromJson(Object? value) {
     if (value is! Map) return null;
     final json = Map<String, Object?>.from(value);
     final task = RealtimeFinalizationTask.fromJson(json['task']);
     final reason = json['reason'];
-    final quarantinedAt =
-        DateTime.tryParse(json['quarantinedAt'] as String? ?? '');
+    final quarantinedAt = DateTime.tryParse(
+      json['quarantinedAt'] as String? ?? '',
+    );
     if (task == null ||
         reason is! String ||
         reason.isEmpty ||

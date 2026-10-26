@@ -45,6 +45,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "039_agent_voice_turn_scope",
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
+        "042_apple_account_state",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -57,6 +58,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "039_agent_voice_turn_scope",
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
+        "042_apple_account_state",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -71,6 +73,15 @@ describe("PostgreSQL cutover evidence upgrade", () => {
           invalidAttempts: 0, invalidClientEvents: 0, incompletePlayback: 0 }),
       }),
     ]));
+  });
+
+  it("does not upgrade evidence if Apple metadata support or the older compatibility fix is absent", async () => {
+    writeEvidence(previousMigrations());
+    const before = readFileSync(evidenceFile);
+    await expect(upgradePostgresCutoverEvidence(validPool({appleReady:false}))).rejects.toThrow("Apple account projection validation failed");
+    expect(readFileSync(evidenceFile)).toEqual(before);
+    await expect(upgradePostgresCutoverEvidence(validPool({conflictDirectivePreserved:false}))).rejects.toThrow("Apple account projection validation failed");
+    expect(readFileSync(evidenceFile)).toEqual(before);
   });
 
   it("rejects a tampered previous evidence signature", async () => {
@@ -103,7 +114,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
 });
 
 function previousMigrations() {
-  return [...expectedPostgresMigrations].slice(0, -5);
+  return [...expectedPostgresMigrations].slice(0, expectedPostgresMigrations.indexOf("037_agent_voice_work"));
 }
 
 function writeEvidence(migrations: string[]) {
@@ -131,12 +142,16 @@ function validPool(overrides: Partial<{
   missing: string;
   unsupported: string;
   validated: boolean;
+  appleReady: boolean;
+  conflictDirectivePreserved: boolean;
 }> = {}) {
   const media = {
     total: "28",
     missing: "0",
     unsupported: "0",
     validated: true,
+    appleReady: true,
+    conflictDirectivePreserved: true,
     ...overrides,
   };
   return {
@@ -194,6 +209,7 @@ function validPool(overrides: Partial<{
       if (sql.includes("SELECT current_database()")) {
         return { rows: [{ name: "ai_phone_staging", oid: "18860" }] };
       }
+      if(sql.includes('AS apple_namespace_ready'))return {rows:[{apple_namespace_ready:media.appleReady,conflict_directive_preserved:media.conflictDirectivePreserved}]};
       throw new Error(`Unexpected query: ${sql}`);
     }),
   } as never;

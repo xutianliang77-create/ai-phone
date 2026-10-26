@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import {usesSharedControl,sharedControlClient} from '../account/shared-control-client.js';
 import type { FastifyInstance } from "fastify";
 import type {
   SaveSessionSegmentsRequest,
@@ -200,6 +201,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   app.get("/usage/balance", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;
+    if(usesSharedControl())return sharedControlClient().request('/usage/balance','GET',undefined,request.headers.authorization);
     return { ...(await getUsageBalance(account.id)) };
   });
 
@@ -212,6 +214,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
         "Unauthorized internal request",
       );
     }
+    if(usesSharedControl())return sendError(reply,409,'control_balance_scope_required','Use the signed session reservation');
     const params = request.params as { userId: string };
     return { ...(await getUsageBalance(params.userId)) };
   });

@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../platform/billing/purchase_service.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../data/billing_api_client.dart';
-
 class WalletPage extends StatefulWidget {
   const WalletPage({
     this.client,
@@ -15,20 +13,19 @@ class WalletPage extends StatefulWidget {
     this.transactionIdFactory,
     super.key,
   });
-
   final BillingApiClient? client;
   final PurchaseService? purchaseService;
   final TargetPlatform? platform;
   final String Function()? transactionIdFactory;
-
   @override
   State<WalletPage> createState() => _WalletPageState();
 }
-
 class _WalletPageState extends State<WalletPage> {
-  late final BillingApiClient _client = widget.client ??
-      BillingApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
-  late final PurchaseService _purchaseService = widget.purchaseService ??
+  late final BillingApiClient _client =
+      widget.client ??
+      BillingApiClient(baseUrl: AppConfig.fromEnvironment().accountApiBaseUrl);
+  late final PurchaseService _purchaseService =
+      widget.purchaseService ??
       (widget.transactionIdFactory == null
           ? const PlatformPurchaseService()
           : SandboxPurchaseService(
@@ -41,13 +38,11 @@ class _WalletPageState extends State<WalletPage> {
   String? _busyProductId;
   bool _restoring = false;
   String? _message;
-
   @override
   void dispose() {
     if (widget.client == null) _client.close();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -75,8 +70,10 @@ class _WalletPageState extends State<WalletPage> {
                     Text(_message!),
                   ],
                   const SizedBox(height: 20),
-                  Text(l10n.planProduct,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    l10n.planProduct,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
                   for (final product in data.products)
                     _ProductTile(
@@ -95,8 +92,9 @@ class _WalletPageState extends State<WalletPage> {
                         icon: _restoring
                             ? const SizedBox.square(
                                 dimension: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.restore),
                         label: Text(l10n.restorePurchases),
@@ -104,8 +102,10 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                   ],
                   const SizedBox(height: 20),
-                  Text(l10n.billingLedger,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    l10n.billingLedger,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
                   if (data.ledger.isEmpty)
                     Text(l10n.noBillingLedger)
@@ -125,7 +125,6 @@ class _WalletPageState extends State<WalletPage> {
       ),
     );
   }
-
   Future<_WalletData> _load() async {
     final results = await Future.wait<Object>([
       _client.fetchBalance(),
@@ -326,9 +325,11 @@ class _ProductTile extends StatelessWidget {
             )
           : FilledButton(
               onPressed: onPurchase,
-              child: Text(onPurchase == null
-                  ? l10n.paymentUnavailable
-                  : l10n.purchaseSandbox),
+              child: Text(
+                onPurchase == null
+                    ? l10n.paymentUnavailable
+                    : l10n.purchaseSandbox,
+              ),
             ),
     );
   }

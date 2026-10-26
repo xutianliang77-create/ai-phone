@@ -4,6 +4,9 @@ import type {
 } from "@translation/contracts";
 import type { RealtimeEnv } from "../config/env.js";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
+import {getSession} from './session-manager.js';
+
+export class NeverAdmittedSessionClosed extends Error {constructor(){super("Session was closed before provider admission");}}
 
 export interface SessionEventSink {
   record(event: ServerRealtimeEvent): Promise<void>;
@@ -37,9 +40,7 @@ class ApiSessionEventSink implements SessionEventSink {
       event.type === "session.paused" ||
       event.type === "session.resumed"
     ) {
-      await this.post(`/internal/realtime/sessions/${event.sessionId}/state`, {
-        status: event.type === "session.paused" ? "paused" : "active",
-      });
+      await this.touch(event.sessionId,event.type === "session.paused" ? "paused" : "active");
       return;
     }
     if (event.type === "transcript.final") {
@@ -144,7 +145,10 @@ class ApiSessionEventSink implements SessionEventSink {
   }
 
   async touch(sessionId: string, status: "active" | "paused", options?: { fresh: boolean }) {
+    const session=getSession(sessionId);
     await this.post(`/internal/realtime/sessions/${sessionId}/state`, { status,
+      ...(session?.claims.control ? {connectionNonce:session.controlConnectionNonce,
+        previousNonce:session.controlPreviousNonce,previousProviderClosed:session.providerCloseConfirmed===true} : {}),
       ...(options ? { fresh: options.fresh } : {}) });
   }
 
@@ -179,6 +183,10 @@ class ApiSessionEventSink implements SessionEventSink {
         signal: controller.signal,
       });
       if (!response.ok) {
+        const id=/^\/internal\/realtime\/sessions\/([^/]+)\/state$/.exec(path)?.[1];
+        let value:{error?:{code?:string;sessionId?:string;ownerId?:string}}|undefined;
+        try{if(response.status===403 && id)value=await response.json() as typeof value;else await response.body?.cancel();}catch{}
+        if(id && value?.error?.code==='session_never_admitted_closed'&&value.error.sessionId===id&&value.error.ownerId===getSession(id)?.userId)throw new NeverAdmittedSessionClosed();
         throw new Error(`API session sync failed with HTTP ${response.status}`);
       }
     } finally {

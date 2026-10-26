@@ -174,6 +174,7 @@ const billingProjectionNamespaces = new Set([
 ]);
 
 const productRecordNamespaces = new Set([
+  "appleAuthStates",
   "accounts",
   "authSessions",
   "smsOtpChallenges",

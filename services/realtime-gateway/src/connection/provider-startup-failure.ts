@@ -6,13 +6,13 @@ import { signGatewayStopReceipt } from "@translation/platform-security";
 
 export async function recordProviderStartupFailure(options: {
   session: RealtimeSession; generation: number; provider: RealtimeProvider | undefined;
-  providerDispatched: boolean; admissionConfirmed: boolean;
+  providerDispatched: boolean; admissionConfirmed: boolean;neverAdmittedConfirmed?:boolean;
   sessionEventSink: Pick<SessionEventSink, "record">; secret: string;
 }) {
   const { session, generation, provider, providerDispatched, admissionConfirmed, sessionEventSink } = options;
       const current = getSession(session.id);
       if (current === session && current.connectionGeneration === generation) {
-        let closed = admissionConfirmed && !providerDispatched;
+        let closed = (admissionConfirmed || options.neverAdmittedConfirmed===true) && !providerDispatched;
         if (session.formalRelease && providerDispatched) {
           try { await provider!.closeSession(session.id); closed = admissionConfirmed; } catch { closed = false; }
         }

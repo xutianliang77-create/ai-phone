@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(41);
+    expect(expectedPostgresMigrations).toHaveLength(42);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "041_agent_voice_delivery",
+      "042_apple_account_state",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["041_agent_voice_delivery"],
+      missing: ["042_apple_account_state"],
       extra: ["999_unknown"],
     });
   });

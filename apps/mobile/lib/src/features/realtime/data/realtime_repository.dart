@@ -1,3 +1,5 @@
+import '../../account/data/account_session_store.dart';
+import '../../account/data/account_auth_headers.dart';
 import 'dart:async';
 
 import '../../../app/app_config.dart';
@@ -5,45 +7,70 @@ import '../../../platform/audio/audio_frame.dart';
 import '../../../platform/asr/asr_text_segment.dart';
 import '../domain/entities/subtitle_segment.dart';
 import 'api/realtime_api_client.dart';
+import 'api/shared_control_processing_api.dart';
 import 'api/realtime_session.dart';
 import 'finalization/realtime_finalization_outbox.dart';
 import 'finalization/realtime_finalization_task.dart';
 import 'gateway/gateway_realtime_event.dart';
 import 'gateway/realtime_gateway_client.dart';
+part 'realtime_repository_finalization.dart';
 
 class RealtimeRepository {
   RealtimeRepository({
     required RealtimeApiClient apiClient,
     required RealtimeGatewayClient gatewayClient,
     RealtimeFinalizationOutbox? finalizationOutbox,
+    AccountSessionStore? accountStore,
     DateTime Function()? now,
     String targetLanguage = 'zh',
-  })  : _apiClient = apiClient,
-        _gatewayClient = gatewayClient,
-        _finalizationOutbox =
-            finalizationOutbox ?? MemoryRealtimeFinalizationOutbox(),
-        _now = now ?? DateTime.now,
-        _targetLanguage = targetLanguage;
+  }) : _accountStore = accountStore,
+       _apiClient = apiClient,
+       _gatewayClient = gatewayClient,
+       _finalizationOutbox =
+           finalizationOutbox ?? MemoryRealtimeFinalizationOutbox(),
+       _now = now ?? DateTime.now,
+       _targetLanguage = targetLanguage;
 
   factory RealtimeRepository.fromConfig(AppConfig config) {
     final autoReverseTargetLanguage = shouldAutoReverseRealtimeSession(config);
+    final store = defaultAccountSessionStore();
     return RealtimeRepository(
-      apiClient: RealtimeApiClient(
-        baseUrl: config.apiBaseUrl,
-        mode: config.realtimeMode,
-        sourceLanguage: config.sourceLanguage,
-        targetLanguage: config.targetLanguage,
-        autoReverseTargetLanguage: autoReverseTargetLanguage,
-        voiceOutputMode: config.realtimeVoiceOutputMode,
-        voicePresetId: config.realtimeVoicePresetId,
-        domainLexiconPack: config.domainLexiconPack,
+      accountStore: selfHostedAccountEnabled ? store : null,
+      apiClient: configuredAccountBackend == 'cloudflare'
+          ? SharedControlProcessingApiClient(
+              processingBase: config.apiBaseUrl,
+              controlBase: config.accountApiBaseUrl,
+              store: store,
+              mode: config.realtimeMode,
+              source: config.sourceLanguage,
+              target: config.targetLanguage,
+              autoReverse: autoReverseTargetLanguage,
+              voiceMode: config.realtimeVoiceOutputMode,
+              voicePreset: config.realtimeVoicePresetId,
+              lexicon: config.domainLexiconPack,
+            )
+          : RealtimeApiClient(
+              baseUrl: config.apiBaseUrl,
+              mode: config.realtimeMode,
+              sourceLanguage: config.sourceLanguage,
+              targetLanguage: config.targetLanguage,
+              autoReverseTargetLanguage: autoReverseTargetLanguage,
+              voiceOutputMode: config.realtimeVoiceOutputMode,
+              voicePresetId: config.realtimeVoicePresetId,
+              domainLexiconPack: config.domainLexiconPack,
+            ),
+      gatewayClient: RealtimeGatewayClient(
+        accountStore: selfHostedAccountEnabled ? store : null,
       ),
-      gatewayClient: RealtimeGatewayClient(),
-      finalizationOutbox: FileRealtimeFinalizationOutbox(),
+      finalizationOutbox: FileRealtimeFinalizationOutbox(
+        scope: selfHostedAccountEnabled ? configuredPublicDeploymentId : null,
+      ),
       targetLanguage: config.targetLanguage,
     );
   }
 
+  final AccountSessionStore? _accountStore;
+  final _owners = <String, String>{};
   final RealtimeApiClient _apiClient;
   final RealtimeGatewayClient _gatewayClient;
   final RealtimeFinalizationOutbox _finalizationOutbox;
@@ -56,14 +83,19 @@ class RealtimeRepository {
   Stream<GatewayRealtimeEvent> get events => _gatewayClient.events;
 
   Future<RealtimeSession> startSession() async {
-    unawaited(recoverPendingFinalizations().catchError((Object _) {}));
+    if (_accountStore == null) {
+      unawaited(recoverPendingFinalizations().catchError((Object _) {}));
+    }
+    final owner = await _accountStore?.load();
     final session = await _apiClient.createSession();
+    if (owner?.ownerId != null) _owners[session.sessionId] = owner!.ownerId!;
     try {
       await _gatewayClient.connect(session);
       return session;
     } catch (_) {
       unawaited(
-          _apiClient.endSession(session.sessionId).catchError((Object _) {}));
+        _apiClient.endSession(session.sessionId).catchError((Object _) {}),
+      );
       rethrow;
     }
   }
@@ -96,10 +128,16 @@ class RealtimeRepository {
     return _gatewayClient.resumeAndWait(sessionId);
   }
 
-  Future<void> setVoiceOutput(String sessionId, bool enabled,
-      {String? presetId}) {
-    return _gatewayClient.setVoiceOutput(sessionId, enabled,
-        presetId: presetId);
+  Future<void> setVoiceOutput(
+    String sessionId,
+    bool enabled, {
+    String? presetId,
+  }) {
+    return _gatewayClient.setVoiceOutput(
+      sessionId,
+      enabled,
+      presetId: presetId,
+    );
   }
 
   void configureVoiceOutput(String mode) => _apiClient.setVoiceOutputMode(mode);
@@ -133,9 +171,7 @@ class RealtimeRepository {
     await prepareFinalization(sessionId, segments);
     await _replaySession(sessionId);
     if (!flushConfirmed) {
-      throw const RealtimeFinalizationException(
-        '最后一句处理未完整确认，现有原文和译文已保留',
-      );
+      throw const RealtimeFinalizationException('最后一句处理未完整确认，现有原文和译文已保留');
     }
   }
 
@@ -144,14 +180,17 @@ class RealtimeRepository {
     List<SubtitleSegment> segments, {
     int? billableSeconds,
   }) async {
-    await _finalizationOutbox.upsert(RealtimeFinalizationTask(
-      sessionId: sessionId,
-      idempotencyKey: 'finalize:$sessionId',
-      segments: _snapshotSegments(segments),
-      billableSeconds: billableSeconds ?? 0,
-      gatewayReceipt: _gatewayClient.gatewayReceiptForSession(sessionId),
-      createdAt: _now(),
-    ));
+    await _finalizationOutbox.upsert(
+      RealtimeFinalizationTask(
+        sessionId: sessionId,
+        ownerId: _owners[sessionId],
+        idempotencyKey: 'finalize:$sessionId',
+        segments: _snapshotSegments(segments),
+        billableSeconds: billableSeconds ?? 0,
+        gatewayReceipt: _gatewayClient.gatewayReceiptForSession(sessionId),
+        createdAt: _now(),
+      ),
+    );
   }
 
   Future<void> recoverPendingFinalizations() async {
@@ -164,54 +203,6 @@ class RealtimeRepository {
     } finally {
       if (identical(_replayInFlight, replay)) _replayInFlight = null;
     }
-  }
-
-  Future<void> _replayAll() async {
-    final tasks = await _finalizationOutbox.load();
-    await Future.wait(tasks.map(_finalizeTask));
-  }
-
-  Future<void> _replaySession(String sessionId) async {
-    final tasks = await _finalizationOutbox.load();
-    final task = _taskForSession(tasks, sessionId);
-    if (task == null) return;
-    final finalized = await _finalizeTask(task);
-    if (!finalized) {
-      throw const RealtimeFinalizationException(
-        '服务器已不存在该会话，现有原文和译文已转入恢复记录',
-      );
-    }
-  }
-
-  Future<bool> _finalizeTask(RealtimeFinalizationTask task) async {
-    try {
-      if (task.gatewayReceipt != null) {
-        await _apiClient.finalizeWithGatewayReceipt(
-            sessionId: task.sessionId,
-            segments: task.segments,
-            billableSeconds: task.billableSeconds,
-            idempotencyKey: task.idempotencyKey,
-            gatewayReceipt: task.gatewayReceipt!);
-      } else {
-        await _apiClient.finalizeSession(
-          sessionId: task.sessionId,
-          segments: task.segments,
-          billableSeconds: task.billableSeconds,
-          idempotencyKey: task.idempotencyKey,
-        );
-      }
-    } on RealtimeApiException catch (error) {
-      if (error.statusCode != 404) rethrow;
-      await _finalizationOutbox.quarantine(
-        task,
-        reason: 'http_404_session_not_found',
-        quarantinedAt: _now(),
-      );
-      return false;
-    }
-    await _finalizationOutbox.remove(task.sessionId);
-    _gatewayClient.forgetGatewayReceipt(task.sessionId);
-    return true;
   }
 
   Future<void> closeRealtime() async {
@@ -285,13 +276,13 @@ Map<String, Object?> _segmentToJson(SubtitleSegment segment) {
   };
 }
 
-List<Map<String, Object?>> _snapshotSegments(
-  List<SubtitleSegment> segments,
-) {
+List<Map<String, Object?>> _snapshotSegments(List<SubtitleSegment> segments) {
   return segments
-      .where((segment) =>
-          segment.sourceText.trim().isNotEmpty ||
-          segment.translatedText.trim().isNotEmpty)
+      .where(
+        (segment) =>
+            segment.sourceText.trim().isNotEmpty ||
+            segment.translatedText.trim().isNotEmpty,
+      )
       .map(_segmentToJson)
       .toList(growable: false);
 }

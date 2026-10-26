@@ -297,3 +297,12 @@ function persistSessionMutation(session: SessionRecord) {
   session.version = (session.version ?? 0) + 1;
   persistStoreSnapshot();
 }
+
+export function saveSharedControlCompletion(sessionId:string,consumedSeconds:number,receipt:string){
+  const session=findSession(sessionId);if(!session)return null;
+  if(session.billingAuthority!=='cloudflare_v10')throw new Error('shared_control_binding_required');
+  session.status='ended';session.endedAt??=new Date().toISOString();session.consumedSeconds=consumedSeconds;
+  session.gatewayFinalizationReceipt??=receipt;session.finalizationIdempotencyKey='finalize:'+sessionId;
+  session.finalizedAt??=session.endedAt;session.lastActivityAt=session.endedAt;
+  persistSessionMutation(session);return session;
+}

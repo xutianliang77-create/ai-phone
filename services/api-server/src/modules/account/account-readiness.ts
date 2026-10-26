@@ -1,7 +1,8 @@
+import {appleEnabled,appleReadiness} from "./apple/apple-settings.js";
 export interface AccountDeploymentReadiness {
   status: "ready" | "not_ready";
   nodeEnv: string;
-  otpSecret: "configured" | "missing" | "weak";
+  otpSecret: "configured" | "missing" | "weak" | "not_required";
   debugCodeExposure: "disabled" | "enabled";
   testAutoAccount: "disabled" | "enabled";
   issues: string[];
@@ -11,6 +12,12 @@ const devOtpSecret = "local-dev-otp-secret";
 
 export function getAccountDeploymentReadiness(): AccountDeploymentReadiness {
   const nodeEnv = process.env.NODE_ENV ?? "unset";
+  if(appleEnabled()||process.env.V10_CONTROL_AUTHORITY==='cloudflare'){
+    const apple=process.env.V10_CONTROL_AUTHORITY==='cloudflare'?{issues:(!/^wujie-v10-[a-z0-9-]{1,100}$/.test(process.env.V10_CONTROL_DEPLOYMENT_ID??'' )?['control deployment is missing']:[])}:appleReadiness(),debugCodeExposure=debugCodeExposureStatus(nodeEnv),testAutoAccount=testAutoAccountStatus();
+    const issues=[...apple.issues,...(nodeEnv==='production'?[]:['account NODE_ENV must be production']),
+      ...(debugCodeExposure==='disabled'?[]:['account debug OTP must be disabled']),...(testAutoAccount==='disabled'?[]:['account test auto account must be disabled'])];
+    return {status:issues.length?'not_ready':'ready',nodeEnv,otpSecret:'not_required',debugCodeExposure,testAutoAccount,issues};
+  }
   const otpSecret = otpSecretStatus();
   const debugCodeExposure = debugCodeExposureStatus(nodeEnv);
   const testAutoAccount = testAutoAccountStatus();

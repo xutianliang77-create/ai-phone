@@ -1,9 +1,12 @@
+import {selfHostedAdmission} from '@translation/platform-security';
+import {usesSharedControl} from "../account/shared-control-client.js";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 
 /** Keep deferred creation/inference surfaces closed; retain history and cleanup routes. */
 export function registerFormalReleaseScope(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
+    if(usesSharedControl() && /^\/(auth|account)\//.test(request.routeOptions.url??'')&&(request.routeOptions.url!=='/account/export'||request.method!=='GET'))return sendError(reply,503,'account_use_control_origin','Use the account control service');
     if (process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL !== "app_store") return;
     const route = request.routeOptions.url ?? "";
     if (route.startsWith("/join/") || (request.method === "POST" &&
@@ -11,6 +14,7 @@ export function registerFormalReleaseScope(app: FastifyInstance) {
       return sendError(reply, 503, "call_link_not_in_release", "Call links are not available in this release");
     }
     if (request.method !== "POST") return;
+    if(usesSharedControl()&&request.routeOptions.url==='/translation/text'&&!selfHostedAdmission().open)return sendError(reply,503,'service_admission_closed','Service admission is closed');
     if (/^\/billing\/orders(?:\/[^/]+\/confirm)?$/.test(route)) {
       return sendError(reply, 503, "purchases_not_in_release", "Purchases are not available in this release");
     }

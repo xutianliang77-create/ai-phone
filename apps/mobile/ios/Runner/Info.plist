@@ -97,5 +97,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>WujiePublicDeploymentId</key>
+	<string>$(WUJIE_CONTROL_DEPLOYMENT_ID)</string>
+	<key>WujieAppAttestEnvironment</key>
+	<string>$(WUJIE_APP_ATTEST_ENVIRONMENT)</string>
 </dict>
 </plist>

@@ -1,3 +1,4 @@
+import '../http/account_bound_http_client.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -10,12 +11,17 @@ class ApiTranslationProvider implements MobileTranslationProvider {
   ApiTranslationProvider({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    AccountSessionStore? accountSessionStore,
     MobileTranslationProvider? fallback,
-  })  : _baseUrl = baseUrl,
-        _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore,
-        _fallback = fallback;
+  }) : _baseUrl = baseUrl,
+       _client = accountBoundClient(
+         baseUrl,
+         accountSessionStore ?? defaultAccountSessionStore(),
+         client,
+       ),
+       _accountSessionStore =
+           accountSessionStore ?? defaultAccountSessionStore(),
+       _fallback = fallback;
 
   final Uri _baseUrl;
   final http.Client _client;

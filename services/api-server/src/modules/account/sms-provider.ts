@@ -1,3 +1,4 @@
+import {appleEnabled} from "./apple/apple-settings.js";
 export interface SmsDelivery {
   provider: string;
   messageId?: string;
@@ -6,10 +7,10 @@ export interface SmsDelivery {
 export interface SmsReadiness {
   status: "ready" | "not_ready";
   provider: string;
-  endpoint: "configured" | "configuration_required";
-  apiKey: "configured" | "configuration_required";
-  templateId: "configured" | "configuration_required";
-  signName: "configured" | "configuration_required";
+  endpoint: "configured" | "configuration_required" | "not_required";
+  apiKey: "configured" | "configuration_required" | "not_required";
+  templateId: "configured" | "configuration_required" | "not_required";
+  signName: "configured" | "configuration_required" | "not_required";
   timeoutMs: number;
   issues: string[];
 }
@@ -41,6 +42,9 @@ export function shouldExposeDebugCode() {
 }
 
 export function getSmsDeploymentReadiness(): SmsReadiness {
+  if((appleEnabled()||process.env.V10_CONTROL_AUTHORITY==='cloudflare')&&(process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE??'core_translation')==='core_translation')return {
+    status:'ready',provider:'not_required',endpoint:'not_required',apiKey:'not_required',templateId:'not_required',signName:'not_required',timeoutMs:0,issues:[],
+  };
   const provider = (process.env.SMS_PROVIDER ?? "").trim() || "not_configured";
   const timeoutMs = smsTimeoutMs();
   const issues = [

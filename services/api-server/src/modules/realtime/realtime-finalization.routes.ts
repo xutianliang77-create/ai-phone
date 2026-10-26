@@ -13,6 +13,7 @@ import {
 } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { formalRealtimeRelease, verifiedGatewaySettlement } from "./gateway-settlement.js";
+import {completeSharedControlSession} from './shared-control-session.js';
 
 export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
   app.post("/realtime/sessions/:sessionId/finalize", async (request, reply) => {
@@ -45,6 +46,7 @@ export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
         return sendError(reply, 403, "account_forbidden",
           "Account cannot access this resource");
       }
+      if(existing.billingAuthority==='cloudflare_v10')return completeSharedControlSession(existing,body.gatewayReceipt??existing.gatewayFinalizationReceipt,body.segments);
       if (existing.finalizationIdempotencyKey === idempotencyKey) {
         return response(existing, idempotencyKey);
       }

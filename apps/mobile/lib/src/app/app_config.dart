@@ -5,7 +5,6 @@ import '../platform/translation/supported_translation_language.dart'
     show autoReverseTargetLanguageCode;
 import '../features/realtime/data/voice_preset_catalog.dart';
 import '../features/realtime/data/domain_lexicon_pack.dart';
-
 class AppConfig {
   AppConfig({
     required this.apiBaseUrl,
@@ -45,29 +44,35 @@ class AppConfig {
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
-  })  : realtimeVoiceOutputMode =
-            normalizeConfigRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
-        sourceLanguage = normalizeConfigSourceLanguage(sourceLanguage),
-        realtimeVoicePresetId =
-            normalizeConfigVoicePresetId(realtimeVoicePresetId),
-        domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
-        targetLanguage = normalizeConfigTargetLanguage(targetLanguage),
-        realtimeMode = normalizeConfigRealtimeMode(realtimeMode),
-        region = region ?? const RegionEditionConfig.domestic() {
+  }) : realtimeVoiceOutputMode = normalizeConfigRealtimeVoiceOutputMode(
+         realtimeVoiceOutputMode,
+       ),
+       sourceLanguage = normalizeConfigSourceLanguage(sourceLanguage),
+       realtimeVoicePresetId = normalizeConfigVoicePresetId(
+         realtimeVoicePresetId,
+       ),
+       domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
+       targetLanguage = normalizeConfigTargetLanguage(targetLanguage),
+       realtimeMode = normalizeConfigRealtimeMode(realtimeMode),
+       region = region ?? const RegionEditionConfig.domestic() {
     validateAppReleaseEnvironment(
-        channel: distributionChannel,
-        apiBaseUrl: apiBaseUrl,
-        productProfile: productProfile,
-        useMockAudio: useMockAudio,
-        useDeviceAsr: useDeviceAsr,
-        useLocalSessions: useLocalSessions,
-        useOnDeviceTranslation: useOnDeviceTranslation,
-        sourceLanguage: this.sourceLanguage,
-        targetLanguage: this.targetLanguage,
-        voiceOutputMode: this.realtimeVoiceOutputMode);
+      channel: distributionChannel,
+      apiBaseUrl: apiBaseUrl,
+      productProfile: productProfile,
+      useMockAudio: useMockAudio,
+      useDeviceAsr: useDeviceAsr,
+      useLocalSessions: useLocalSessions,
+      useOnDeviceTranslation: useOnDeviceTranslation,
+      sourceLanguage: this.sourceLanguage,
+      targetLanguage: this.targetLanguage,
+      voiceOutputMode: this.realtimeVoiceOutputMode,
+    );
   }
-
   final Uri apiBaseUrl;
+  Uri get accountApiBaseUrl {
+    const control = String.fromEnvironment('CONTROL_API_BASE_URL');
+    return control.isEmpty ? apiBaseUrl : Uri.parse(control);
+  }
   final String distributionChannel;
   final String productProfile;
   bool get isFormalRelease => distributionChannel == 'app_store';
@@ -105,13 +110,15 @@ class AppConfig {
   final String appVersion;
   final String buildNumber;
   final RegionEditionConfig region;
-
   static AppConfig fromEnvironment() {
     const distributionChannel = String.fromEnvironment(
-        'WUJIE_DISTRIBUTION_CHANNEL',
-        defaultValue: 'restricted_instance');
-    const productProfile =
-        String.fromEnvironment('WUJIE_PRODUCT_PROFILE', defaultValue: 'full');
+      'WUJIE_DISTRIBUTION_CHANNEL',
+      defaultValue: 'restricted_instance',
+    );
+    const productProfile = String.fromEnvironment(
+      'WUJIE_PRODUCT_PROFILE',
+      defaultValue: 'full',
+    );
     final region = RegionEditionConfig.fromEnvironment();
     const apiBaseUrl = String.fromEnvironment(
       'API_BASE_URL',
@@ -191,15 +198,17 @@ class AppConfig {
     const deviceAsrDiagnosticCaptureEnabled = bool.fromEnvironment(
       'DEVICE_ASR_DIAGNOSTIC_CAPTURE',
     );
-    const useOnDeviceTranslation =
-        bool.fromEnvironment('USE_ON_DEVICE_TRANSLATION');
+    const useOnDeviceTranslation = bool.fromEnvironment(
+      'USE_ON_DEVICE_TRANSLATION',
+    );
     const useLocalSessions = bool.fromEnvironment('USE_LOCAL_SESSIONS');
     const onDeviceTranslationProvider = String.fromEnvironment(
       'ON_DEVICE_TRANSLATION_PROVIDER',
       defaultValue: 'ios_system',
     );
-    const onDeviceTranslationRequired =
-        bool.fromEnvironment('ON_DEVICE_TRANSLATION_REQUIRED');
+    const onDeviceTranslationRequired = bool.fromEnvironment(
+      'ON_DEVICE_TRANSLATION_REQUIRED',
+    );
     const serverOwnedHistory = bool.fromEnvironment('SERVER_OWNED_HISTORY');
     const appErrorReportingEnabled = bool.fromEnvironment(
       'APP_ERROR_REPORTING_ENABLED',
@@ -260,7 +269,8 @@ class AppConfig {
       useOnDeviceTranslation: useOnDeviceTranslation,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
       onDeviceTranslationRequired: onDeviceTranslationRequired,
-      autoReverseTargetLanguage: autoReverseTargetLanguage ||
+      autoReverseTargetLanguage:
+          autoReverseTargetLanguage ||
           targetLanguage == autoReverseTargetLanguageCode,
       realtimeVoiceOutputMode: realtimeVoiceOutputMode,
       realtimeVoicePresetId: realtimeVoicePresetId,
@@ -276,7 +286,6 @@ class AppConfig {
       region: region,
     );
   }
-
   AppConfig copyWith({
     String? realtimeMode,
     String? sourceLanguage,

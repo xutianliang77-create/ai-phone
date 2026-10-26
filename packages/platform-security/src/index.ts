@@ -217,3 +217,5 @@ function unavailable(provider: RateLimitProvider, limit: number): RateLimitDecis
     retryAfterMs: 1000,
   };
 }
+export {selfHostedAdmission} from './self-hosted-admission.js';
+export {selfHostedOwnerAllowed} from './self-hosted-admission.js';

@@ -50,6 +50,17 @@ export interface CreateRealtimeSessionResponse {
 }
 
 export interface RealtimeTokenClaims {
+  control?: {
+    contractVersion: 1;
+    execution: 'retained_v10_processing';
+    ownerId: string;
+    deploymentId: string;
+    devicePublicKey: string;
+    deviceKeyHash: string;
+    planHash: string;
+    bindingHash: string;
+    expiresAtMs: number;
+  };
   userId: string;
   sessionId: string;
   mode?: RealtimeMode;

@@ -158,7 +158,7 @@ function sqliteFile() {
 }
 
 function hasSnapshotData(value: AppStoreSnapshot) {
-  return value.sessions.length > 0 ||
+  return value.appleAuthStates.length > 0 || value.sessions.length > 0 ||
     value.accounts.length > 0 ||
     value.billingLedger.length > 0 ||
     Object.keys(value.usageBalances).length > 0;

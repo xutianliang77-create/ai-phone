@@ -1,3 +1,6 @@
+import {registerControlPrivateErasure} from './modules/account/control-private-erasure.js';
+import {SharedControlError} from './modules/account/shared-control-client.js';
+import {registerAppleRoutes} from "./modules/account/apple/apple.routes.js";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import {
@@ -58,6 +61,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
       },
     },
   });
+  app.setErrorHandler((error,request,reply)=>{
+    if(error instanceof SharedControlError)return reply.status(error.statusCode).send({error:{code:error.code,message:'Control operation was not completed'}});
+    reply.send(error);
+  });
   registerPlatformTelemetryHooks(app);
   await app.register(cors, {
     origin: env.corsAllowedOrigins,
@@ -73,6 +80,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
   registerPublicEntryProtection(app, env, options.publicEntryRateLimiter);
   registerFormalReleaseScope(app);
+  registerAppleRoutes(app);
+  registerControlPrivateErasure(app);
   registerPlatformMetricsRoutes(app);
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);

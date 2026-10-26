@@ -16,6 +16,8 @@ import UIKit
   )
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
+  private let controlProofBridge = SharedControlProofBridge()
+  private let appleAccountBridge = AppleAccountBridge()
 
   override func application(
     _ application: UIApplication,
@@ -26,6 +28,12 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SharedControlProofBridge") {
+      controlProofBridge.register(messenger:registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleAccountBridge") {
+      appleAccountBridge.register(messenger: registrar.messenger(), presenter: { [weak self] in self?.window?.rootViewController })
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "AudioSessionCoordinator"
     ) {

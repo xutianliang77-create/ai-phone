@@ -1,3 +1,5 @@
+import {appleEnabled} from "./apple/apple-settings.js";
+import {appleService} from "./apple/apple-service.js";
 import { createHash } from "node:crypto";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import { getRepositoryRuntime } from "../../infrastructure/storage/repository-runtime.js";
@@ -9,6 +11,7 @@ export function authorizationSessionHash(authorization: string | undefined) {
 }
 
 export async function authSessionHashIsActive(hash: string, userId: string) {
+  if(appleEnabled() && await appleService().hasHash(hash))return (await appleService().authorizeHash(hash))?.id===userId;
   const runtime = getRepositoryRuntime();
   if (runtime.driver === "postgres") {
     const session = await runtime.postgres.productRecords.findByLookup<{
@@ -20,7 +23,7 @@ export async function authSessionHashIsActive(hash: string, userId: string) {
     return account?.status === "active";
   }
   const store = getStoreSnapshot();
-  const session = store.authSessions.find((item) => hashToken(item.token) === hash);
+  const session = store.authSessions.find((item) => (item.token.startsWith("hash-v1:")?item.token.slice(8):hashToken(item.token)) === hash);
   return !!session && session.userId === userId && !session.revokedAt &&
     Date.parse(session.expiresAt) > Date.now() &&
     store.accounts.some((item) => item.id === userId && item.status === "active");

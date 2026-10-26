@@ -1,3 +1,7 @@
+import {selfHostedAdmission,selfHostedOwnerAllowed} from "@translation/platform-security";
+import {usesSharedControl} from '../account/shared-control-client.js';
+import {createSharedControlSession,cancelSharedControlSession,checkSharedControlServing,completeSharedControlSession} from './shared-control-session.js';
+import {createIdempotentSession,CreationConflict} from "./idempotent-session-create.js";
 import type { FastifyInstance } from "fastify";
 import {
   type UpdateRealtimeSessionStateRequest,
@@ -29,8 +33,16 @@ import { formalRealtimeRelease, verifiedGatewaySettlement } from "./gateway-sett
 export async function registerRealtimeRoutes(app: FastifyInstance) {
   registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {
+    if(!selfHostedAdmission().open)return sendError(reply,503,"service_admission_closed","Service admission is closed");
+    if(usesSharedControl()){
+      const input=request.body as Record<string,unknown>;
+      const parsed=validateCreateRealtimeSessionRequest(input);
+      if(!parsed.ok)return sendError(reply,400,parsed.error.code,parsed.error.message);
+      return createSharedControlSession(undefined,request.headers.authorization??'',input.controlEnvelope,parsed.value);
+    }
     const account = await requireAccount(request, reply);
     if (!account) return;
+    if(!selfHostedOwnerAllowed(account.id))return sendError(reply,403,"account_not_in_test_scope","Account is not in the current test scope");
     const parsed = validateCreateRealtimeSessionRequest(request.body);
     if (!parsed.ok) {
       return sendError(reply, 400, parsed.error.code, parsed.error.message);
@@ -45,8 +57,12 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "feature_not_in_release", "This release supports Chinese/English and preset voices");
     }
 
-    const result = await createRealtimeSession(account.id, parsed.value,
+    let result;
+    try{result = process.env.AUTH_PROVIDER==='apple'
+      ? await createIdempotentSession(account.id,parsed.value,authorizationSessionHash(request.headers.authorization)!,request.headers['idempotency-key'])
+      : await createRealtimeSession(account.id, parsed.value,
       formalRealtimeRelease() ? { ownerAuthSessionHash: authorizationSessionHash(request.headers.authorization) } : {});
+    }catch(error){if(error instanceof CreationConflict)return sendError(reply,409,error.code,"Creation request remains bound to its original session");throw error;}
     if (!result) {
       return sendError(
         reply,
@@ -82,6 +98,14 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
+      if(existing.billingAuthority==='cloudflare_v10'){
+        if(existing.status==='ended')return {sessionId:existing.id,status:'ended'};
+        return cancelSharedControlSession(existing,request.headers.authorization??'');
+      }
+      if(formalRealtimeRelease()&&existing.status==='created'&&existing.creationRequestHash&&existing.ownerAuthSessionHash){
+        const cancelled=await completeSessionWithUsage(existing.id,{billableSeconds:0});
+        return {sessionId:existing.id,status:cancelled?.status??existing.status};
+      }
       if (formalRealtimeRelease() && existing.status !== "ended") {
         return sendError(reply, 409, "gateway_settlement_pending", "Gateway stop evidence is required; usage remains pending");
       }
@@ -155,7 +179,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
         );
       }
       const params = request.params as { sessionId: string };
-      const body = request.body as Partial<UpdateRealtimeSessionStateRequest> & { fresh?: boolean };
+      const body = request.body as Partial<UpdateRealtimeSessionStateRequest> & { fresh?: boolean; connectionNonce?:string; previousNonce?:string; previousProviderClosed?:boolean };
       if (!isInternalRealtimeState(body.status)) {
         return sendError(
           reply,
@@ -164,12 +188,20 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
           "Invalid realtime session state",
         );
       }
+      if(!selfHostedAdmission().open)return sendError(reply,503,"service_admission_closed","Service admission is closed");
       const requestedStatus = body.status;
       return withSessionWriteLock(params.sessionId, async () => {
-        if (formalRealtimeRelease()) {
-          const current = await findSession(params.sessionId);
+        const current = await findSession(params.sessionId);
+        if(current?.billingAuthority==='cloudflare_v10'){
+          if(typeof body.connectionNonce!=='string'||!/^[a-f0-9]{64}$/.test(body.connectionNonce))return sendError(reply,409,'control_connection_proof_required','Device connection proof is required');
+          await checkSharedControlServing(current,body.connectionNonce,body.fresh===true,body.previousNonce,body.previousProviderClosed===true);
+        } else if (formalRealtimeRelease()) {
           if (!current?.ownerAuthSessionHash ||
               !await authSessionHashIsActive(current.ownerAuthSessionHash, current.userId)) {
+            if(current?.status==='created'&&current.creationRequestHash&&current.ownerAuthSessionHash){
+              await completeSessionWithUsage(current.id,{billableSeconds:0});
+              return reply.status(403).send({error:{code:'session_never_admitted_closed',message:'Session was safely cancelled before admission',sessionId:current.id,ownerId:current.userId}});
+            }
             return sendError(reply, 403, "session_authorization_revoked", "Session authorization is unavailable");
           }
           if (body.fresh === true && current.status !== "created") {
@@ -228,6 +260,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return withSessionWriteLock(params.sessionId, async () => {
         const existing = await findSession(params.sessionId);
         if (!existing) return sendError(reply, 404, "session_not_found", "Session not found");
+        if(existing.billingAuthority==='cloudflare_v10')return completeSharedControlSession(existing,body?.gatewayReceipt);
         const gateway = formalRealtimeRelease() ? verifiedGatewaySettlement(existing, body?.gatewayReceipt) : null;
         if (formalRealtimeRelease() && !gateway) {
           return sendError(reply, 409, "gateway_settlement_pending", "Valid gateway stop evidence is required");

@@ -1,3 +1,4 @@
+import {controlClock} from '../connection/control-budget.js';
 import {
   transitionRealtimeSessionState,
   type RealtimeTokenClaims,
@@ -9,7 +10,7 @@ const closedSessions = new Map<string, { userId: string; expiresAt: number; bill
 
 export function createSession(claims: RealtimeTokenClaims): RealtimeSession {
   const now = Date.now();
-  const formalRelease = process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store";
+  const formalRelease = process.env.DOMESTIC_RELEASE_DISTRIBUTION_CHANNEL === "app_store" || (process.env.AUTH_PROVIDER === "apple" || process.env.V10_CONTROL_AUTHORITY === "cloudflare");
   const session: RealtimeSession = {
     id: claims.sessionId,
     userId: claims.userId,
@@ -81,7 +82,7 @@ export function transitionStatus(
   if (!session) return null;
   const transition = transitionRealtimeSessionState(session.status, status);
   if (transition.changed) {
-    const now = nowMs();
+    const now = controlClock(session,nowMs());
     if (session.status === "active" && session.activeStartedAt !== undefined) {
       session.accumulatedActiveMs += Math.max(0, now - session.activeStartedAt);
       session.activeStartedAt = undefined;
@@ -102,7 +103,8 @@ export function sessionBillableSeconds(
   const activeSeconds = Math.ceil(
     (session.accumulatedActiveMs + currentActiveMs) / 1000,
   );
-  return Math.max(session.billableSeconds, activeSeconds);
+  const measured=Math.max(session.billableSeconds, activeSeconds);
+  return session.claims.control?Math.min(session.claims.maxDurationSeconds,measured):measured;
 }
 
 export function deleteSession(sessionId: string, expectedSession?: RealtimeSession) {
@@ -120,4 +122,13 @@ export function closedSessionReceipt(sessionId: string, userId: string) {
   const entry = closedSessions.get(sessionId);
   if (!entry || entry.userId !== userId || entry.expiresAt <= Date.now()) return null;
   return entry;
+}
+
+/** No provider was dispatched: detach an unproven socket without inventing a
+ * stop receipt or releasing the control-plane reservation. */
+export function detachUnadmittedControlSession(session:RealtimeSession,generation:number){
+ if(session.claims.control&&session.status==='connecting'&&session.connectionGeneration===generation&&session.providerCloseConfirmed!==false){
+  if(session.controlPreviousNonce){session.controlConnectionNonce=session.controlPreviousNonce;session.controlPreviousNonce=undefined;}
+  if(!session.controlConnectionNonce)sessions.delete(session.id);
+ }
 }

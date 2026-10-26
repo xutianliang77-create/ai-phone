@@ -3,27 +3,39 @@ import 'package:flutter/material.dart';
 import '../../../../app/app_config.dart';
 import '../../data/account_api_client.dart';
 import '../../data/account_session_store.dart';
+import '../../data/apple_identity_client.dart';
+import '../../../compliance/presentation/widgets/apple_account_agreements.dart';
+
+part 'account_page_login.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({
     this.client,
     this.sessionStore,
+    this.config,
+    this.appleIdentity,
     super.key,
   });
 
   final AccountApiClient? client;
   final AccountSessionStore? sessionStore;
+  final AppConfig? config;
+  final AppleIdentityClient? appleIdentity;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
 }
 
 class _AccountPageState extends State<AccountPage> {
-  late final AccountApiClient _client = widget.client ??
-      AccountApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
+  late final AccountApiClient _client =
+      widget.client ??
+      AccountApiClient(
+        baseUrl:
+            (widget.config ?? AppConfig.fromEnvironment()).accountApiBaseUrl,
+      );
   late final bool _ownsClient = widget.client == null;
   late final AccountSessionStore _sessionStore =
-      widget.sessionStore ?? const FileAccountSessionStore();
+      widget.sessionStore ?? _client.createSessionStore();
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
   AccountSession? _session;
@@ -55,7 +67,7 @@ class _AccountPageState extends State<AccountPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            const Text('在线同传、Call Link、支付和 AI 代打电话发布前需要账号归属。'),
+            const Text('登录后可查看账号、授权状态和个人信息。'),
             const SizedBox(height: 16),
             if (_loading) const LinearProgressIndicator(),
             if (_message != null) _StatusText(_message!),
@@ -68,44 +80,6 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  Widget _buildLoginForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        TextField(
-          controller: _phoneController,
-          decoration: const InputDecoration(labelText: '手机号'),
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _codeController,
-          decoration: const InputDecoration(labelText: '验证码'),
-          keyboardType: TextInputType.number,
-          textInputAction: TextInputAction.done,
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: <Widget>[
-            OutlinedButton.icon(
-              onPressed: _loading ? null : _requestCode,
-              icon: const Icon(Icons.sms_outlined),
-              label: const Text('获取验证码'),
-            ),
-            FilledButton.icon(
-              onPressed: _loading ? null : _login,
-              icon: const Icon(Icons.login),
-              label: const Text('登录'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   Widget _buildAccountPanel() {
     final account = _account!;
     return Column(
@@ -114,7 +88,9 @@ class _AccountPageState extends State<AccountPage> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(account.phoneMasked),
+          title: Text(
+            account.phoneMasked.isEmpty ? 'Apple 账号' : account.phoneMasked,
+          ),
           subtitle: Text('状态：${_statusText(account.status)}'),
         ),
         Text('账号 ID：${account.id}'),
@@ -164,32 +140,6 @@ class _AccountPageState extends State<AccountPage> {
     }, clearSessionOnAuthError: true);
   }
 
-  Future<void> _requestCode() async {
-    final phone = _phoneController.text.trim();
-    await _run(() async {
-      final challenge = await _client.requestPhoneCode(phone);
-      _message = challenge.debugCode == null
-          ? '验证码已发送至 ${challenge.phoneMasked}'
-          : '开发验证码：${challenge.debugCode}';
-    });
-  }
-
-  Future<void> _login() async {
-    final phone = _phoneController.text.trim();
-    final code = _codeController.text.trim();
-    await _run(() async {
-      final result = await _client.loginWithPhoneCode(phone: phone, code: code);
-      final session = AccountSession(
-        token: result.token,
-        expiresAtIso: result.expiresAt.toIso8601String(),
-      );
-      await _sessionStore.save(session);
-      _session = session;
-      _account = result.account;
-      _message = '登录成功';
-    });
-  }
-
   Future<void> _exportAccount() async {
     final token = _session?.token;
     if (token == null) return;
@@ -203,6 +153,7 @@ class _AccountPageState extends State<AccountPage> {
     final token = _session?.token;
     var remoteLogoutFailed = false;
     await _run(() async {
+      if (_client.deploymentId.isNotEmpty) await _clearLocalSession();
       if (token != null) {
         try {
           await _client.logout(token);
@@ -210,13 +161,14 @@ class _AccountPageState extends State<AccountPage> {
           remoteLogoutFailed = true;
         }
       }
-      await _clearLocalSession();
+      if (_client.deploymentId.isEmpty) await _clearLocalSession();
       _message = remoteLogoutFailed ? '已退出本机；服务器会话将在登录令牌到期后失效' : '已退出登录';
     });
   }
 
   Future<void> _confirmDeletion() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('确认注销账号'),
@@ -291,6 +243,7 @@ class _AccountPageState extends State<AccountPage> {
     if (text.contains('/auth/phone/request-code')) return '验证码发送失败，请检查手机号';
     if (text.contains('/auth/phone/login')) return '登录失败，请检查验证码';
     if (text.contains('401')) return '登录已失效，请重新登录';
+    if (_client.deploymentId.isNotEmpty) return '账号操作未完成，请稍后重试；如持续失败请联系支持。';
     return text.replaceFirst('Exception: ', '');
   }
 
@@ -311,8 +264,10 @@ class _StatusText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: TextStyle(color: Theme.of(context).colorScheme.primary));
+    return Text(
+      text,
+      style: TextStyle(color: Theme.of(context).colorScheme.primary),
+    );
   }
 }
 
@@ -323,8 +278,10 @@ class _ErrorText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: TextStyle(color: Theme.of(context).colorScheme.error));
+    return Text(
+      text,
+      style: TextStyle(color: Theme.of(context).colorScheme.error),
+    );
   }
 }
 

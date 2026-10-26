@@ -1,3 +1,8 @@
+import {bindControlBudget,controlBudgetExhausted} from './control-budget.js';
+import {NeverAdmittedSessionClosed} from "../sessions/session-event-sink.js";
+import {bindGatewayHeartbeat} from "./gateway-heartbeat.js";
+import {admitSharedControlDevice,bindSharedControlExpiry} from './shared-control-admission.js';
+import {bindOperationalDeadline,requireOperationalAdmission} from "./self-hosted-deadline.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
@@ -26,7 +31,6 @@ import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 import { recordProviderStartupFailure } from "./provider-startup-failure.js";
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
-
 export function startWebSocketServer() {
   const runtime = createRealtimeServerRuntime();
   const {
@@ -39,17 +43,17 @@ export function startWebSocketServer() {
     usageBalanceClient,
     disconnectFinalizers,
   } = runtime;
-
   server.on("connection", async (ws, request) => {
     const attachment = admitRealtimeConnection(ws, request, env);
     if (!attachment) return;
     const { session, generation, resumed } = attachment;
+    if(!await admitSharedControlDevice(ws,session,generation))return;
     let provider!: RealtimeProvider;
     let providerDispatched = false;
     let admissionConfirmed = !session.formalRelease;
     let providerFailureStage: "provider" | "asr" | "translation" = "provider";
     try {
-      if (session.formalRelease) await sessionEventSink.touch(session.id, "active", { fresh: !resumed });
+      if (session.formalRelease) await sessionEventSink.touch(session.id, "active", { fresh: !resumed || !!session.claims.control });
       admissionConfirmed = true;
       const dependencyFailure = coreDependencyFailureStage(
         dependencyReadiness.readiness(),
@@ -80,10 +84,11 @@ export function startWebSocketServer() {
         asrHotwords,
         asrCorrections,
       });
+      requireOperationalAdmission();
       logSpeakerAttributionConfigured(env, session, speakerAttribution);
-    } catch {
+    } catch(error) {
       await recordProviderStartupFailure({ session, generation, provider, providerDispatched,
-        admissionConfirmed, sessionEventSink, secret: env.realtimeTokenSecret });
+        admissionConfirmed,neverAdmittedConfirmed:error instanceof NeverAdmittedSessionClosed, sessionEventSink, secret: env.realtimeTokenSecret });
       sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: providerFailureStage,
@@ -93,7 +98,6 @@ export function startWebSocketServer() {
       ws.close();
       return;
     }
-
     const flushTracker = new RealtimeFlushTracker();
     const ttsOutputQueue = createRealtimeTtsOutputQueue(env, session);
     const eventDispatcher = new RealtimeEventDispatcher({
@@ -157,6 +161,9 @@ export function startWebSocketServer() {
       if (ws.readyState === 1) ws.close();
     };
 
+    bindOperationalDeadline(ws,()=>{void endRealtimeSession('time_limit');});
+    bindSharedControlExpiry(ws,session,()=>{void endRealtimeSession('time_limit');});
+    bindControlBudget(ws,session,()=>{void endRealtimeSession('time_limit');});
     const usageInterval = setInterval(() => {
       if (session.status === "active" || session.status === "paused") {
         void sessionEventSink.touch(session.id, session.status).catch((error) => {
@@ -206,6 +213,7 @@ export function startWebSocketServer() {
     };
     ws.on("message", (data) => {
       if (rateLimited) return;
+      if(controlBudgetExhausted(session)){void endRealtimeSession('time_limit');return;}
       if (!messageRateGuard.consume("message")) {
         rateLimited = true;
         sendRealtime(buildError("bad_event", "Realtime message rate limit exceeded", {
@@ -299,16 +307,7 @@ export function startWebSocketServer() {
     });
 
     let connectionError = false;
-    let heartbeatAlive = true;
-    ws.on("pong", () => { heartbeatAlive = true; });
-    const heartbeatInterval = setInterval(() => {
-      if (!heartbeatAlive) {
-        ws.terminate();
-        return;
-      }
-      heartbeatAlive = false;
-      ws.ping();
-    }, env.heartbeatIntervalMs);
+    const heartbeatInterval=bindGatewayHeartbeat(ws,env.heartbeatIntervalMs);
     const connectionCleanup = new RealtimeConnectionCleanup({
       session,
       generation,

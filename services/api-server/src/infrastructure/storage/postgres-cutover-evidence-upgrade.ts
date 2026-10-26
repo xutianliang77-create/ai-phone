@@ -1,3 +1,4 @@
+import {validateAppleAccountState} from "./postgres-cutover-apple-validation.js";
 import { createHash } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { Pool } from "pg";
@@ -95,6 +96,7 @@ const migrationValidators: Record<string, (
   "039_agent_voice_turn_scope": validateAgentVoiceTurnScope,
   "040_voice_client_ownership": validateVoiceClientOwnership,
   "041_agent_voice_delivery": validateAgentVoiceDelivery,
+  "042_apple_account_state": validateAppleAccountState,
 };
 
 async function validateAgentVoiceTurnScope(pool: Pick<Pool, "query">) {

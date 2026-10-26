@@ -1,3 +1,6 @@
+import {usesSharedControl,sharedControlClient} from "./shared-control-client.js";
+import {appleEnabled} from "./apple/apple-settings.js";
+import {appleService,appleTokenHash} from "./apple/apple-service.js";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { stableDomainId } from
   "../../infrastructure/storage/postgres-domain-record-uow.js";
@@ -140,6 +143,8 @@ export async function loginWithPhoneCode(
 }
 
 export async function accountFromAuthorization(authorization: string | undefined) {
+  if(usesSharedControl())return sharedControlClient().account(authorization);
+  if(appleEnabled() && authorization?.startsWith("Bearer wj_")) return appleService().authorizeHash(appleTokenHash(authorization.slice(7).trim()));
   const runtime = getRepositoryRuntime();
   if (runtime.driver !== "postgres") return legacy.accountFromAuthorization(authorization);
   const token = parseBearerToken(authorization);

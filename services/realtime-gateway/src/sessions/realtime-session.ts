@@ -26,4 +26,6 @@ export interface RealtimeSession {
   formalRelease?: boolean;
   providerCloseConfirmed?: boolean;
   gatewayReceipt?: string;
+  controlConnectionNonce?:string;
+  controlPreviousNonce?:string;
 }

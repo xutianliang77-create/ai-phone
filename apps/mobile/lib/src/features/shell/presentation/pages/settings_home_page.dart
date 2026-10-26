@@ -27,7 +27,7 @@ class SettingsHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final sessionStore = accountSessionStore ?? const FileAccountSessionStore();
+    final sessionStore = accountSessionStore ?? defaultAccountSessionStore();
     final profile = config.isFormalRelease
         ? ProductCapabilityProfile.coreTranslation
         : capabilityProfile ?? ProductCapabilityProfile.current;
@@ -41,7 +41,7 @@ class SettingsHomePage extends StatelessWidget {
               sessionStore: sessionStore,
               onTap: () => _open(
                 context,
-                AccountPage(sessionStore: sessionStore),
+                AccountPage(sessionStore: sessionStore, config: config),
               ),
             ),
             const SizedBox(height: 20),
@@ -77,9 +77,9 @@ class SettingsHomePage extends StatelessWidget {
               onTap: config.isFormalRelease
                   ? null
                   : () => _open(
-                        context,
-                        MyVoicePage(apiBaseUrl: config.apiBaseUrl),
-                      ),
+                      context,
+                      MyVoicePage(apiBaseUrl: config.apiBaseUrl),
+                    ),
             ),
             if (profile.showVoiceIdentity)
               _SettingsAction(
@@ -115,9 +115,9 @@ class SettingsHomePage extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context, Widget page) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute<void>(builder: (_) => page));
   }
 }
 
@@ -136,9 +136,9 @@ class _ReleaseIdentity extends StatelessWidget {
     final edition = config.region.isDomestic
         ? l10n.domesticEditionStatus
         : l10n.internationalEditionStatus;
-    final detailStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: colors.onSurfaceVariant,
-        );
+    final detailStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
