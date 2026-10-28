@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:translation_mobile/src/features/account/data/account_session_store.dart';
 import 'package:translation_mobile/src/features/billing/data/on_device_subscription_client.dart';
 import 'package:translation_mobile/src/platform/license/on_device_license.dart';
+import 'package:translation_mobile/src/platform/diagnostics/subscription_load_diagnostics.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -193,4 +195,98 @@ void main() {
       expect(methods.where((m) => m == 'finish'), isEmpty);
     },
   );
+  test(
+    'captures the StoreKit failure stage without recording its private message or details',
+    () async {
+      final trace = <Map<String, Object?>>[];
+      messenger.setMockMethodCallHandler(purchase, (call) async {
+        throw PlatformException(
+          code: 'subscription_product_mismatch',
+          message: 'SYNTHETIC_PRIVATE_MESSAGE',
+          details: {'authorization': 'SYNTHETIC_PRIVATE_TOKEN'},
+        );
+      });
+      final c = OnDeviceSubscriptionClient(
+        control: control(),
+        channel: purchase,
+        diagnosticObserver: trace.add,
+      );
+      await expectLater(c.load(), throwsA(isA<PlatformException>()));
+      expect(
+        trace.any(
+          (e) => e['stage'] == 'entitlement' && e['outcome'] == 'completed',
+        ),
+        isTrue,
+      );
+      expect(trace.last['stage'], 'storekit');
+      expect(trace.last['outcome'], 'failed');
+      expect(trace.last['errorCode'], 'subscription_product_mismatch');
+      expect(jsonEncode(trace), isNot(contains('SYNTHETIC_PRIVATE')));
+      expect(jsonEncode(trace), isNot(contains('fixture.monthly')));
+    },
+  );
+
+  test(
+    'a pending StoreKit load leaves its start stage observable without retrying',
+    () async {
+      final trace = <Map<String, Object?>>[];
+      final reached = Completer<void>();
+      final productResult = Completer<Map<String, Object?>>();
+      var calls = 0;
+      messenger.setMockMethodCallHandler(purchase, (call) {
+        calls++;
+        return productResult.future;
+      });
+      final c = OnDeviceSubscriptionClient(
+        control: control(),
+        channel: purchase,
+        diagnosticObserver: (event) {
+          trace.add(event);
+          if (event['stage'] == 'storekit' &&
+              event['outcome'] == 'started' &&
+              !reached.isCompleted) {
+            reached.complete();
+          }
+        },
+      );
+      final loading = c.load();
+      await reached.future.timeout(const Duration(seconds: 1));
+      expect(trace.last['stage'], 'storekit');
+      expect(trace.last['outcome'], 'started');
+      expect(calls, 1);
+      productResult.complete(product());
+      expect((await loading)['product'], isNotNull);
+      expect(trace.last['stage'], 'complete');
+      expect(calls, 1);
+    },
+  );
+
+  test(
+    'diagnostic observer failure never changes a successful product load',
+    () async {
+      messenger.setMockMethodCallHandler(purchase, (_) async => product());
+      final c = OnDeviceSubscriptionClient(
+        control: control(),
+        channel: purchase,
+        diagnosticObserver: (_) =>
+            throw StateError('SYNTHETIC_DIAGNOSTIC_FAILURE'),
+      );
+      expect((await c.load())['product'], isNotNull);
+    },
+  );
+
+  test('unknown platform errors are reduced to an allowlisted category', () {
+    final event = makeSubscriptionLoadEvent(
+      attempt: 1,
+      stage: 'storekit',
+      outcome: 'failed',
+      durationMs: 4,
+      error: PlatformException(
+        code: 'SYNTHETIC_PRIVATE_CODE',
+        message: 'SYNTHETIC_PRIVATE_MESSAGE',
+      ),
+    );
+    expect(event['errorCode'], 'other_platform_error');
+    expect(jsonEncode(event), isNot(contains('SYNTHETIC_PRIVATE')));
+  });
 }

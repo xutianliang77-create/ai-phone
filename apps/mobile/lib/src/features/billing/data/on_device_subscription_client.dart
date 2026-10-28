@@ -1,33 +1,77 @@
 import 'package:flutter/services.dart';
 import '../../account/data/account_scoped_http.dart';
 import '../../../platform/license/on_device_license.dart';
+import '../../../platform/diagnostics/subscription_load_diagnostics.dart';
 
 class OnDeviceSubscriptionClient {
   OnDeviceSubscriptionClient({
     OnDeviceLicenseClient? control,
     MethodChannel? channel,
+    SubscriptionLoadObserver? diagnosticObserver,
   }) : control = control ?? OnDeviceLicenseClient.shared,
        channel =
            channel ??
-           const MethodChannel('translation_mobile/v10_subscription');
+           const MethodChannel('translation_mobile/v10_subscription'),
+       _diagnosticObserver = diagnosticObserver ?? recordSubscriptionLoadEvent;
   final OnDeviceLicenseClient control;
   final MethodChannel channel;
+  final SubscriptionLoadObserver _diagnosticObserver;
   Future<Map<String, Object?>> load() async {
-    final op = await ScopedAccountOperation.capture(control.store);
-    final e = await control.request('/billing/entitlement', operation: op);
-    final product = await channel.invokeMapMethod<String, Object?>('load', {
-      'ownerId': op.original.ownerId,
-    });
-    await op.check();
-    if (product?['productId'] != (e['entitlement'] as Map?)?['productId'] ||
-        product?['validated'] != true ||
-        product?['priceMinorCny'] != 1000 ||
-        product?['currency'] != 'CNY' ||
-        product?['period'] != 'P1M' ||
-        product?['trialDays'] != 7) {
-      throw StateError('subscription_product_mismatch');
+    final attempt = nextSubscriptionLoadAttempt();
+    final watch = Stopwatch()..start();
+    var stage = 'scope';
+    void emit(String outcome, [Object? error]) {
+      try {
+        _diagnosticObserver(
+          makeSubscriptionLoadEvent(
+            attempt: attempt,
+            stage: stage,
+            outcome: outcome,
+            durationMs: watch.elapsedMilliseconds,
+            error: error,
+          ),
+        );
+      } catch (_) {
+        // Diagnostics must never change the product result.
+      }
     }
-    return {...e, 'product': product};
+
+    emit('started');
+    try {
+      final op = await ScopedAccountOperation.capture(control.store);
+      emit('completed');
+      stage = 'entitlement';
+      emit('started');
+      final e = await control.request('/billing/entitlement', operation: op);
+      emit('completed');
+      stage = 'storekit';
+      emit('started');
+      final product = await channel.invokeMapMethod<String, Object?>('load', {
+        'ownerId': op.original.ownerId,
+      });
+      emit('completed');
+      stage = 'scope_recheck';
+      emit('started');
+      await op.check();
+      emit('completed');
+      stage = 'validation';
+      emit('started');
+      if (product?['productId'] != (e['entitlement'] as Map?)?['productId'] ||
+          product?['validated'] != true ||
+          product?['priceMinorCny'] != 1000 ||
+          product?['currency'] != 'CNY' ||
+          product?['period'] != 'P1M' ||
+          product?['trialDays'] != 7) {
+        throw StateError('subscription_product_mismatch');
+      }
+      emit('completed');
+      stage = 'complete';
+      emit('completed');
+      return {...e, 'product': product};
+    } catch (error) {
+      emit('failed', error);
+      rethrow;
+    }
   }
 
   Future<String> purchase({
@@ -66,7 +110,8 @@ class OnDeviceSubscriptionClient {
       'ownerId': owner,
       'serverNowMs': config['serverNowMs'],
     });
-    if (method == 'purchase' && config['licenseAdmission'] != 'configured_open') {
+    if (method == 'purchase' &&
+        config['licenseAdmission'] != 'configured_open') {
       throw StateError('subscription_admission_closed');
     }
     if (method == 'purchase') {

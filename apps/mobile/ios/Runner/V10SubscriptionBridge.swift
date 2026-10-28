@@ -11,6 +11,8 @@ final class V10SubscriptionBridge {
   private let license: V10DeviceLicenseBridge
   private var pending: [String:(Transaction,String)] = [:]
   private var busy = false
+  private var loadAttempt = 0
+  private var loadEvents = [[String:Any]]()
   init(license: V10DeviceLicenseBridge) { self.license = license }
   private var productId: String { Bundle.main.object(forInfoDictionaryKey:"WujieV10SubscriptionProductId") as? String ?? "" }
   func register(messenger: FlutterBinaryMessenger) {
@@ -19,10 +21,57 @@ final class V10SubscriptionBridge {
       catch {result(FlutterError(code:(error as? V10LicenseFailure)?.code ?? "subscription_unavailable",message:"订阅操作未完成，请保留原购买记录并重试同步。",details:nil))}
     }}
   }
-  private func product() async throws -> Product {
-    guard !productId.isEmpty,!productId.contains("$("),let p=try await Product.products(for:[productId]).first,
-      p.id==productId,p.type == .autoRenewable,p.price == Decimal(10),p.priceFormatStyle.currencyCode=="CNY",
-      let s=p.subscription,s.subscriptionPeriod.unit == .month,s.subscriptionPeriod.value==1 else {
+  // QA metadata contains only fixed stages, booleans, bounded counts, and
+  // allowlisted error categories. Never save account, transaction, or errors' userInfo.
+  private func recordLoad(_ attempt:Int?,_ stage:String,started:Double,
+                          flags:[String:Bool] = [:],count:Int? = nil,error:Error? = nil) {
+    guard let attempt,
+      Bundle.main.object(forInfoDictionaryKey:"WujieExecutionMode") as? String == "on_device",
+      Bundle.main.object(forInfoDictionaryKey:"WujieAppAttestEnvironment") as? String == "development",
+      ["load_started","product_config_checked","product_request_started","product_empty",
+       "product_received","eligibility_started","eligibility_finished","trial_checked",
+       "load_completed","load_failed"].contains(stage) else { return }
+    var event:[String:Any] = ["attempt":attempt,"stage":stage,
+      "at":ISO8601DateFormatter().string(from:Date()),
+      "durationMs":Int(min(600000,max(0,(ProcessInfo.processInfo.systemUptime-started)*1000)))]
+    let allowedFlags = ["productConfigured","idMatch","typeMatch","priceMatch","currencyMatch","periodMatch","trialConfigured"]
+    for (key,value) in flags where allowedFlags.contains(key) { event[key]=value }
+    if let count { event["productCount"] = min(3,max(0,count)) }
+    if let error {
+      let code=(error as? V10LicenseFailure)?.code
+      let allowedCodes=["subscription_product_mismatch","subscription_trial_not_configured","storekit_unavailable","device_account_required"]
+      event["errorCode"] = code.flatMap { allowedCodes.contains($0) ? $0 : nil } ?? "subscription_unavailable"
+      let native=error as NSError
+      if ["SKErrorDomain","ASDErrorDomain","AMSErrorDomain","NSURLErrorDomain"].contains(native.domain) {
+        event["nativeErrorDomain"] = native.domain
+        event["nativeErrorCode"] = native.code
+      }
+    }
+    loadEvents.append(event)
+    if loadEvents.count > 30 { loadEvents.removeFirst(loadEvents.count-30) }
+    let payload:[String:Any] = ["build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown",
+      "credentialsRecorded":false,"events":loadEvents]
+    guard let data=try? JSONSerialization.data(withJSONObject:payload),
+      let documents=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask).first else { return }
+    try? data.write(to:documents.appendingPathComponent("wujie-subscription-native-stages.json"),options:.atomic)
+  }
+  private func product(diagnosticAttempt:Int? = nil,started:Double = 0) async throws -> Product {
+    let configured = !productId.isEmpty && !productId.contains("$(")
+    recordLoad(diagnosticAttempt,"product_config_checked",started:started,flags:["productConfigured":configured])
+    guard configured else { throw V10LicenseFailure("subscription_product_mismatch") }
+    recordLoad(diagnosticAttempt,"product_request_started",started:started)
+    let products=try await Product.products(for:[productId])
+    guard let p=products.first else {
+      recordLoad(diagnosticAttempt,"product_empty",started:started,count:products.count)
+      throw V10LicenseFailure("subscription_product_mismatch")
+    }
+    let idMatch=p.id==productId, typeMatch=p.type == .autoRenewable, priceMatch=p.price == Decimal(10),
+      currencyMatch=p.priceFormatStyle.currencyCode=="CNY"
+    let periodMatch=p.subscription.map { $0.subscriptionPeriod.unit == .month && $0.subscriptionPeriod.value==1 } ?? false
+    recordLoad(diagnosticAttempt,"product_received",started:started,
+      flags:["idMatch":idMatch,"typeMatch":typeMatch,"priceMatch":priceMatch,
+             "currencyMatch":currencyMatch,"periodMatch":periodMatch],count:products.count)
+    guard idMatch,typeMatch,priceMatch,currencyMatch,periodMatch else {
       throw V10LicenseFailure("subscription_product_mismatch")
     }
     return p
@@ -40,10 +89,24 @@ final class V10SubscriptionBridge {
       guard let scene=UIApplication.shared.connectedScenes.first(where:{$0.activationState == .foregroundActive}) as? UIWindowScene else{throw V10LicenseFailure("subscription_ui_unavailable")}
       try await AppStore.showManageSubscriptions(in:scene);return [:]
     case "load":
-      let p=try await product(),eligible=await p.subscription!.isEligibleForIntroOffer
-      guard trialConfigured(p) else{throw V10LicenseFailure("subscription_trial_not_configured")}
-      return ["productId":p.id,"displayName":p.displayName,"priceText":p.displayPrice,"priceMinorCny":1000,
-        "currency":"CNY","period":"P1M","trialDays":7,"trialEligible":eligible,"validated":true]
+      loadAttempt += 1
+      let attempt=loadAttempt,started=ProcessInfo.processInfo.systemUptime
+      recordLoad(attempt,"load_started",started:started)
+      do {
+        let p=try await product(diagnosticAttempt:attempt,started:started)
+        recordLoad(attempt,"eligibility_started",started:started)
+        let eligible=await p.subscription!.isEligibleForIntroOffer
+        recordLoad(attempt,"eligibility_finished",started:started)
+        let trial=trialConfigured(p)
+        recordLoad(attempt,"trial_checked",started:started,flags:["trialConfigured":trial])
+        guard trial else{throw V10LicenseFailure("subscription_trial_not_configured")}
+        recordLoad(attempt,"load_completed",started:started)
+        return ["productId":p.id,"displayName":p.displayName,"priceText":p.displayPrice,"priceMinorCny":1000,
+          "currency":"CNY","period":"P1M","trialDays":7,"trialEligible":eligible,"validated":true]
+      } catch {
+        recordLoad(attempt,"load_failed",started:started,error:error)
+        throw error
+      }
     case "purchase":
       guard !busy,let token=a["appAccountToken"] as? String,let uuid=UUID(uuidString:token),
         let now=a["serverNowMs"] as? Int64,a["consentConfirmed"] as? Bool==true else{throw V10LicenseFailure("subscription_consent_required")}
