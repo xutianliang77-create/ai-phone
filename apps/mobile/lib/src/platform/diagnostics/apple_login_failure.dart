@@ -61,7 +61,7 @@ Future<void> recordAppleLoginFailure(
   final safeCode =
       code is String &&
           RegExp(
-            r'^(apple_|d1_|account_|invalid_|public_|deployment_|request_)[a-z0-9_]{1,120}$',
+            r'^(apple_|d1_|v10_|account_|invalid_|public_|deployment_|request_)[a-z0-9_]{1,120}$',
           ).hasMatch(code)
       ? code
       : 'unclassified_error';
@@ -107,7 +107,7 @@ Future<void> recordAppleLoginClientFailure({
   final safeCode =
       code is String &&
           RegExp(
-            r'^(apple_|network_|invalid_|public_|deployment_|request_|account_)[a-z0-9_]{1,120}$',
+            r'^(apple_|v10_|network_|invalid_|public_|deployment_|request_|account_)[a-z0-9_]{1,120}$',
           ).hasMatch(code)
       ? code
       : 'unclassified_error';

@@ -41,7 +41,7 @@ import UIKit
       controlProofBridge.register(messenger:registrar.messenger())
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleAccountBridge") {
-      appleAccountBridge.register(messenger: registrar.messenger(), presenter: { [weak self] in self?.window?.rootViewController })
+      appleAccountBridge.register(messenger: registrar.messenger(), presenter: { registrar.viewController })
     }
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "AudioSessionCoordinator"
@@ -56,7 +56,7 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "OnDeviceTranslationBridge"
     ) {
-      onDeviceTranslationBridge.register(messenger: registrar.messenger(),presenter:{[weak self] in self?.window?.rootViewController})
+      onDeviceTranslationBridge.register(messenger: registrar.messenger(),presenter:{registrar.viewController})
     }
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "SpeechOutputBridge"

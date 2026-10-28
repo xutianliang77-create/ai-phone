@@ -21,4 +21,4 @@ export async function context(env,withAccount=true){
  return {budget,store,account,lifecycle,surface:new D1HttpSurfaceRepository(store,deployment(env))};
 }
 export async function authorize(ctx,request,now){const value=await ctx.account.authorize(request.headers.get('authorization')??undefined,now);
- if(!value)fail('v10_auth_required');return {kind:'customer',id:value.account.id,authorizationEpoch:value.authorizationEpoch,tokenHash:value.tokenHash,account:value.account};}
+ if(!value)fail('v10_auth_required',401);return {kind:'customer',id:value.account.id,authorizationEpoch:value.authorizationEpoch,tokenHash:value.tokenHash,account:value.account};}

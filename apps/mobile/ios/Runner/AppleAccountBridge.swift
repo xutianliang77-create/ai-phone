@@ -11,6 +11,7 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
   private var pending: FlutterResult?
   private var expectedState: String?
   private var controller: ASAuthorizationController?
+  private var authorizationAnchor: ASPresentationAnchor?
   private var presenter: (() -> UIViewController?)?
   func register(messenger: FlutterBinaryMessenger, presenter: @escaping () -> UIViewController?) {
     self.presenter = presenter
@@ -23,14 +24,16 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
       guard pending == nil, let nonce = args["nonce"] as? String, let state = args["state"] as? String,
             let bundle = args["bundleId"] as? String, bundle == Bundle.main.bundleIdentifier,
             !nonce.isEmpty, nonce.count <= 256, !state.isEmpty, state.count <= 256,
-            presenter?()?.view.window != nil else {
+            let anchor = presenter?()?.viewIfLoaded?.window,
+            UIApplication.shared.applicationState == .active,
+            anchor.windowScene?.activationState == .foregroundActive else {
         recordFailure("apple_signin_not_ready")
         result(FlutterError(code:"apple_signin_not_ready",message:nil,details:nil)); return
       }
       let request = ASAuthorizationAppleIDProvider().createRequest()
       request.nonce = nonce // A3 already supplies the exact Apple nonce; do not double hash.
       request.state = state
-      pending = result; expectedState = state
+      pending = result; expectedState = state; authorizationAnchor = anchor
       let c = ASAuthorizationController(authorizationRequests: [request])
       c.delegate = self; c.presentationContextProvider = self; controller = c
       c.performRequests()
@@ -65,7 +68,7 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
   }
   func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
     // performRequests is permitted only with a current foreground window.
-    return presenter?()?.view.window ?? ASPresentationAnchor()
+    return authorizationAnchor ?? ASPresentationAnchor()
   }
   func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
     guard let c = authorization.credential as? ASAuthorizationAppleIDCredential, c.state == expectedState,
@@ -87,7 +90,7 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
     var value: [String:Any] = ["at":ISO8601DateFormatter().string(from:Date()),
       "build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") ?? "unknown",
       "stage":"system_authorization","errorCode":code,"credentialsRecorded":false,
-      "presenterWindowAvailable":presenter?()?.view.window != nil,
+      "presenterWindowAvailable":presenter?()?.viewIfLoaded?.window != nil,
       "applicationState":UIApplication.shared.applicationState.rawValue]
     if let native { value["nativeErrorDomain"] = native.domain; value["nativeErrorCode"] = native.code }
     // No NSError userInfo, message, state, identity token or authorization code.
@@ -96,6 +99,6 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
     try? data.write(to:documents.appendingPathComponent("wujie-apple-signin-native-last.json"),options:.atomic)
   }
   private func complete(_ value: Any?) {
-    let result = pending; pending = nil; expectedState = nil; controller = nil; result?(value)
+    let result = pending; pending = nil; expectedState = nil; controller = nil; authorizationAnchor = nil; result?(value)
   }
 }

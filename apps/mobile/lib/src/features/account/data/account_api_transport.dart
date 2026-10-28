@@ -102,7 +102,7 @@ extension _AccountApiTransport on AccountApiClient {
     String? body,
     required _AccountRequestDeadline deadline,
   }) async {
-    requireOnDeviceControlRequest(baseUrl, 'POST', baseUrl.resolve(path), jsonEncode(body));
+    requireOnDeviceControlRequest(baseUrl, method, baseUrl.resolve(path), body);
     deadline.requireOpen();
     final request = http.AbortableRequest(
       method,
