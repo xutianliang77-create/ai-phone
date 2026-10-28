@@ -28,6 +28,7 @@ final class V10SubscriptionBridge {
     guard let attempt,
       Bundle.main.object(forInfoDictionaryKey:"WujieExecutionMode") as? String == "on_device",
       Bundle.main.object(forInfoDictionaryKey:"WujieAppAttestEnvironment") as? String == "development",
+      Bundle.main.object(forInfoDictionaryKey:"WujieSubscriptionDiagnostics") as? String == "1",
       ["load_started","product_config_checked","product_request_started","product_empty",
        "product_received","eligibility_started","eligibility_finished","trial_checked",
        "load_completed","load_failed"].contains(stage) else { return }
