@@ -155,7 +155,9 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
   }
   private func trialConfigured(_ p:Product) -> Bool {
     guard let offer=p.subscription?.introductoryOffer else{return false}
-    return offer.paymentMode == .freeTrial && offer.period.unit == .week && offer.period.value==1 && offer.periodCount==1
+    let sevenDays=(offer.period.unit == .week && offer.period.value==1) ||
+      (offer.period.unit == .day && offer.period.value==7)
+    return offer.paymentMode == .freeTrial && sevenDays && offer.periodCount==1
   }
   // Only product metadata is recorded. Offer eligibility, account identity,
   // transaction data and raw StoreKit payloads remain excluded.
