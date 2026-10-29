@@ -50,7 +50,7 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
   void _changeSettings(RealtimeRuntimeSettings settings) {
     if (_rejectDeferredFormalSettings(settings)) return;
     if (!_canChangeSettings) {
-      if (_isAutoSpeakOnlyChange(settings)) {
+      if (settings.isAutoSpeakOnlyChangeFrom(_settings)) {
         unawaited(_applyAutoSpeakSetting(settings));
         return;
       }
@@ -64,14 +64,6 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
 
   void _toggleAutoSpeakTranslation(bool enabled) {
     _changeSettings(_settings.copyWith(autoSpeakTranslation: enabled));
-  }
-
-  bool _isAutoSpeakOnlyChange(RealtimeRuntimeSettings settings) {
-    return settings.processingMode == _settings.processingMode &&
-        settings.sourceLanguage == _settings.sourceLanguage &&
-        settings.targetLanguage == _settings.targetLanguage &&
-        settings.voicePresetId == _settings.voicePresetId &&
-        settings.autoSpeakTranslation != _settings.autoSpeakTranslation;
   }
 
   Future<void> _applyAutoSpeakSetting(RealtimeRuntimeSettings settings) async {
@@ -96,7 +88,7 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
   }
 
   bool _rejectDeferredFormalSettings(RealtimeRuntimeSettings settings) {
-    if (!_config.isFormalRelease) return false;
+    if (!_config.isFormalRelease && !_config.onDeviceOnly) return false;
     final supported = settings.isSupportedIn(_config);
     if (!supported) {
       ScaffoldMessenger.of(context).showSnackBar(

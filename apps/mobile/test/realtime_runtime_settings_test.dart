@@ -4,6 +4,15 @@ import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_s
 import 'package:translation_mobile/src/platform/translation/supported_translation_language.dart';
 
 void main() {
+  test('changing the automatic pair cannot pass as a live voice-only toggle', () {
+    const before = RealtimeRuntimeSettings(processingMode: RealtimeProcessingMode.onDevice,
+      sourceLanguage: 'auto',targetLanguage:'auto_reverse',voiceOutputMode:RealtimeVoiceOutputMode.off);
+    expect(before.copyWith(autoSpeakTranslation:true).isAutoSpeakOnlyChangeFrom(before),isTrue);
+    expect(before.copyWith(autoSpeakTranslation:true,automaticPairA:'en',automaticPairB:'zh')
+      .isAutoSpeakOnlyChangeFrom(before),isFalse);
+    expect(before.copyWith(autoSpeakTranslation:true,domainLexiconPack:'medical')
+      .isAutoSpeakOnlyChangeFrom(before),isFalse);
+  });
   test('applies on-device auto reverse settings to app config', () {
     const settings = RealtimeRuntimeSettings(
       processingMode: RealtimeProcessingMode.onDevice,

@@ -92,6 +92,18 @@ class RealtimeRuntimeSettings {
     return voiceOutputMode != RealtimeVoiceOutputMode.off;
   }
 
+  /// The only live settings change is enabling/disabling speech. A changed
+  /// language pair must wait for the old session and its callbacks to stop.
+  bool isAutoSpeakOnlyChangeFrom(RealtimeRuntimeSettings previous) =>
+      processingMode == previous.processingMode &&
+      sourceLanguage == previous.sourceLanguage &&
+      targetLanguage == previous.targetLanguage &&
+      automaticPairA == previous.automaticPairA &&
+      automaticPairB == previous.automaticPairB &&
+      voicePresetId == previous.voicePresetId &&
+      domainLexiconPack == previous.domainLexiconPack &&
+      autoSpeakTranslation != previous.autoSpeakTranslation;
+
   bool get autoReverseTargetLanguage {
     return targetLanguage == autoReverseTargetLanguageCode;
   }
