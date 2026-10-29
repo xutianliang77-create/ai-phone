@@ -27,6 +27,7 @@ Object.assign(env,{DEVICE_APP_ATTEST_APP_ID:env.APPLE_TEAM_ID+'.'+env.PUBLIC_BUN
 parts.forEach((p,i)=>env['PUBLIC_RELEASE_DOCUMENTS_'+(i+1)]=p);
 const transaction={transactionId:'101',originalTransactionId:'100',productId:env.V10_SUBSCRIPTION_PRODUCT_ID,bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',appAccountToken,type:'Auto-Renewable Subscription',inAppOwnershipType:'PURCHASED',purchaseDate:now-1000,expiresDate:now+300000,signedDate:now,currency:'CNY',storefront:'CHN',price:10000};
 const restoreTransaction={...transaction,transactionId:'201',originalTransactionId:'200'};
+const productionTransaction={...transaction,environment:'Production',transactionId:'301',originalTransactionId:'300'};
 let syntheticStatusGets=0,syntheticOcsp=0,externalDenied=0;
 const outbound=async request=>{
  const u=new URL(request.url);
@@ -45,6 +46,10 @@ const outbound=async request=>{
   syntheticStatusGets++;const source=u.pathname.endsWith('/200')?restoreTransaction:transaction;
   const t={...source,signedDate:Date.now()},r={originalTransactionId:source.originalTransactionId,productId:env.V10_SUBSCRIPTION_PRODUCT_ID,environment:'Sandbox',autoRenewStatus:0,signedDate:Date.now()};
   return Response.json({bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',data:[{lastTransactions:[{originalTransactionId:source.originalTransactionId,status:1,signedTransactionInfo:cert.sign(t),signedRenewalInfo:cert.sign(r)}]}]});
+ }
+ if(u.origin==='https://api.storekit.apple.com'&&u.pathname==='/inApps/v1/subscriptions/300'&&request.method==='GET'){
+  syntheticStatusGets++;const t={...productionTransaction,signedDate:Date.now()},r={originalTransactionId:'300',productId:env.V10_SUBSCRIPTION_PRODUCT_ID,environment:'Production',autoRenewStatus:0,signedDate:Date.now()};
+  return Response.json({bundleId:env.PUBLIC_BUNDLE_ID,environment:'Production',appAppleId:6821818845,data:[{lastTransactions:[{originalTransactionId:'300',status:1,signedTransactionInfo:cert.sign(t),signedRenewalInfo:cert.sign(r)}]}]});
  }
  externalDenied++;throw Error('external_network_forbidden');
 };
@@ -110,12 +115,23 @@ try{
  const stop=envelope({domain:'wujie.v10.device-license.close.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),leaseId:a.leaseId,launchNonce:'synthetic-launch',sequence:1,activeMs:5000,issuedAtMs:Date.now(),reason:'ended'});
  const s=await call(open,'/v10/device/close','POST',stop);await call(open,'/v10/device/close','POST',stop);
  expect(s.chargedSeconds===0,'no_minute_charge');
+ if(production){
+  const proof=envelope({domain:'wujie.v10.storekit-proof.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'5'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(productionTransaction),storeKitCurrentEntitlement:false});
+  await call(production,'/billing/subscription/sync','POST',proof);
+  expect((await call(production,'/billing/entitlement')).entitlement.valid===true,'production_signed_entitlement');
+  const prodLedger=(await call(production,'/billing/ledger')).ledger,prodKey=sha(JSON.stringify(['Production',env.PUBLIC_BUNDLE_ID,'301']));
+  expect(prodLedger.length>0&&prodLedger.every(x=>x.transaction_key===prodKey),'only_production_event_visible');
+  const prodRequest=envelope({domain:'wujie.v10.device-license.request.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'6'.repeat(64),launchNonce:'production-launch',profile:config.componentProfile.profile,implementationHash:config.implementationHash,issuedAtMs:Date.now(),operation:'acquire',leaseId:'',sequence:0});
+  const prodLicense=await call(production,'/v10/device/acquire','POST',prodRequest);
+  const prodStop=envelope({domain:'wujie.v10.device-license.close.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),leaseId:prodLicense.leaseId,launchNonce:'production-launch',sequence:1,activeMs:5000,issuedAtMs:Date.now(),reason:'ended'});
+  await call(production,'/v10/device/close','POST',prodStop);
+ }
  const revoked={...transaction,signedDate:Date.now()+1,revocationDate:Date.now()},notification=cert.sign({notificationUUID:'synthetic-refund',notificationType:'REFUND',signedDate:Date.now()+1,data:{bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',signedTransactionInfo:cert.sign(revoked)}});
  await call(open,'/billing/apple/notifications','POST',{signedPayload:notification});await call(open,'/billing/apple/notifications','POST',{signedPayload:notification});
  expect((await db.prepare("SELECT revoked_ms FROM v10_subscription_transactions WHERE chain_key IN (SELECT chain_key FROM v10_subscription_chains WHERE original_transaction_id='100')").first())?.revoked_ms!=null,'refund_recorded');
  expect((await call(open,'/billing/entitlement')).entitlement.valid===true,'other_active_chain_survives_refund');
  const counts={};for(const table of ['v10_device_licenses','v10_device_statistics','v10_subscription_transactions','credit_ledger','credit_reservations'])counts[table]=(await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n;
- expect(counts.v10_device_statistics===1&&counts.credit_ledger===0&&counts.credit_reservations===0,'unique_statistics_no_wallet');
+ expect(counts.v10_device_statistics===(production?2:1)&&counts.credit_ledger===0&&counts.credit_reservations===0,'unique_statistics_no_wallet');
  const secret='Q'.repeat(43),receiptHash=sha('v10-deletion:'+secret);
  await call(open,'/account/delete','POST',{receiptHash});expect((await call(open,'/account/delete','POST',{})).replayed===true,'deletion_ack_replay');
  // The provider is synthetic and D1 is a fresh in-memory database. Advance
