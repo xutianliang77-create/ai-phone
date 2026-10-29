@@ -21,13 +21,33 @@ extension RealtimeControllerTranslationPreflight on RealtimeController {
         );
       }
     }
-    _message = 'On-device translation ready';
+    _message = '离线语言资源已检查';
     if (_config.onDeviceOnly && _autoSpeakTranslation) {
       final speech = _speechOutputProvider;
       if (speech is! SpeechOutputPreparation) throw StateError('本机系统声音未就绪');
       for (final language in const ['zh', 'en']) { await (speech as SpeechOutputPreparation).prepareVoice(language); }
     }
     _notify();
+  }
+
+  Future<void> _warmOnDeviceTranslation(int generation) async {
+    if (!_config.onDeviceOnly) return;
+    final provider = _mobileTranslationProvider;
+    if (provider is! MobileTranslationPreparation) {
+      throw StateError('translation_preparation_unavailable');
+    }
+    _message = '启动翻译模型';
+    _notify();
+    try {
+      for (final config in createOnDeviceTranslationPreflightConfigs(_config)) {
+        if (!_isCurrentStart(generation)) return;
+        await (provider as MobileTranslationPreparation).warmUp(config)
+            .timeout(const Duration(seconds: 30));
+      }
+    } on TimeoutException {
+      await _cancelLocalTranslation();
+      throw StateError('本机翻译启动超时，请重试');
+    }
   }
 }
 

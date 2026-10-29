@@ -26,7 +26,7 @@ void main() {
     messenger.setMockMethodCallHandler(native, null);
     messenger.setMockMethodCallHandler(purchase, null);
   });
-  OnDeviceLicenseClient control({bool rejectSync = false}) {
+  OnDeviceLicenseClient control({bool rejectSync = false, bool active = false}) {
     final store = MemoryAccountSessionStore(
       const AccountSession(
         token: 'synthetic',
@@ -55,7 +55,7 @@ void main() {
           };
         case '/billing/entitlement':
           data = {
-            'entitlement': {'valid': false, 'productId': 'fixture.monthly'},
+            'entitlement': {'valid': active, 'productId': 'fixture.monthly'},
             'appAccountToken': '11111111-1111-1111-1111-111111111111',
           };
         case '/v10/device/configuration':
@@ -153,6 +153,7 @@ void main() {
         }
         expect(c.method, 'finish');
         expect(a['acknowledgedTransactionId'], '101');
+        expect(a['appAccountToken'], '11111111-1111-1111-1111-111111111111');
         return {};
       });
       final c = OnDeviceSubscriptionClient(
@@ -195,6 +196,33 @@ void main() {
       expect(methods.where((m) => m == 'finish'), isEmpty);
     },
   );
+
+  test('an update during purchase shares the in-flight sync and finishes once', () async {
+    final reached = Completer<void>();
+    final purchaseResult = Completer<Map<String, Object?>>();
+    final methods = <String>[];
+    messenger.setMockMethodCallHandler(purchase, (c) async {
+      methods.add(c.method);
+      if (c.method == 'load') return product();
+      if (c.method == 'purchase') {
+        reached.complete();
+        return purchaseResult.future;
+      }
+      if (c.method == 'finish') return {};
+      throw StateError('unexpected ${c.method}');
+    });
+    final c = OnDeviceSubscriptionClient(control: control(), channel: purchase);
+    final initiated = c.purchase(trialEligible: true, consent: true);
+    await reached.future;
+    final observed = c.recoverPending();
+    await Future<void>.delayed(Duration.zero);
+    purchaseResult.complete({'status': 'success', 'proofs': [
+      {'transactionId': '101', 'envelope': {'clientData': 'fixture', 'deviceSignature': 'fixture'}}
+    ]});
+    expect(await initiated, 'success');
+    expect(await observed, 'success');
+    expect(methods, ['load', 'purchase', 'finish']);
+  });
   test(
     'captures the StoreKit failure stage without recording its private message or details',
     () async {
@@ -260,6 +288,52 @@ void main() {
       expect(calls, 1);
     },
   );
+
+  test('timed out retries share the unfinished StoreKit request', () async {
+    final result = Completer<Map<String, Object?>>();
+    final trace = <Map<String,Object?>>[];
+    var nativeCalls = 0;
+    messenger.setMockMethodCallHandler(purchase, (_) {
+      nativeCalls++;
+      return result.future;
+    });
+    final c = OnDeviceSubscriptionClient(
+      control: control(), channel: purchase,
+      storeKitTimeout: const Duration(milliseconds: 20),
+      diagnosticObserver: trace.add,
+    );
+    await expectLater(c.load(), throwsA(isA<TimeoutException>()));
+    await expectLater(c.load(), throwsA(isA<TimeoutException>()));
+    expect(nativeCalls, 1);
+    final starts=trace.where((e)=>e['stage']=='storekit'&&e['outcome']=='started').toList();
+    expect(starts.length,2);
+    expect(starts[0]['requestId'],isNot(starts[1]['requestId']));
+    expect(starts[0]['nativeRequestId'],starts[1]['nativeRequestId']);
+    result.complete(product());
+    await Future<void>.delayed(Duration.zero);
+    messenger.setMockMethodCallHandler(purchase, (_) async { nativeCalls++; return product(); });
+    expect((await c.load())['product'], isNotNull);
+    expect(nativeCalls, 2);
+  });
+
+  test('clearing a declined approval is explicit and never purchases again', () async {
+    final methods=<String>[];
+    messenger.setMockMethodCallHandler(purchase, (call) async {
+      methods.add(call.method);
+      if (call.method=='pending') return {'status':'restored','proofs':[]};
+      if (call.method=='clearPendingApproval') return {'status':'cleared'};
+      throw StateError('unexpected purchase');
+    });
+    final c=OnDeviceSubscriptionClient(control:control(),channel:purchase);
+    await expectLater(c.clearPendingApproval(userConfirmedDecline:false),throwsArgumentError);
+    expect(methods,isEmpty);
+    expect(await c.clearPendingApproval(userConfirmedDecline:true),'cleared');
+    expect(methods,['pending','clearPendingApproval']);
+    methods.clear();
+    final active=OnDeviceSubscriptionClient(control:control(active:true),channel:purchase);
+    await expectLater(active.clearPendingApproval(userConfirmedDecline:true),throwsStateError);
+    expect(methods,['pending']);
+  });
 
   test(
     'diagnostic observer failure never changes a successful product load',

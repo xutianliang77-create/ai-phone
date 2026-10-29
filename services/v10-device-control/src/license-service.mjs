@@ -43,8 +43,17 @@ export class DeviceLicenseService{
    componentProfile:PROFILE,implementationHash:IMPLEMENTATION_HASH,allowedLanguages:['zh','en']};
   const token=signLicense(claims,this.config.signingKeyId,this.config.signingKeyPem),receipt={leaseId,sequence,license:token,expiresAtMs:end,notBeforeMs:starts,entitlementStatus:entitlement.status};
   const c=command('v10-license:'+requestId,actor.id,'v10.device-license.'+b.operation,{dataHash:p.dataHash},now);
+  const statusFence=this.config.requireFreshStatus
+   ? "s.status IN(1,4) AND s.verified_ms>? AND s.verified_ms<=?"
+   : "(s.status IS NULL OR s.status IN(1,4))";
+  const statusArgs=this.config.requireFreshStatus?[now-60000,now]:[];
   const statements=[assertion(c,'request_not_cancelled',"NOT EXISTS(SELECT 1 FROM v10_device_license_cancellations WHERE request_key=?)",requestId),activeAccount(c,actor.authorizationEpoch),assertion(c,'auth_token',"EXISTS(SELECT 1 FROM account_tokens WHERE token_hash=? AND user_id=? AND revoked_ms IS NULL AND expires_ms>? AND authorization_epoch=?)",actor.tokenHash,actor.id,now,actor.authorizationEpoch),
-   assertion(c,'entitlement_current',"EXISTS(SELECT 1 FROM v10_subscription_transactions WHERE transaction_key=? AND owner_id=? AND revoked_ms IS NULL AND starts_ms<=? AND expires_ms>=?)",entitlement.transactionKey,actor.id,starts,end)];
+   assertion(c,'entitlement_current',`EXISTS(SELECT 1 FROM v10_subscription_transactions t
+    LEFT JOIN v10_subscription_status s ON s.chain_key=t.chain_key
+    WHERE t.transaction_key=? AND t.owner_id=? AND t.revoked_ms IS NULL AND t.starts_ms<=?
+    AND ${statusFence}
+    AND (t.expires_ms>=? OR (s.status=4 AND s.grace_expires_ms>=? AND s.verified_ms>? AND s.verified_ms<=?)))`,
+    entitlement.transactionKey,actor.id,starts,...statusArgs,end,end,now-60000,now)];
   if(replaced)statements.push(assertion(c,'same_device_replacement',"EXISTS(SELECT 1 FROM v10_device_licenses WHERE lease_id=? AND owner_id=? AND device_key_hash=? AND launch_nonce=?)",replaced.lease_id,actor.id,p.keyHash,replaced.launch_nonce),sql("UPDATE v10_device_licenses SET state='closed',updated_ms=? WHERE lease_id=?",now,replaced.lease_id));
   if(current){statements.push(assertion(c,'license_sequence',"EXISTS(SELECT 1 FROM v10_device_licenses WHERE lease_id=? AND state='active' AND sequence=? AND expires_ms=?)",leaseId,current.sequence,current.expires_ms),
    sql("UPDATE v10_device_licenses SET sequence=?,starts_ms=?,expires_ms=?,entitlement_key=?,entitlement_revision=?,updated_ms=? WHERE lease_id=? AND sequence=?",sequence,starts,end,entitlement.transactionKey,entitlement.revisionHash,now,leaseId,current.sequence));

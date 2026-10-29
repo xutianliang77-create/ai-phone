@@ -82,7 +82,7 @@ extension RealtimeControllerSpeech on RealtimeController {
     final backlogId = _config.onDeviceOnly ? _speechBacklog.enqueue(normalizedText, targetLanguage) : null;
     _armSpeechBacklog();
     if (_config.onDeviceOnly && backlogId == null) {
-      _message = '朗读等待超过8秒，已暂停自动朗读，字幕已保留。关闭后重新开启朗读可从当前继续。'; _notify(); return;
+      _message = '朗读排队过长，已暂停自动朗读，字幕已保留。关闭后重新开启朗读可从当前继续。'; _notify(); return;
     }
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
       if (generation != _speechGeneration) { if (backlogId != null) _speechBacklog.discard(backlogId); return null; }
@@ -91,7 +91,10 @@ extension RealtimeControllerSpeech on RealtimeController {
       }
       _armSpeechBacklog();
       final elapsed = Stopwatch()..start();
-      return _speakWithTimeout(speaker, normalizedText, targetLanguage).whenComplete(() {
+      final playback = _config.onDeviceOnly
+          ? _speakChunks(speaker, normalizedText, targetLanguage, generation)
+          : _speakWithTimeout(speaker, normalizedText, targetLanguage).then<void>((_) {});
+      return playback.whenComplete(() {
         if (backlogId != null) _speechBacklog.finish(backlogId, speakingMs: elapsed.elapsedMilliseconds.toDouble());
         _armSpeechBacklog();
       });
@@ -110,12 +113,23 @@ extension RealtimeControllerSpeech on RealtimeController {
     });
   }
 
-  Future<void> _speakWithTimeout(
+  Future<void> _speakChunks(SpeechOutputProvider speaker,String text,
+      String language,int generation) async {
+    // The backlog retains the full subtitle; punctuation chunks are played in
+    // order so an ordinary long utterance is not cut at a fixed 30-second cap.
+    for (final chunk in speechPlaybackChunks(text)) {
+      if (generation != _speechGeneration || _status != RealtimeStatus.active) return;
+      if (!await _speakWithTimeout(speaker,chunk,language)) return;
+    }
+  }
+
+  Future<bool> _speakWithTimeout(
     SpeechOutputProvider speaker,
     String text,
     String language,
   ) async {
     final generation = _speechGeneration;
+    var completed=true;
     await _recordDeviceAsrDiagnosticEvent(
       'tts.begin',
       payload: <String, Object?>{
@@ -133,11 +147,13 @@ extension RealtimeControllerSpeech on RealtimeController {
             _speechTimeoutFor(text),
           );
     } on TimeoutException catch (error) {
+      completed=false;
       await ignoreCleanupError(speaker.stop);
       if (generation == _speechGeneration) {
         _reportSpeechFailure(error, '语音播放超时');
       }
     } on Object catch (error) {
+      completed=false;
       if (generation == _speechGeneration) {
         _reportSpeechFailure(error, '语音播放失败');
       }
@@ -157,13 +173,19 @@ extension RealtimeControllerSpeech on RealtimeController {
         );
       }
     }
+    return completed && generation == _speechGeneration;
   }
 
   Duration _speechTimeoutFor(String text) {
     final configured = _speechOutputTimeout;
     if (configured != null) return configured;
-    final estimatedMs = 5000 + text.runes.length * 220;
-    return Duration(milliseconds: estimatedMs.clamp(8000, 30000).toInt());
+    if (!_config.onDeviceOnly) {
+      return Duration(milliseconds:(5000+text.runes.length*220).clamp(8000,30000).toInt());
+    }
+    // Allow long natural speech to finish; a stuck synthesizer is still bounded.
+    // The native license and explicit stop remain authoritative.
+    final estimatedMs = 5000 + text.runes.length * 1000;
+    return Duration(milliseconds: estimatedMs.clamp(8000, 1800000).toInt());
   }
 
   Future<void> _stopSpeaking() async {

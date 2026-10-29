@@ -110,13 +110,17 @@ final class V10DeviceLicenseBridge: NSObject, FlutterStreamHandler {
     default:throw V10LicenseFailure("device_license_method")
     }
   }
-  func signedStoreKit(owner: String,jws: String,currentEntitlement: Bool,serverNowMs: Int64) async throws -> [String:Any] {
+  func signedStoreKit(owner: String,jws: String,currentEntitlement: Bool,serverNowMs: Int64,userInitiatedRestore:Bool = false,targetAccountToken:String? = nil) async throws -> [String:Any] {
     // This method is internal to the verified StoreKit bridge, never exposed as
     // an arbitrary Dart byte-signing API.
     try await setup(owner);guard let identity else {throw V10LicenseFailure("device_account_required")}
-    let body:[String:Any]=["domain":"wujie.v10.storekit-proof.v1","ownerId":owner,"deploymentId":deployment,
+    var body:[String:Any]=["domain":"wujie.v10.storekit-proof.v1","ownerId":owner,"deploymentId":deployment,
       "devicePublicKey":identity.publicKey,"requestKey":V10DeviceLicenseGuard.hex(Data(UUID().uuidString.utf8)),
       "issuedAtMs":try observedServerTime(),"signedTransactionInfo":jws,"storeKitCurrentEntitlement":currentEntitlement]
+    if userInitiatedRestore && currentEntitlement {
+      guard let token=targetAccountToken,UUID(uuidString:token) != nil else{throw V10LicenseFailure("subscription_account_mismatch")}
+      body["userInitiatedRestore"]=true;body["targetAccountToken"]=token.lowercased()
+    }
     return try signed(body,identity:identity)
   }
   private func observedServerTime() throws -> Int64 {

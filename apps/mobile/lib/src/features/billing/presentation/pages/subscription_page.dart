@@ -24,6 +24,11 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     body: FutureBuilder<Map<String, Object?>>(
       future: _future,
       builder: (context, snapshot) {
+        // FutureBuilder may retain the previous error while a new future is
+        // waiting. Never show an enabled retry button for that old result.
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
         if (snapshot.hasError) {
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -51,6 +56,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             e = d['entitlement'] as Map,
             p = d['product'] as Map;
         final eligible = p['trialEligible'] == true, end = e['expiresAtMs'];
+        final pendingApproval = p['pendingApproval'] == true;
         final needsSync = const [
           'verification_required',
           'billing_retry',
@@ -97,14 +103,20 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   : '此 Apple 账号当前不享有免费试用。确认后按人民币10元/月订阅，并由 Apple 自动续期。',
             ),
             const Text('取消续订不会立即取消已获得的有效期。实际收费及到期时间以 Apple 确认页和已验证交易为准。'),
+            if (pendingApproval)
+              const Text('Apple 正在处理先前的订阅请求，请勿重复购买；完成后会自动同步。若长时间未处理，请在 Apple 订阅管理中核查。'),
+            if (pendingApproval)
+              TextButton(onPressed: _busy ? null : _confirmDeclined, child: const Text('Apple 已拒绝该请求')),
             const SizedBox(height: 12),
             FilledButton(
-              onPressed: _busy || e['valid'] == true || needsSync
+              onPressed: _busy || e['valid'] == true || needsSync || pendingApproval
                   ? null
                   : () => _purchase(eligible),
               child: Text(
                 _busy
                     ? '正在处理…'
+                    : pendingApproval
+                    ? '等待 Apple 处理'
                     : needsSync
                     ? '请先同步或恢复购买'
                     : eligible
@@ -149,7 +161,11 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     ),
   );
   void _reload() {
-    if (mounted) setState(() => _future = _client.load());
+    if (mounted) {
+      setState(() {
+        _future = _client.load();
+      });
+    }
   }
 
   Future<void> _purchase(bool eligible) async {
@@ -180,6 +196,17 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     );
   }
 
+  Future<void> _confirmDeclined() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+      title: const Text('确认 Apple 已拒绝该请求'),
+      content: const Text('Apple 可能不会将拒绝结果通知 App。请先确认该请求确已被拒绝；若判断错误，先前请求仍可能完成。确认只清除等待状态，不会自动购买。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(c,false), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(c,true), child: const Text('已确认拒绝'))],
+    ));
+    if (confirmed != true || !mounted) return;
+    await _action(() => _client.clearPendingApproval(userConfirmedDecline: true));
+  }
+
   Future<void> _action(Future<String> Function() action) async {
     if (_busy) return;
     setState(() {
@@ -193,6 +220,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         _message = switch (status) {
           'cancelled' => '已取消，未开始新的订阅。',
           'pending' => '等待 Apple 处理，请勿重复购买。',
+          'cleared' => '已清除等待状态；如需订阅，请重新确认购买。',
           _ => '已同步，请核对订阅状态。',
         };
         _future = _client.load();

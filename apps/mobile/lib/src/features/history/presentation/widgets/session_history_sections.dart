@@ -186,6 +186,7 @@ class _SessionRecordTile extends StatelessWidget {
             : '${session.speakerCount} people')
         : null;
     return <String>[
+      if (session.status == 'recoverable') chinese ? '本机快照' : 'Local snapshot',
       direction,
       _duration(session.consumedSeconds, chinese),
       if (people != null) people,

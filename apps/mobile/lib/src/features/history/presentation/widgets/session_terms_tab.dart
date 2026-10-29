@@ -10,6 +10,7 @@ class SessionTermsTab extends StatelessWidget {
     required this.pendingTermKeys,
     required this.onConfirm,
     required this.onRevoke,
+    this.isLocal = false,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class SessionTermsTab extends StatelessWidget {
   final Set<String> pendingTermKeys;
   final ValueChanged<SessionTermSuggestion> onConfirm;
   final ValueChanged<SessionTermSuggestion> onRevoke;
+  final bool isLocal;
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +27,12 @@ class SessionTermsTab extends StatelessWidget {
       return Center(child: Text(context.l10n.noTerms));
     }
     return ListView.builder(
-      itemCount: terms.length,
+      itemCount: terms.length + (isLocal ? 1 : 0),
       itemBuilder: (context, index) {
-        final term = terms[index];
+        if (isLocal && index == 0) {
+          return const ListTile(title: Text('术语保存在本机，暂不自动应用于翻译。'));
+        }
+        final term = terms[index - (isLocal ? 1 : 0)];
         final key = sessionTermKey(term);
         final isConfirmed = confirmedTermIds.containsKey(key);
         final isPending = pendingTermKeys.contains(key);

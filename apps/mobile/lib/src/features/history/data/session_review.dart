@@ -71,6 +71,12 @@ class SessionTermSuggestion {
 SessionReview buildSessionReview(SessionDetail detail) {
   final serverReview = _serverReview(detail.reviewJson);
   if (serverReview != null) return serverReview;
+  return buildExtractiveSessionReview(detail);
+}
+
+/// Extracts existing lines without sending text to a model or inventing
+/// decisions. The result is a local excerpt, not an AI meeting summary.
+SessionReview buildExtractiveSessionReview(SessionDetail detail) {
   final textPairs = detail.segments
       .where((segment) =>
           segment.sourceText.trim().isNotEmpty ||

@@ -93,4 +93,19 @@ void main() {
 
     expect(protected.restore('There are many items.'), isNull);
   });
+
+  test('rejects duplicated or invented markers instead of publishing them', () {
+    final protected = protectTranslationText(
+      '订单A120共947件',
+      const MobileTranslationConfig(sourceLanguage: 'zh', targetLanguage: 'en'),
+    );
+    expect(
+      protected.restore('Order XTLKEEP0QXZ XTLKEEP0QXZ has XTLKEEP1QXZ units.'),
+      isNull,
+    );
+    expect(
+      protected.restore('Order XTLKEEP0QXZ has XTLKEEP1QXZ units XTLKEEP999QXZ.'),
+      isNull,
+    );
+  });
 }

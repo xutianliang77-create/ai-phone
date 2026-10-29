@@ -16,13 +16,33 @@ export class AppleSubscriptionStatus {
    for(const group of body.data??[])for(const item of group.lastTransactions??[]){
     if(item.originalTransactionId!==chain.original_transaction_id)continue;
     if(found||![1,2,3,4,5].includes(item.status))fail('v10_apple_status_binding');found=true;
-    const t=this.verifier.transaction(item.signedTransactionInfo,now),r=this.verifier.renewal(item.signedRenewalInfo,t,now);
-    if(t.originalTransactionId!==chain.original_transaction_id||t.signedAtMs<now-300000||r.signedDate<now-300000)fail('v10_apple_status_stale');
+    const t=await this.verifier.transaction(item.signedTransactionInfo,now),r=await this.verifier.renewal(item.signedRenewalInfo,t,now);
+    // signedDate is when Apple signed this transaction, not when this
+    // authenticated status response was fetched. The repository still fences
+    // older signed revisions and records the fresh verification time below.
+    if(t.originalTransactionId!==chain.original_transaction_id)fail('v10_apple_status_binding');
     await this.subscriptions.sync({id:owner,kind:'system'},t,{},now,'apple_status');
     await this.record(owner,chain.chain_key,item.status,r,now,hash([t.payloadHash,r]));
    }
    if(!found)fail('v10_apple_status_missing');
   }
+ }
+ // A restore across accounts must use a fresh response from the authenticated
+ // Apple status API, not the age or validity of a client-provided JWS alone.
+ async activeRestoreEvidence(originalTransactionId,now){
+  const body=await this.read(originalTransactionId,now);
+  if(body.bundleId!==this.config.bundleId||body.environment!==this.config.environment||
+   (this.config.environment==='Production'&&body.appAppleId!==this.config.appAppleId))fail('v10_apple_status_binding',403);
+  const matches=[];
+  for(const group of body.data??[])for(const item of group.lastTransactions??[])
+   if(item.originalTransactionId===originalTransactionId)matches.push(item);
+  if(matches.length!==1||![1,4].includes(matches[0].status))fail('v10_restore_entitlement_not_active',403);
+  const item=matches[0],t=await this.verifier.transaction(item.signedTransactionInfo,now),
+   renewal=await this.verifier.renewal(item.signedRenewalInfo,t,now);
+  if(t.originalTransactionId!==originalTransactionId||t.revokedAtMs!==null||t.startsAtMs>now||
+    !(t.expiresAtMs>now||(item.status===4&&Number.isSafeInteger(renewal.gracePeriodExpiresDate)&&renewal.gracePeriodExpiresDate>now)))
+   fail('v10_restore_entitlement_not_active',403);
+  return {transaction:t,renewal,status:item.status,verifiedAtMs:now};
  }
  async record(owner,chain,status,r,now,payloadHash){
   const c=command('v10-status:'+hash([chain,payloadHash,status,now]),owner,'v10.subscription.status',{chain,payloadHash,status},now);

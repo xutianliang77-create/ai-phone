@@ -1,6 +1,17 @@
 part of 'account_api_client.dart';
 
 extension _AccountApiTransport on AccountApiClient {
+  Future<Map<String,Object?>> _getDeletionStatus(String secret) async {
+    if(!onDeviceExecution||!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(secret)) {
+      throw const FormatException('invalid_deletion_receipt');
+    }
+    const path='/account/delete/status';
+    final response=await _send(path,(deadline) async {
+      await _verifyIdentity(path,'GET',deadline.remaining);
+      return _boundRequest('GET',path,{'authorization':'DeletionReceipt $secret'},deadline:deadline);
+    });
+    return _decode(response,path);
+  }
   Future<ScopedAccountOperation> _currentToken(String token) async {
     final op = await ScopedAccountOperation.capture(createSessionStore());
     if (op.original.token != token) throw const AccountAuthRequiredException();

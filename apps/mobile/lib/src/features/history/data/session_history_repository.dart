@@ -37,6 +37,10 @@ class SessionHistoryRepository {
   final LocalSessionStore? _localStore;
   final FileShareService _shareService;
   final DateTime Function() _now;
+  bool get isLocal => _localStore != null;
+
+  Future<List<TermbaseTerm>> localTerms() =>
+      _localStore?.listLocalTerms() ?? Future.value(const []);
 
   Future<List<SessionListItem>> listSessions({String query = ''}) {
     final localStore = _localStore;
@@ -106,7 +110,7 @@ class SessionHistoryRepository {
 
   Future<SessionDetail> generateReview(String sessionId) {
     final localStore = _localStore;
-    if (localStore != null) return localStore.getSession(sessionId);
+    if (localStore != null) return localStore.generateLocalReview(sessionId);
     return _apiClient!.generateReview(sessionId);
   }
 
@@ -140,14 +144,9 @@ class SessionHistoryRepository {
     required String translatedText,
   }) {
     if (_localStore != null) {
-      return Future.value(TermbaseTerm(
-        id: 'local_${sourceText.hashCode}_${translatedText.hashCode}',
-        sourceText: sourceText,
-        translatedText: translatedText,
-        sourceLanguage: _detectLanguage(sourceText),
-        targetLanguage: _detectLanguage(translatedText),
-        status: 'active',
-      ));
+      return _localStore.confirmLocalTerm(
+        sessionId: sessionId, sourceText: sourceText, translatedText: translatedText,
+        sourceLanguage: _detectLanguage(sourceText), targetLanguage: _detectLanguage(translatedText));
     }
     return _apiClient!.confirmTerm(
       sessionId: sessionId,
@@ -157,16 +156,7 @@ class SessionHistoryRepository {
   }
 
   Future<TermbaseTerm> revokeTerm(String termId) {
-    if (_localStore != null) {
-      return Future.value(TermbaseTerm(
-        id: termId,
-        sourceText: '',
-        translatedText: '',
-        sourceLanguage: 'zh',
-        targetLanguage: 'en',
-        status: 'revoked',
-      ));
-    }
+    if (_localStore != null) return _localStore.revokeLocalTerm(termId);
     return _apiClient!.revokeTerm(termId);
   }
 

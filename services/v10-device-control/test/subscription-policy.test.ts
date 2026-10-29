@@ -14,6 +14,15 @@ it('has no seconds balance prerequisite for an active period, and ends at equali
  expect(currentEntitlement([row],now)).toMatchObject({valid:true,status:'trialing'});expect(currentEntitlement([row],now+1).valid).toBe(false);
  expect(currentEntitlement([{...row,revoked_ms:now}],now)).toMatchObject({valid:false,status:'revoked'});
 });
+it('honors a verified billing grace deadline and stops exactly when it ends',()=>{
+ const row={transaction_key:'t1',period_kind:'paid',starts_ms:now-10000,expires_ms:now-1,
+  signed_ms:now-1000,revoked_ms:null,apple_status:4,status_verified_ms:now,grace_expires_ms:now+1000};
+ expect(currentEntitlement([row],now)).toMatchObject({valid:true,status:'grace',expiresAtMs:now+1000});
+ expect(currentEntitlement([row],now+1000).valid).toBe(false);
+ expect(currentEntitlement([{...row,status_verified_ms:now-60000}],now).valid).toBe(false);
+ expect(currentEntitlement([{...row,apple_status:1}],now).valid).toBe(false);
+ expect(currentEntitlement([{...row,revoked_ms:now}],now).valid).toBe(false);
+});
 it('rejects wrong SKU, environment, currency and invalid intervals before ledger changes',()=>{
  for(const patch of [{productId:'other'},{environment:'Production'},{currency:'USD'},{expiresDate:now-2000},{price:0}])expect(()=>normalizeTransaction({...base,...patch},config,now)).toThrow();
 });

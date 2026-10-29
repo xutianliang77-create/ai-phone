@@ -32,7 +32,7 @@ class LicensedLocalOcr implements MobileOcrProvider {
 }
 
 class LicensedLocalTranslation
-    implements MobileTranslationProvider, MobileTranslationDiagnostics {
+    implements MobileTranslationProvider, MobileTranslationDiagnostics, MobileTranslationCancellation, MobileTranslationPreparation {
   LicensedLocalTranslation(this.delegate, {OnDeviceLicense? license})
     : license = license ?? OnDeviceLicenseClient.shared;
   final MobileTranslationProvider delegate;
@@ -55,6 +55,16 @@ class LicensedLocalTranslation
   Future<MobileTranslationAvailability> availability(
     MobileTranslationConfig config,
   ) => (delegate as MobileTranslationDiagnostics).availability(config);
+  @override
+  Future<void> cancelPending() => delegate is MobileTranslationCancellation
+      ? (delegate as MobileTranslationCancellation).cancelPending() : Future.value();
+  @override
+  Future<void> warmUp(MobileTranslationConfig config) async {
+    await license.ensureValid();
+    final provider = delegate;
+    if (provider is! MobileTranslationPreparation) throw StateError('translation_preparation_unavailable');
+    await (provider as MobileTranslationPreparation).warmUp(config);
+  }
   @override
   Future<void> dispose() => delegate.dispose();
 }

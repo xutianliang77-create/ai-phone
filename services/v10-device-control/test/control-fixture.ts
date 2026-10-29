@@ -8,7 +8,7 @@ import {LEASE_DOMAIN,PROFILE} from '../src/common.mjs';
 import {IMPLEMENTATION_HASH} from '../src/component-profile.mjs';
 export {now};
 export function setup(){
- const f=new Fixture();for(const name of ['0002_http_surface.sql','0006_apple_billing_events.sql','0009_device_permits.sql','0011_device_subscriptions.sql'])f.db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ const f=new Fixture();for(const name of ['0002_http_surface.sql','0006_apple_billing_events.sql','0009_device_permits.sql','0011_device_subscriptions.sql','0012_account_deletion_recovery.sql','0013_subscription_restore.sql','0014_account_deletion_receipts.sql','0015_deletion_status_capabilities.sql'])f.db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
  const signer=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),config={deploymentId:'wujie-v10-device-fixture',bundleId:'com.example.phone',environment:'Sandbox',productId:'fixture.monthly',admissionOpen:true,signingKeyId:'fixture',signingKeyPem:signer.privateKey.export({type:'pkcs8',format:'pem'}).toString()};
  async function owner(id:string){
   const user=f.seedUser(id),device=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),jwk=device.publicKey.export({format:'jwk'}),raw=Buffer.concat([Buffer.from([4]),Buffer.from(jwk.x!,'base64url'),Buffer.from(jwk.y!,'base64url')]);

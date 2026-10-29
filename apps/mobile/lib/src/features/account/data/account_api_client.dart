@@ -244,6 +244,14 @@ class AccountApiClient {
     return AccountProfile.fromJson(response['account'] as Map<String, Object?>);
   }
 
+  Future<AccountProfile> requestDeviceDeletion(String token,{required String receiptHash}) async {
+    if(!RegExp(r'^[a-f0-9]{64}$').hasMatch(receiptHash)) throw ArgumentError('invalid_deletion_receipt');
+    final response=await _post('/account/delete',{'receiptHash':receiptHash},token:token);
+    return AccountProfile.fromJson(response['account'] as Map<String,Object?>);
+  }
+
+  Future<Map<String,Object?>> deletionStatus(String secret) => _getDeletionStatus(secret);
+
   Future<void> recordConsent({
     required String token,
     required String consentType,

@@ -2,6 +2,7 @@ import Flutter
 import AuthenticationServices
 import Security
 import UIKit
+import LocalAuthentication
 
 /// Uses the current public application's Keychain namespace, never a shared
 /// access group or the private application's files. No password/API-key logging.
@@ -20,6 +21,16 @@ final class AppleAccountBridge: NSObject, ASAuthorizationControllerDelegate, ASA
   }
   private func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     guard let args = call.arguments as? [String: Any] else { result(FlutterError(code:"invalid_account_request",message:nil,details:nil)); return }
+    if call.method == "authenticateLegacyRecords" {
+      let context=LAContext()
+      guard context.canEvaluatePolicy(.deviceOwnerAuthentication,error:nil) else {
+        result(FlutterError(code:"device_authentication_unavailable",message:nil,details:nil));return
+      }
+      context.evaluatePolicy(.deviceOwnerAuthentication,localizedReason:"验证手机解锁身份以查看未绑定账号的旧记录。") { success,_ in
+        DispatchQueue.main.async { result(success) }
+      }
+      return
+    }
     if call.method == "signIn" {
       guard pending == nil, let nonce = args["nonce"] as? String, let state = args["state"] as? String,
             let bundle = args["bundleId"] as? String, bundle == Bundle.main.bundleIdentifier,

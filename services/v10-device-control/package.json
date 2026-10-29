@@ -1,1 +1,1 @@
-{"name":"@wujie/v10-device-control","version":"0.1.0","private":true,"type":"module","description":"Phone-only v10 Apple account, subscription entitlement and device licence control"}
+{"name":"@wujie/v10-device-control","version":"0.1.0","private":true,"type":"module","description":"Phone-only v10 Apple account, subscription entitlement and device licence control","dependencies":{"asn1js":"3.0.6","pkijs":"3.4.0"},"devDependencies":{"esbuild":"0.28.1"}}

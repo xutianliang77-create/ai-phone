@@ -46,12 +46,36 @@ class OwnedLocalSessionStore extends LocalSessionStore {
   Future<SessionDetail> getSession(String sessionId) =>
       _run((s) => s.getSession(sessionId));
   @override
+  Future<SessionDetail> generateLocalReview(String sessionId) =>
+      _run((s) => s.generateLocalReview(sessionId));
+  @override
+  Future<List<TermbaseTerm>> listLocalTerms() => _run((s) => s.listLocalTerms());
+  @override
+  Future<TermbaseTerm> confirmLocalTerm({required String sessionId, required String sourceText,
+    required String translatedText, required String sourceLanguage, required String targetLanguage}) =>
+      _run((s) => s.confirmLocalTerm(sessionId: sessionId, sourceText: sourceText,
+        translatedText: translatedText, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage));
+  @override
+  Future<TermbaseTerm> revokeLocalTerm(String id) => _run((s) => s.revokeLocalTerm(id));
+  @override
   Future<void> saveEndedSession({
     required String sessionId,
     required DateTime createdAt,
     required List<SubtitleSegment> segments,
   }) => _run(
     (s) => s.saveEndedSession(
+      sessionId: sessionId,
+      createdAt: createdAt,
+      segments: segments,
+    ),
+  );
+  @override
+  Future<void> saveRecoverableSession({
+    required String sessionId,
+    required DateTime createdAt,
+    required List<SubtitleSegment> segments,
+  }) => _run(
+    (s) => s.saveRecoverableSession(
       sessionId: sessionId,
       createdAt: createdAt,
       segments: segments,

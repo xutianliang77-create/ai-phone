@@ -17,10 +17,12 @@ export function normalizeTransaction(p,config,now){
 }
 export function uuid(v){return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);}
 export function currentEntitlement(rows,now){
- const active=rows.filter(r=>r.starts_ms<=now&&r.expires_ms>now&&(r.revoked_ms===null||r.revoked_ms===undefined));
- active.sort((a,b)=>b.expires_ms-a.expires_ms||b.signed_ms-a.signed_ms||String(a.transaction_key).localeCompare(b.transaction_key));
+ const expiry=r=>r.apple_status===4&&Number.isSafeInteger(r.grace_expires_ms)&&r.grace_expires_ms>r.expires_ms&&
+  Number.isSafeInteger(r.status_verified_ms)&&r.status_verified_ms>now-60000&&r.status_verified_ms<=now?r.grace_expires_ms:r.expires_ms;
+ const active=rows.filter(r=>r.starts_ms<=now&&expiry(r)>now&&(r.revoked_ms===null||r.revoked_ms===undefined));
+ active.sort((a,b)=>expiry(b)-expiry(a)||b.signed_ms-a.signed_ms||String(a.transaction_key).localeCompare(b.transaction_key));
  const r=active[0];
- if(r)return {status:r.period_kind==='trial'?'trialing':'active',valid:true,startsAtMs:r.starts_ms,expiresAtMs:r.expires_ms,transactionKey:r.transaction_key,revisionHash:hash(active.map(x=>[x.transaction_key,x.signed_ms,x.expires_ms]))};
+ if(r)return {status:expiry(r)>r.expires_ms?'grace':r.period_kind==='trial'?'trialing':'active',valid:true,startsAtMs:r.starts_ms,expiresAtMs:expiry(r),transactionKey:r.transaction_key,revisionHash:hash(active.map(x=>[x.transaction_key,x.signed_ms,x.expires_ms,x.apple_status??null,x.grace_expires_ms??null,x.status_verified_ms??null]))};
  if(!rows.length)return {status:'not_subscribed',valid:false};
  const latest=[...rows].sort((a,b)=>b.signed_ms-a.signed_ms)[0];
  return {status:latest.revoked_ms?'revoked':'expired',valid:false,expiresAtMs:latest.expires_ms};

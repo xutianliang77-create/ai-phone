@@ -30,3 +30,12 @@ it('renews with a new signed sequence starting at the old end, and does not chan
  const at=now+1740000,b=await ctx.licenses().issue(u.actor,u.envelope({operation:'renew',leaseId:a.leaseId,sequence:1,requestKey:'b'.repeat(64),issuedAtMs:at}),at);
  expect(b.sequence).toBe(2);expect(b.notBeforeMs).toBe(at);expect(b.expiresAtMs).toBe(at+1800000);expect(a.expiresAtMs).toBe(now+1800000);
 });
+it('issues only through a freshly verified billing grace deadline',async()=>{
+ ctx=setup();const u=await ctx.owner('alice'),chain=ctx.subscriptions().chainKey(u.transaction);
+ ctx.config['requireFreshStatus']=true;
+ ctx.f.db.prepare('UPDATE v10_subscription_transactions SET expires_ms=? WHERE owner_id=?').run(now-1,'alice');
+ ctx.f.db.prepare('INSERT INTO v10_subscription_status VALUES(?,?,?,?,?,?,?,?,?)').run(chain,'alice',now,now,4,0,1,now+12345,'synthetic');
+ expect(await ctx.subscriptions().entitlement('alice',now)).toMatchObject({valid:true,status:'grace',expiresAtMs:now+12345});
+ const r=await ctx.licenses().issue(u.actor,u.envelope(),now);
+ expect(r.expiresAtMs).toBe(now+12345);
+});

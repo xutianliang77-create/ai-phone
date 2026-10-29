@@ -41,11 +41,13 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   final Set<String> _pendingTermKeys = <String>{};
   final Set<int> _pendingActionIndexes = <int>{};
   bool _queuedInitialReview = false;
+  int _termRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _detail = _repository.getSession(widget.sessionId);
+    if (_repository.isLocal) _loadLocalTerms();
     if (widget.autoGenerateReview) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _queuedInitialReview) return;
@@ -152,6 +154,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                   onUpdateActionItem: _updateActionItem,
                   onGenerateReview: _generateReview,
                   generatingReview: _generatingReview,
+                  isLocal: _repository.isLocal,
                   initialTranscriptQuery: widget.initialTranscriptQuery,
                 ),
               ),
@@ -186,7 +189,9 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       if (!mounted) return;
       setState(() => _currentDetail = detail);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.reviewGenerated)),
+        SnackBar(content: Text(_repository.isLocal
+            ? '已保存本机摘录；内容按原记录提取，不是 AI 归纳。'
+            : context.l10n.reviewGenerated)),
       );
     } catch (error) {
       if (!mounted) return;
@@ -195,6 +200,23 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       );
     } finally {
       if (mounted) setState(() => _generatingReview = false);
+    }
+  }
+
+  Future<void> _loadLocalTerms() async {
+    final revision = _termRevision;
+    try {
+      final terms = await _repository.localTerms();
+      if (!mounted || revision != _termRevision) return;
+      setState(() {
+        _confirmedTermIds.clear();
+        for (final t in terms.where((t) => t.status == 'active')) {
+          _confirmedTermIds[sessionTermKey(SessionTermSuggestion(
+            sourceText: t.sourceText, translatedText: t.translatedText))] = t.id;
+        }
+      });
+    } catch (error) {
+      if (mounted) _showError(error);
     }
   }
 
@@ -241,6 +263,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   }
 
   Future<void> _confirmTerm(SessionTermSuggestion term) async {
+    _termRevision++;
     final key = sessionTermKey(term);
     setState(() => _pendingTermKeys.add(key));
     try {
@@ -261,6 +284,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   }
 
   Future<void> _revokeTerm(SessionTermSuggestion term) async {
+    _termRevision++;
     final key = sessionTermKey(term);
     final termId = _confirmedTermIds[key];
     if (termId == null) return;

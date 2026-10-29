@@ -19,6 +19,7 @@ void requireOnDeviceControlRequest(
     '/account/me',
     '/account/export',
     '/account/delete',
+    '/account/delete/status',
     '/account/consents',
     '/billing/products',
     '/billing/entitlement',

@@ -18,6 +18,7 @@ import '../../../../shared/domain/turn_language_profile.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
 import '../../data/realtime_repository.dart';
+import '../../data/local_realtime_repository.dart';
 import '../../../realtime/domain/entities/subtitle_segment.dart';
 import 'cleanup_guard.dart';
 import 'device_asr_failure_message.dart';
@@ -56,6 +57,7 @@ class RealtimeController extends ChangeNotifier {
     SpeechCaptureGate? speechCaptureGate,
     bool autoSpeakTranslation = false,
     Duration? speechOutputTimeout,
+    Duration localTranslationDrainTimeout = const Duration(seconds: 3),
     AppConfig? config,
   })  : _config = config ?? AppConfig.fromEnvironment(),
         _repository = repository ??
@@ -78,7 +80,8 @@ class RealtimeController extends ChangeNotifier {
             audioSessionCoordinator ?? const NoopAudioSessionCoordinator(),
         _speechCaptureGate = speechCaptureGate ?? SpeechCaptureGate(),
         _autoSpeakTranslation = autoSpeakTranslation,
-        _speechOutputTimeout = speechOutputTimeout;
+        _speechOutputTimeout = speechOutputTimeout,
+        _localTranslationDrainTimeout = localTranslationDrainTimeout;
 
   AppConfig _config;
   final RealtimeRepository _repository;
@@ -91,8 +94,10 @@ class RealtimeController extends ChangeNotifier {
   bool _autoSpeakTranslation;
   bool _voiceOutputUpdating = false;
   final Duration? _speechOutputTimeout;
+  final Duration _localTranslationDrainTimeout;
   Future<void> _speechChain = Future<void>.value();
   Future<void> _asrTextChain = Future<void>.value();
+  int _localWorkGeneration = 0;
   int _speechGeneration = 0;
   bool _speechOutputActive = false;
   final SpeechCaptureGate _speechCaptureGate;
@@ -105,6 +110,8 @@ class RealtimeController extends ChangeNotifier {
   StreamSubscription<AsrTextSegment>? _asrSubscription;
   StreamSubscription<AudioSessionEvent>? _audioSessionSubscription;
   RealtimeSession? _session;
+  RealtimeSession? _pendingLocalSave;
+  List<SubtitleSegment>? _pendingLocalSegments;
   Timer? _sessionTimeoutTimer, _speechBacklogTimer;
   String? _message;
   int? _remainingSeconds;
@@ -290,8 +297,28 @@ class RealtimeController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  void _checkpointLocalSession(String sessionId) {
+    final repository=_repository;
+    if (!_config.onDeviceOnly || repository is! LocalRealtimeRepository) return;
+    unawaited(repository.checkpoint(sessionId,List<SubtitleSegment>.of(_segments))
+      .catchError((Object _) {
+        if (!_disposed && _session?.sessionId==sessionId) {
+          _message='本机记录暂未保存，请保留当前页面并重试。';
+          _notify();
+        }
+      }));
+  }
+
+  Future<void> _cancelLocalTranslation() async {
+    final provider=_mobileTranslationProvider;
+    if (!_config.onDeviceOnly || provider is! MobileTranslationCancellation) return;
+    try { await (provider as MobileTranslationCancellation).cancelPending()
+      .timeout(const Duration(seconds:1)); } catch (_) { /* Late results remain fenced. */ }
+  }
+
   void _fail(String message) {
     final failedSession = _session;
+    if (_config.onDeviceOnly) _localWorkGeneration++;
     _message = message;
     _setStatus(RealtimeStatus.failed);
     _session = null;
@@ -307,6 +334,7 @@ class RealtimeController extends ChangeNotifier {
 
   Future<void> _cleanupAfterFailure(RealtimeSession? failedSession) async {
     _sessionTimeoutTimer?.cancel();
+    await _cancelLocalTranslation();
     await ignoreCleanupError(_audioCapture.stop);
     await ignoreCleanupError(_audioSessionCoordinator.endCapture);
     await ignoreCleanupError(() async => _audioSubscription?.cancel());
@@ -323,9 +351,15 @@ class RealtimeController extends ChangeNotifier {
           billableSeconds: _activeTimeClock.billableSeconds,
         );
       });
-      await ignoreCleanupError(() {
-        return _repository.end(failedSession.sessionId, _segments);
-      });
+      final snapshot=List<SubtitleSegment>.unmodifiable(_segments);
+      try {
+        await _repository.end(failedSession.sessionId,snapshot);
+      } catch (_) {
+        if (_config.onDeviceOnly) {
+          _pendingLocalSave=failedSession;_pendingLocalSegments=snapshot;
+          _message='本机记录未保存，请保留页面并重试保存。';_notify();
+        }
+      }
     }
     await ignoreCleanupError(_repository.closeRealtime);
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/platform/asr/apple_speech_asr_provider.dart';
@@ -162,4 +163,26 @@ void main() {
       );
     },
   );
+  test('cancelling one translation provider does not cancel another', () async {
+    final pending=<String,Completer<Map<String,Object?>>>{};
+    final cancelled=<String>[];
+    messenger.setMockMethodCallHandler(mt,(call) {
+      final args=Map<String,Object?>.from(call.arguments as Map);
+      final id=args['requestId'] as String;
+      if (call.method=='translate') {
+        final c=Completer<Map<String,Object?>>();pending[id]=c;return c.future;
+      }
+      expect(call.method,'cancel');cancelled.add(id);
+      pending[id]?.completeError(PlatformException(code:'translation_cancelled'));
+      return Future.value(null);
+    });
+    final first=IosSystemTranslationProvider(channel:mt),second=IosSystemTranslationProvider(channel:mt);
+    const pair=MobileTranslationConfig(sourceLanguage:'zh',targetLanguage:'en');
+    final a=first.translate('第一句',pair),b=second.translate('第二句',pair);
+    await Future<void>.delayed(Duration.zero);expect(pending.length,2);
+    final ids=pending.keys.toList();await first.cancelPending();
+    expect(await a,isNull);expect(cancelled,[ids.first]);expect(pending[ids.last]!.isCompleted,isFalse);
+    pending[ids.last]!.complete({'text':'second','provider':'fixture'});
+    expect((await b)?.text,'second');
+  });
 }

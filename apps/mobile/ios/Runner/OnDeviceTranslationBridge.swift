@@ -10,9 +10,17 @@ final class OnDeviceTranslationBridge {
   var authorizationCheck: ((String,String,String?) throws -> Void)?
   var currentLicense: (() throws -> String)?
   private var activeSessions:[UUID:Any]=[:]
+  private var preparedSessions:[String:Any]=[:]
+  private final class RequestState { var cancelled=false; var operation:UUID? }
+  private var activeRequests:[String:RequestState]=[:]
   func stopForLicense(){
+    for state in activeRequests.values { state.cancelled=true }
     let sessions=Array(activeSessions.values);activeSessions.removeAll()
-    if #available(iOS 26.0,*){for item in sessions{(item as? TranslationSession)?.cancel()}}
+    let prepared=Array(preparedSessions.values);preparedSessions.removeAll()
+    if #available(iOS 26.0,*){
+      for item in sessions{(item as? TranslationSession)?.cancel()}
+      for item in prepared{(item as? TranslationSession)?.cancel()}
+    }
   }
   private var presenter: () -> UIViewController? = { nil }
 
@@ -33,6 +41,14 @@ final class OnDeviceTranslationBridge {
       isAvailable(call: call, result: result)
     case "translate":
       translate(call: call, result: result)
+    case "warmup":
+      warmup(call:call,result:result)
+    case "cancel":
+      guard let id=stringArgument("requestId",from:call),let state=activeRequests[id] else { result(nil);return }
+      state.cancelled=true
+      if #available(iOS 26.0,*),let operation=state.operation,
+         let session=activeSessions[operation] as? TranslationSession { session.cancel() }
+      result(nil)
     case "prepare", "cancelPreparation":
       Task { @MainActor [weak self] in
         guard let self else { return }
@@ -56,6 +72,58 @@ final class OnDeviceTranslationBridge {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func warmup(call:FlutterMethodCall,result:@escaping FlutterResult) {
+    guard #available(iOS 26.0,*) else {
+      result(flutterError(code:"ios_translation_requires_ios_26",message:"iOS 26 is required.",details:nil));return
+    }
+    guard let id=stringArgument("requestId",from:call),id.utf8.count<=80,
+      id.range(of:"^[A-Za-z0-9-]+$",options:.regularExpression) != nil,activeRequests[id] == nil else {
+      result(flutterError(code:"translation_request_invalid",message:"Invalid translation request.",details:nil));return
+    }
+    let state=RequestState();activeRequests[id]=state
+    Task { @MainActor [weak self] in
+      guard let self else {return}
+      defer {self.activeRequests.removeValue(forKey:id)}
+      do {try await self.systemWarmup(call:call,state:state);result(nil)}
+      catch let error as V10LicenseFailure {result(self.flutterError(code:error.code,message:"请联网核对本机授权",details:nil))}
+      catch let error as OnDeviceTranslationError {result(self.flutterError(code:error.code,message:error.message,details:error.details))}
+      catch {result(self.flutterError(code:"translation_preparation_failed",message:"本机翻译准备失败",details:nil))}
+    }
+  }
+
+  @available(iOS 26.0,*)
+  private func systemWarmup(call:FlutterMethodCall,state:RequestState) async throws {
+    try requireActive(state)
+    let lease=try currentLicense?()
+    guard resourcePreparation == nil,let pair=await languagePair(from:call) else {
+      throw OnDeviceTranslationError(code:"unsupported_language_pair",message:"翻译语言不可用",details:nil)
+    }
+    try requireActive(state)
+    guard await LanguageAvailability().status(from:pair.source,to:pair.target) == .installed else {
+      throw OnDeviceTranslationError(code:"language_pair_not_installed",message:"语言资源未安装",details:nil)
+    }
+    try requireActive(state)
+    try authorizationCheck?(pair.sourceCode,pair.targetCode,lease)
+    let session=TranslationSession(installedSource:pair.source,target:pair.target), operation=UUID()
+    var cached=false
+    state.operation=operation;activeSessions[operation]=session
+    defer {activeSessions.removeValue(forKey:operation);state.operation=nil;if !cached {session.cancel()}}
+    try await session.prepareTranslation()
+    try requireActive(state)
+    try authorizationCheck?(pair.sourceCode,pair.targetCode,lease)
+    let key=preparedKey(pair.sourceCode,pair.targetCode,lease)
+    let prefix="\(pair.sourceCode):\(pair.targetCode):"
+    for oldKey in preparedSessions.keys.filter({$0.hasPrefix(prefix) && $0 != key}) {
+      (preparedSessions.removeValue(forKey:oldKey) as? TranslationSession)?.cancel()
+    }
+    if let old=preparedSessions.updateValue(session,forKey:key) as? TranslationSession {old.cancel()}
+    cached=true
+  }
+
+  private func preparedKey(_ source:String,_ target:String,_ lease:String?) -> String {
+    "\(source):\(target):\(lease ?? "")"
   }
 
   private func isAvailable(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -98,11 +166,20 @@ final class OnDeviceTranslationBridge {
       return
     }
 
+    let requestId=stringArgument("requestId",from:call) ?? UUID().uuidString
+    guard requestId.utf8.count<=80,
+      requestId.range(of:"^[A-Za-z0-9-]+$",options:.regularExpression) != nil,
+      activeRequests[requestId] == nil else {
+      result(flutterError(code:"translation_request_invalid",message:"Invalid translation request.",details:nil));return
+    }
+    let state=RequestState();activeRequests[requestId]=state
     Task { [weak self] in
       guard let self else { return }
+      defer { self.activeRequests.removeValue(forKey:requestId) }
       do {
-        let payload = try await self.systemTranslate(text: text, call: call)
+        let payload = try await self.systemTranslate(text: text, call: call, state: state)
         DispatchQueue.main.async {
+          guard !state.cancelled else {result(self.flutterError(code:"translation_cancelled",message:"翻译已停止",details:nil));return}
           do{try self.authorizationCheck?(payload["sourceLanguage"] as? String ?? "",payload["targetLanguage"] as? String ?? "",payload["authorizationLeaseId"] as? String)}
           catch{result(self.flutterError(code:"authorization_required",message:"本机授权已停止",details:nil));return}
           result(payload)
@@ -163,8 +240,10 @@ final class OnDeviceTranslationBridge {
   @available(iOS 26.0, *)
   private func systemTranslate(
     text: String,
-    call: FlutterMethodCall
+    call: FlutterMethodCall,
+    state: RequestState
   ) async throws -> [String: Any] {
+    try requireActive(state)
     let boundLease=try currentLicense?()
     guard resourcePreparation == nil else { throw LocalResourcePreparationError.busy }
     guard let pair = await languagePair(from: call) else {
@@ -174,9 +253,11 @@ final class OnDeviceTranslationBridge {
         details: nil
       )
     }
+    try requireActive(state)
 
     let availability = LanguageAvailability()
     let status = await availability.status(from: pair.source, to: pair.target)
+    try requireActive(state)
     guard status == .installed else {
       throw OnDeviceTranslationError(
         code: status == .unsupported ? "unsupported_language_pair" : "language_pair_not_installed",
@@ -191,16 +272,19 @@ final class OnDeviceTranslationBridge {
     }
 
     try authorizationCheck?(pair.sourceCode,pair.targetCode,boundLease)
-    let session = TranslationSession(
-      installedSource: pair.source,
-      target: pair.target
-    )
+    let key=preparedKey(pair.sourceCode,pair.targetCode,boundLease)
+    let prepared=preparedSessions.removeValue(forKey:key) as? TranslationSession
+    let session = prepared ?? TranslationSession(installedSource:pair.source,target:pair.target)
     let operation=UUID()
+    state.operation=operation
     activeSessions[operation]=session
-    defer{activeSessions.removeValue(forKey:operation)}
-    try await session.prepareTranslation()
+    defer{activeSessions.removeValue(forKey:operation);state.operation=nil;session.cancel()}
+    try requireActive(state)
+    if prepared == nil {try await session.prepareTranslation()}
+    try requireActive(state)
     try authorizationCheck?(pair.sourceCode,pair.targetCode,boundLease)
     let response = try await session.translate(text)
+    try requireActive(state)
     try authorizationCheck?(pair.sourceCode,pair.targetCode,boundLease)
     guard OnDeviceTranslationLanguage.matches(response.sourceLanguage, code: pair.sourceCode),
           OnDeviceTranslationLanguage.matches(response.targetLanguage, code: pair.targetCode) else {
@@ -230,6 +314,10 @@ final class OnDeviceTranslationBridge {
       "sourceLocale": response.sourceLanguage.minimalIdentifier,
       "targetLocale": response.targetLanguage.minimalIdentifier
     ]
+  }
+
+  private func requireActive(_ state:RequestState) throws {
+    if state.cancelled { throw OnDeviceTranslationError(code:"translation_cancelled",message:"翻译已停止",details:nil) }
   }
 
   @available(iOS 26.0, *)

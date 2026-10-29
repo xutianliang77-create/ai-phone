@@ -4,6 +4,7 @@ import os from 'node:os';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {generateKeyPairSync,sign,verify,createHash,randomUUID} from 'node:crypto';
+import {AppleCredentialVault} from '../../v10-cloudflare-control/vendor/reused-control-core.mjs';
 const out=path.resolve(process.argv[2]),wrangler=process.argv[3];
 const {Miniflare,convertV4MiniflareOptions}=createRequire(wrangler)('miniflare');
 const {certificates}=await import(pathToFileURL(path.join(out,'fixture-certificates.mjs')));
@@ -25,18 +26,25 @@ Object.assign(env,{DEVICE_APP_ATTEST_APP_ID:env.APPLE_TEAM_ID+'.'+env.PUBLIC_BUN
  V10_SERVICE_WINDOW_STARTS_AT:new Date(now-1000).toISOString(),V10_SERVICE_WINDOW_ENDS_AT:new Date(now+600000).toISOString(),V10_QA_ALLOWED_ACCOUNT_IDS:JSON.stringify([owner])});
 parts.forEach((p,i)=>env['PUBLIC_RELEASE_DOCUMENTS_'+(i+1)]=p);
 const transaction={transactionId:'101',originalTransactionId:'100',productId:env.V10_SUBSCRIPTION_PRODUCT_ID,bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',appAccountToken,type:'Auto-Renewable Subscription',inAppOwnershipType:'PURCHASED',purchaseDate:now-1000,expiresDate:now+300000,signedDate:now,currency:'CNY',storefront:'CHN',price:10000};
-let syntheticStatusGets=0,externalDenied=0;
+const restoreTransaction={...transaction,transactionId:'201',originalTransactionId:'200'};
+let syntheticStatusGets=0,syntheticOcsp=0,externalDenied=0;
 const outbound=async request=>{
  const u=new URL(request.url);
+ if(u.origin==='http://ocsp.apple.com'&&u.pathname.startsWith('/fixture/')&&request.method==='POST'){
+  syntheticOcsp++;
+  const key=u.pathname.endsWith('/leaf')?'leaf':'intermediate';
+  return new Response(cert.ocsp(key,Buffer.from(await request.arrayBuffer())),{headers:{'content-type':'application/ocsp-response'}});
+ }
  if(u.origin==='https://appleid.apple.com'){
   syntheticIdentityCalls++;
   if(u.pathname==='/auth/keys')return Response.json({keys:[{...identityKey.publicKey.export({format:'jwk'}),kid:'fixture-identity',alg:'RS256',use:'sig'}]});
   if(u.pathname==='/auth/token')return Response.json({id_token:syntheticIdentityJwt,refresh_token:'SYNTHETIC_LOCAL_REFRESH'});
   if(u.pathname==='/auth/revoke')return new Response('',{status:200});
  }
- if(u.origin==='https://api.storekit-sandbox.apple.com'&&u.pathname==='/inApps/v1/subscriptions/100'&&request.method==='GET'){
-  syntheticStatusGets++;const t={...transaction,signedDate:Date.now()},r={originalTransactionId:'100',productId:env.V10_SUBSCRIPTION_PRODUCT_ID,environment:'Sandbox',autoRenewStatus:0,signedDate:Date.now()};
-  return Response.json({bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',data:[{lastTransactions:[{originalTransactionId:'100',status:1,signedTransactionInfo:cert.sign(t),signedRenewalInfo:cert.sign(r)}]}]});
+ if(u.origin==='https://api.storekit-sandbox.apple.com'&&['/inApps/v1/subscriptions/100','/inApps/v1/subscriptions/200'].includes(u.pathname)&&request.method==='GET'){
+  syntheticStatusGets++;const source=u.pathname.endsWith('/200')?restoreTransaction:transaction;
+  const t={...source,signedDate:Date.now()},r={originalTransactionId:source.originalTransactionId,productId:env.V10_SUBSCRIPTION_PRODUCT_ID,environment:'Sandbox',autoRenewStatus:0,signedDate:Date.now()};
+  return Response.json({bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',data:[{lastTransactions:[{originalTransactionId:source.originalTransactionId,status:1,signedTransactionInfo:cert.sign(t),signedRenewalInfo:cert.sign(r)}]}]});
  }
  externalDenied++;throw Error('external_network_forbidden');
 };
@@ -50,8 +58,8 @@ const options=convertV4MiniflareOptions({telemetry:{enabled:false},workers:[make
 if(options.workers.some(w=>w.dev.outboundService?.type!=='fetcher'))throw Error('outbound_guard_not_installed');
 const mf=new Miniflare(options),results=[];let db;
 const expect=(ok,detail)=>{if(!ok)throw Error(detail);};
-async function call(worker,p,method='GET',body,expected=200){
- const r=await worker.fetch('https://www.beelinkdata.com'+p,{method,headers:{'content-type':'application/json',authorization:'Bearer '+token},...(body?{body:JSON.stringify(body)}:{})});
+async function call(worker,p,method='GET',body,expected=200,authorization='Bearer '+token){
+ const r=await worker.fetch('https://www.beelinkdata.com'+p,{method,headers:{'content-type':'application/json',authorization},...(body?{body:JSON.stringify(body)}:{})});
  const type=r.headers.get('content-type')??'',value=type.includes('json')?await r.json():await r.text();
  results.push({path:p,status:r.status,error:value?.error?.code??null});expect(r.status===expected,p+':'+JSON.stringify(value));return value;
 }
@@ -63,7 +71,9 @@ try{
   db.prepare("INSERT INTO accounts(user_id,app_account_token,status,authorization_epoch,created_ms,updated_ms) VALUES(?,?,'active',1,?,?)").bind(owner,appAccountToken,now,now),
   db.prepare('INSERT INTO usage_accounts VALUES(?,0,0,1,?)').bind(owner,now),
   db.prepare("INSERT INTO identities(identity_key,provider,issuer,scope,subject_hash,user_id,created_ms) VALUES('synthetic-identity','apple','https://appleid.apple.com',?,'synthetic-subject',?,?)").bind(scope,owner,now),
-  db.prepare("INSERT INTO apple_credentials VALUES('synthetic-identity',?,'{}',1,?,NULL)").bind(owner,now),
+  db.prepare("INSERT INTO apple_credentials VALUES('synthetic-identity',?,?,1,?,NULL)").bind(owner,
+   JSON.stringify(new AppleCredentialVault(new Map([['fixture',Buffer.from('22'.repeat(32),'hex')]]),'fixture',scope)
+    .seal('synthetic-identity',owner,'SYNTHETIC_LOCAL_REFRESH')),now),
   db.prepare("INSERT INTO account_tokens(token_hash,user_id,identity_key,authorization_epoch,created_ms,expires_ms) VALUES(?,?,'synthetic-identity',1,?,?)").bind(sha('auth-token:'+token),owner,now,now+86400000),
   db.prepare('INSERT INTO device_permit_keys VALUES(?,?,?,?,?,?,0,?,?)').bind(sha(deviceRaw),owner,deviceRaw.toString('base64'),'synthetic-attest-id','synthetic-attest-public','synthetic-attest-receipt',now,now),
  ]);
@@ -81,6 +91,8 @@ try{
  const html=await call(open,'/privacy');expect(html.includes('手机')&&!html.includes('Hy-MT2'),'privacy_documents');
  const purchase=envelope({domain:'wujie.v10.storekit-proof.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'1'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(transaction),storeKitCurrentEntitlement:false});
  await call(open,'/billing/subscription/sync','POST',purchase);
+ const restorable=envelope({domain:'wujie.v10.storekit-proof.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'3'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(restoreTransaction),storeKitCurrentEntitlement:false});
+ await call(open,'/billing/subscription/sync','POST',restorable);
  expect((await call(open,'/billing/entitlement')).entitlement.valid===true,'signed_status_entitlement');
  const config=await call(open,'/v10/device/configuration'),request=envelope({domain:'wujie.v10.device-license.request.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'2'.repeat(64),launchNonce:'synthetic-launch',profile:config.componentProfile.profile,implementationHash:config.implementationHash,issuedAtMs:Date.now(),operation:'acquire',leaseId:'',sequence:0});
  const a=await call(open,'/v10/device/acquire','POST',request),b=await call(open,'/v10/device/acquire','POST',request);
@@ -92,12 +104,59 @@ try{
  expect(s.chargedSeconds===0,'no_minute_charge');
  const revoked={...transaction,signedDate:Date.now()+1,revocationDate:Date.now()},notification=cert.sign({notificationUUID:'synthetic-refund',notificationType:'REFUND',signedDate:Date.now()+1,data:{bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',signedTransactionInfo:cert.sign(revoked)}});
  await call(open,'/billing/apple/notifications','POST',{signedPayload:notification});await call(open,'/billing/apple/notifications','POST',{signedPayload:notification});
- expect((await call(open,'/billing/entitlement')).entitlement.valid===false,'refund_revocation');
+ expect((await db.prepare("SELECT revoked_ms FROM v10_subscription_transactions WHERE chain_key IN (SELECT chain_key FROM v10_subscription_chains WHERE original_transaction_id='100')").first())?.revoked_ms!=null,'refund_recorded');
+ expect((await call(open,'/billing/entitlement')).entitlement.valid===true,'other_active_chain_survives_refund');
  const counts={};for(const table of ['v10_device_licenses','v10_device_statistics','v10_subscription_transactions','credit_ledger','credit_reservations'])counts[table]=(await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n;
  expect(counts.v10_device_statistics===1&&counts.credit_ledger===0&&counts.credit_reservations===0,'unique_statistics_no_wallet');
- await call(open,'/account/delete','POST',{});expect((await call(open,'/account/delete','POST',{})).replayed===true,'deletion_ack_replay');
- expect(externalDenied===0,'outbound_denied_attempt');
- fs.writeFileSync(path.join(out,'WORKER_RUNTIME.json'),JSON.stringify({status:'PASS_LOCAL_WORKER_PRODUCTION_ENTRY',workerSha256:sha(fs.readFileSync(path.join(out,'worker-local.mjs'))),diagnosticInstrumentation:process.env.WUJIE_LOCAL_RUNTIME_DIAGNOSTICS==='1',results,counts,syntheticStatusGets,syntheticIdentityCalls,externalDenied,modelsCalled:0,realAppleCalls:0,deployed:false,deviceAccess:false,limits:['Synthetic attested-key seed does not qualify real App Attest','Local D1/workerd does not qualify cloud capacity or phone inference']},null,2));
+ const secret='Q'.repeat(43),receiptHash=sha('v10-deletion:'+secret);
+ await call(open,'/account/delete','POST',{receiptHash});expect((await call(open,'/account/delete','POST',{})).replayed===true,'deletion_ack_replay');
+ // The provider is synthetic and D1 is a fresh in-memory database. Advance
+ // only this test job's due time; no global history queue is involved.
+ for(let i=0;i<100;i++){
+  const row=await db.prepare('SELECT state FROM v10_account_deletion_recovery WHERE owner_id=?').bind(owner).first();
+  if(row?.state==='needs_finalization')break;
+  if(i===99)throw Error('synthetic_revoke_not_completed');
+  await new Promise(resolve=>setTimeout(resolve,20));
+ }
+ await db.prepare('UPDATE v10_account_deletion_recovery SET due_ms=? WHERE owner_id=?').bind(Date.now()-1,owner).run();
+ await open.scheduled({cron:'* * * * *'});
+ const deletion=await call(open,'/account/delete/status','GET',undefined,200,'DeletionReceipt '+secret);
+ expect(deletion.status==='completed'&&deletion.appleRevocation==='confirmed','deletion_completed_receipt');
+ expect(!(await db.prepare('SELECT user_id FROM accounts WHERE user_id=?').bind(owner).first()),'deletion_old_account_removed');
+ await call(open,'/account/me','GET',undefined,401);
+ // A separate synthetic account and attested-key seed exercises the actual
+ // Worker/D1 route after deletion. Apple responses and OCSP remain mocked.
+ const newOwner='synthetic-runtime-new-owner',newToken='SYNTHETIC_LOCAL_NEW_TOKEN',newAppToken=randomUUID();
+ const newDevice=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),newJwk=newDevice.publicKey.export({format:'jwk'});
+ const newRaw=Buffer.concat([Buffer.from([4]),Buffer.from(newJwk.x,'base64url'),Buffer.from(newJwk.y,'base64url')]);
+ await db.batch([
+  db.prepare("INSERT INTO accounts(user_id,app_account_token,status,authorization_epoch,created_ms,updated_ms) VALUES(?,?,'active',1,?,?)").bind(newOwner,newAppToken,now,now),
+  db.prepare('INSERT INTO usage_accounts VALUES(?,0,0,1,?)').bind(newOwner,now),
+  db.prepare("INSERT INTO identities(identity_key,provider,issuer,scope,subject_hash,user_id,created_ms) VALUES('synthetic-new-identity','apple','https://appleid.apple.com',?,'synthetic-new-subject',?,?)").bind(scope,newOwner,now),
+  db.prepare("INSERT INTO apple_credentials VALUES('synthetic-new-identity',?,?,1,?,NULL)").bind(newOwner,
+   JSON.stringify(new AppleCredentialVault(new Map([['fixture',Buffer.from('22'.repeat(32),'hex')]]),'fixture',scope)
+    .seal('synthetic-new-identity',newOwner,'SYNTHETIC_NEW_REFRESH')),now),
+  db.prepare("INSERT INTO account_tokens(token_hash,user_id,identity_key,authorization_epoch,created_ms,expires_ms) VALUES(?,?,'synthetic-new-identity',1,?,?)").bind(sha('auth-token:'+newToken),newOwner,now,now+86400000),
+  db.prepare('INSERT INTO device_permit_keys VALUES(?,?,?,?,?,?,0,?,?)').bind(sha(newRaw),newOwner,newRaw.toString('base64'),'synthetic-new-attest-id','synthetic-attest-public','synthetic-attest-receipt',now,now),
+ ]);
+ const restoreBody={domain:'wujie.v10.storekit-proof.v1',ownerId:newOwner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:newRaw.toString('base64'),requestKey:'4'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(restoreTransaction),storeKitCurrentEntitlement:true};
+ const restoreEnvelope=b=>{const d=Buffer.from(JSON.stringify(b));return {clientData:d.toString('base64'),deviceSignature:sign('sha256',d,{key:newDevice.privateKey,dsaEncoding:'ieee-p1363'}).toString('base64')};};
+ const beforeRestoreChecks=syntheticStatusGets;
+ await call(open,'/billing/subscription/sync','POST',restoreEnvelope(restoreBody),403,'Bearer '+newToken);
+ await call(open,'/billing/subscription/sync','POST',restoreEnvelope({...restoreBody,userInitiatedRestore:true,targetAccountToken:appAccountToken}),403,'Bearer '+newToken);
+ expect(syntheticStatusGets===beforeRestoreChecks,'denied_restore_must_not_ask_apple');
+ const restored=await call(open,'/billing/subscription/sync','POST',restoreEnvelope({...restoreBody,userInitiatedRestore:true,targetAccountToken:newAppToken}),200,'Bearer '+newToken);
+ expect(restored.ownershipTransferred===true&&restored.restoreAcknowledged===true&&restored.transactionId==='201','worker_restore_acknowledgement');
+ expect((await call(open,'/billing/entitlement','GET',undefined,200,'Bearer '+newToken)).entitlement.valid===true,'new_owner_entitlement');
+ expect((await db.prepare('SELECT COUNT(*) n FROM v10_subscription_restore_events').first()).n===1,'one_restore_event');
+ expect((await db.prepare("SELECT COUNT(*) n FROM v10_subscription_transactions WHERE chain_key IN (SELECT chain_key FROM v10_subscription_chains WHERE original_transaction_id='200')").first()).n===1,'one_restored_transaction');
+ const newRefund={...restoreTransaction,signedDate:Date.now()+2,revocationDate:Date.now()},newNotification=cert.sign({notificationUUID:'synthetic-restored-refund',notificationType:'REFUND',signedDate:Date.now()+2,data:{bundleId:env.PUBLIC_BUNDLE_ID,environment:'Sandbox',signedTransactionInfo:cert.sign(newRefund)}});
+ await call(open,'/billing/apple/notifications','POST',{signedPayload:newNotification});
+ expect((await call(open,'/billing/entitlement','GET',undefined,200,'Bearer '+newToken)).entitlement.valid===false,'restored_refund_revokes_new_owner');
+ expect(externalDenied===0&&syntheticOcsp>=2,'outbound_or_ocsp_guard');
+ fs.writeFileSync(path.join(out,'WORKER_RUNTIME.json'),JSON.stringify({status:'PASS_LOCAL_WORKER_PRODUCTION_ENTRY',workerSha256:sha(fs.readFileSync(path.join(out,'worker-local.mjs'))),diagnosticInstrumentation:process.env.WUJIE_LOCAL_RUNTIME_DIAGNOSTICS==='1',results,counts,
+  assertions:['scoped_deletion_completed_and_old_bearer_rejected','restore_requires_explicit_proof_and_matching_account_generation','restore_checks_synthetic_apple_status_before_transfer','one_owner_one_transaction_one_restore_event','refund_after_restore_revokes_new_owner'],
+  syntheticStatusGets,syntheticOcsp,syntheticIdentityCalls,externalDenied,modelsCalled:0,realAppleCalls:0,deployed:false,deviceAccess:false,limits:['Synthetic attested-key seed does not qualify real App Attest','Local D1/workerd does not qualify cloud capacity or phone inference']},null,2));
  console.log(JSON.stringify({status:'PASS',requests:results.length,counts,syntheticStatusGets}));
 }catch(error){fs.writeFileSync(path.join(out,'WORKER_RUNTIME_FAILURE.json'),JSON.stringify({error:String(error?.stack??error),results,syntheticStatusGets,externalDenied},null,2));throw error;}
 finally{await mf.dispose();cert.close();fs.rmSync(stage,{recursive:true,force:true});}

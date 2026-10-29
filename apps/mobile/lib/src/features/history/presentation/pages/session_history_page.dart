@@ -59,7 +59,8 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
             initialValue: _endedOnly,
             onSelected: (value) => setState(() => _endedOnly = value),
             itemBuilder: (context) => <PopupMenuEntry<bool>>[
-              PopupMenuItem(value: true, child: Text(_text('已结束', 'Ended'))),
+              PopupMenuItem(value: true, child: Text(AppConfig.fromEnvironment().onDeviceOnly
+                ? _text('已结束及本机快照', 'Ended and local snapshots') : _text('已结束', 'Ended'))),
               PopupMenuItem(value: false, child: Text(_text('全部状态', 'All'))),
             ],
           ),
@@ -123,7 +124,8 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                 final sessions = snapshot.data!
                     .where((session) => session.kind == _kind.name)
                     .where(
-                        (session) => !_endedOnly || session.status == 'ended')
+                        (session) => !_endedOnly || session.status == 'ended' ||
+                          (AppConfig.fromEnvironment().onDeviceOnly && session.status == 'recoverable'))
                     .toList(growable: false);
                 if (sessions.isEmpty) {
                   return SessionHistoryEmptyState(kind: _kind);

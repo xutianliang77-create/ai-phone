@@ -12,11 +12,18 @@ class TranslationTextProtection {
   bool get hasProtectedText => _protectedText.isNotEmpty;
 
   String? restore(String translatedText) {
+    // Every generated marker must occur exactly once and no unknown marker may
+    // survive. Merely finding a marker allows duplicated numbers or IDs to be
+    // published as if they had been preserved correctly.
+    if (_anyMarkerPattern.allMatches(translatedText).length !=
+        _protectedText.length) {
+      return null;
+    }
     var restored = translatedText;
     for (var index = 0; index < _protectedText.length; index++) {
       final marker = _markerPattern(index);
-      if (!marker.hasMatch(restored)) return null;
-      restored = restored.replaceAll(marker, _protectedText[index]);
+      if (marker.allMatches(translatedText).length != 1) return null;
+      restored = restored.replaceFirst(marker, _protectedText[index]);
     }
     return restored;
   }
@@ -67,6 +74,11 @@ String? _targetScriptPattern(String language) {
 }
 
 String _marker(int index) => 'XTLKEEP${index}QXZ';
+
+final _anyMarkerPattern = RegExp(
+  r'X\s*T\s*L\s*K\s*E\s*E\s*P\s*\d(?:\s*\d)*\s*Q\s*X\s*Z',
+  caseSensitive: false,
+);
 
 RegExp _markerPattern(int index) {
   final characters = _marker(index).split('');

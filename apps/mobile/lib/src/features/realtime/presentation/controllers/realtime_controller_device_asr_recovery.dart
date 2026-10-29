@@ -50,7 +50,8 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       return;
     }
     if (segment.isRetraction) {
-      _localPartialFlush.clearIfSameId(segment.id); _removeSegment(segment.id); return;
+      _localPartialFlush.clearIfSameId(segment.id); _removeSegment(segment.id);
+      _checkpointLocalSession(session.sessionId); return;
     }
     final isPlaybackEcho = _speechCaptureGate.shouldDropDeviceAsr(
       text: segment.text,
@@ -69,19 +70,32 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       },
     ));
     if (segmentWasMarkedAsEcho) return;
+    // Preserve a final recognition before waiting behind an earlier translation.
+    // A failed or stalled translator must not discard already-recognized text.
+    if (_config.onDeviceOnly && segment.isFinal) {
+      _upsertSegment(segment.id, sourceText: segment.text,
+          sourceLanguage: segment.language, confidence: segment.confidence,
+          stage: 'asr');
+      _checkpointLocalSession(session.sessionId);
+    }
     if (_speechCaptureGate.playbackActive) {
       unawaited(_stopSpeaking());
     }
     final sessionId = session.sessionId;
+    final localGeneration = _localWorkGeneration;
     final queued = _asrTextChain.then((_) async {
       final currentSession = _session;
       if (currentSession?.sessionId != sessionId ||
+          (_config.onDeviceOnly && localGeneration != _localWorkGeneration) ||
           (_status != RealtimeStatus.active && !_stopInFlight)) {
         return;
       }
       await _handleAsrTextSegment(sessionId, segment);
     });
     _asrTextChain = queued.catchError((Object error) async {
+      if (_config.onDeviceOnly &&
+          (_session?.sessionId != sessionId ||
+           localGeneration != _localWorkGeneration)) { return; }
       await _failWithRealtimeError(error);
     });
   }
@@ -119,8 +133,19 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
     }
   }
 
-  Future<void> _drainAsrTextSegments() async {
-    await _asrTextChain.catchError((Object _) {});
+  Future<bool> _drainAsrTextSegments() async {
+    final work=_asrTextChain.catchError((Object _) {});
+    if (!_config.onDeviceOnly) { await work; return true; }
+    try {
+      await work.timeout(_localTranslationDrainTimeout);
+      return true;
+    } on TimeoutException {
+      _localWorkGeneration++;
+      _asrTextChain=Future<void>.value();
+      await _cancelLocalTranslation();
+      _message='翻译未完成，已保留当前原文。';_notify();
+      return false;
+    }
   }
 
   Future<void> _recordDeviceAsrDiagnosticEvent(

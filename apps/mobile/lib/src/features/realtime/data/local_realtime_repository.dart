@@ -32,6 +32,7 @@ class LocalRealtimeRepository extends RealtimeRepository {
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final Map<String, DateTime> _createdAt = <String, DateTime>{};
   final _sessionStores = <String, LocalSessionStore>{};
+  final _checkpoints = <String, _LocalCheckpointState>{};
 
   @override
   Stream<GatewayRealtimeEvent> get events => _events.stream;
@@ -91,18 +92,55 @@ class LocalRealtimeRepository extends RealtimeRepository {
     await _license?.ensureValid(); await _license?.activity(sessionId, true); return true;
   }
 
+  /// Coalesce to one in-flight and one latest snapshot per session. The store
+  /// is pinned to the original account before capture starts.
+  Future<void> checkpoint(String sessionId, List<SubtitleSegment> segments) {
+    if (segments.isEmpty && !_checkpoints.containsKey(sessionId)) return Future.value();
+    final store=_sessionStores[sessionId], created=_createdAt[sessionId];
+    if (store==null || created==null) return Future.error(StateError('local_checkpoint_session_missing'));
+    final state=_checkpoints.putIfAbsent(sessionId, _LocalCheckpointState.new);
+    if (state.closing) return Future.value();
+    state.pending=List<SubtitleSegment>.unmodifiable(segments);
+    final running=state.flight;
+    if (running!=null) return running;
+    final task=_flushCheckpoint(sessionId,store,created,state);
+    state.flight=task;
+    return task.whenComplete(() { if (identical(state.flight,task)) state.flight=null; });
+  }
+
+  Future<void> _flushCheckpoint(String sessionId,LocalSessionStore store,
+      DateTime created,_LocalCheckpointState state) async {
+    while (state.pending != null) {
+      final snapshot=state.pending!;state.pending=null;
+      try {
+        await store.saveRecoverableSession(sessionId:sessionId,createdAt:created,segments:snapshot);
+      } catch (_) {
+        state.pending ??= snapshot;
+        rethrow;
+      }
+    }
+  }
+
   @override
   Future<void> end(String sessionId, List<SubtitleSegment> segments) async {
     final boundStore = _sessionStores[sessionId], created = _createdAt[sessionId];
     if (boundStore == null || created == null) return;
+    final snapshot=List<SubtitleSegment>.unmodifiable(segments);
+    final state=_checkpoints[sessionId];
+    if (state!=null) {
+      state.closing=true;
+      try { await state.flight; } catch (_) { /* The final write below may recover. */ }
+      state.pending=null;
+    }
     await _license?.activity(sessionId, false).catchError((Object _) {});
     await boundStore.saveEndedSession(
       sessionId: sessionId,
       createdAt: created,
-      segments: segments,
+      segments: snapshot,
     );
     _createdAt.remove(sessionId);
     _sessionStores.remove(sessionId);
+    _checkpoints.remove(sessionId);
   }
 
   @override
@@ -124,4 +162,10 @@ class LocalRealtimeRepository extends RealtimeRepository {
     unawaited(_events.close());
     super.dispose();
   }
+}
+
+class _LocalCheckpointState {
+  List<SubtitleSegment>? pending;
+  Future<void>? flight;
+  bool closing=false;
 }

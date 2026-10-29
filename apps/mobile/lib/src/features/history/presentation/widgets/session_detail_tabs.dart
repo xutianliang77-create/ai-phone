@@ -19,6 +19,7 @@ class SessionDetailTabs extends StatelessWidget {
     required this.onUpdateActionItem,
     required this.onGenerateReview,
     required this.generatingReview,
+    this.isLocal = false,
     this.initialTranscriptQuery = '',
     super.key,
   });
@@ -32,6 +33,7 @@ class SessionDetailTabs extends StatelessWidget {
   final UpdateSessionActionItem onUpdateActionItem;
   final VoidCallback onGenerateReview;
   final bool generatingReview;
+  final bool isLocal;
   final String initialTranscriptQuery;
 
   @override
@@ -62,6 +64,7 @@ class SessionDetailTabs extends StatelessWidget {
                   hasServerReview: detail.reviewJson != null,
                   onGenerateReview: onGenerateReview,
                   generatingReview: generatingReview,
+                  localExtractive: detail.reviewJson?['source'] == 'local_extractive',
                 ),
                 SessionTermsTab(
                   terms: review.terms,
@@ -69,6 +72,7 @@ class SessionDetailTabs extends StatelessWidget {
                   pendingTermKeys: pendingTermKeys,
                   onConfirm: onConfirmTerm,
                   onRevoke: onRevokeTerm,
+                  isLocal: isLocal,
                 ),
                 SessionActionItemsTab(
                   items: review.actionItems,

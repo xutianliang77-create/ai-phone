@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/billing/data/on_device_subscription_client.dart';
@@ -54,13 +55,43 @@ void main() {
       expect(c.purchases, 0);
     },
   );
+  testWidgets('retry replaces the old error while the new lookup is loading', (t) async {
+    final client = _RetryClient();
+    await t.pumpWidget(MaterialApp(home: SubscriptionPage(client: client)));
+    await t.pumpAndSettle();
+    expect(find.text('重新核对'), findsOneWidget);
+    await t.tap(find.text('重新核对'));
+    await t.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('重新核对'), findsNothing);
+    client.result.complete({'entitlement': {'valid': false},
+      'product': {'trialEligible': false, 'priceText': '¥10.00'}});
+    await t.pumpAndSettle();
+    expect(find.text('确认订阅 ¥10/月'), findsOneWidget);
+  });
+  testWidgets('an unresolved Apple approval disables a second purchase', (t) async {
+    final c = _Client(true, pending: true);
+    await t.pumpWidget(MaterialApp(home: SubscriptionPage(client: c)));
+    await t.pumpAndSettle();
+    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, '等待 Apple 处理')).onPressed, isNull);
+    expect(c.purchases, 0);
+    await t.tap(find.text('Apple 已拒绝该请求'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('若判断错误'), findsOneWidget);
+    await t.tap(find.text('已确认拒绝'));
+    await t.pumpAndSettle();
+    expect(c.clears, 1);
+    expect(c.purchases, 0);
+  });
 }
 
 class _Client implements OnDeviceSubscriptionClient {
-  _Client(this.eligible, {this.status});
+  _Client(this.eligible, {this.status, this.pending = false});
   final bool eligible;
   final String? status;
+  bool pending;
   int purchases = 0;
+  int clears = 0;
   @override
   OnDeviceLicenseClient get control =>
       throw UnimplementedError('not used by widget fixture');
@@ -69,7 +100,7 @@ class _Client implements OnDeviceSubscriptionClient {
   @override
   Future<Map<String, Object?>> load() async => {
     'entitlement': {'valid': false, 'status': status},
-    'product': {'trialEligible': eligible, 'priceText': '¥10.00'},
+    'product': {'trialEligible': eligible, 'priceText': '¥10.00', 'pendingApproval': pending},
   };
   @override
   Future<String> purchase({
@@ -86,5 +117,20 @@ class _Client implements OnDeviceSubscriptionClient {
   @override
   Future<String> recoverPending() async => 'restored';
   @override
+  Future<String> clearPendingApproval({required bool userConfirmedDecline}) async {
+    if (!userConfirmedDecline) throw StateError('confirmation');
+    clears++; pending = false; return 'cleared';
+  }
+  @override
   Future<void> manage() async {}
+}
+
+class _RetryClient extends _Client {
+  _RetryClient():super(false);
+  int count=0;
+  final result=Completer<Map<String,Object?>>();
+  @override Future<Map<String,Object?>> load() {
+    if(count++==0) return Future.error(StateError('fixture'));
+    return result.future;
+  }
 }

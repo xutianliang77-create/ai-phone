@@ -20,7 +20,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
             confidence: segment.confidence,
           );
     if (_config.useLocalSessions) {
-      await _handleLocalAsrTextSegment(cleanSegment);
+      await _handleLocalAsrTextSegment(sessionId, cleanSegment);
       return;
     }
     if (_canTranslateOnDevice(cleanSegment)) {
@@ -56,7 +56,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     if (!sent) _fail('Realtime connection lost');
   }
 
-  Future<void> _handleLocalAsrTextSegment(AsrTextSegment segment) async {
+  Future<void> _handleLocalAsrTextSegment(String sessionId, AsrTextSegment segment) async {
     if (!segment.isFinal) {
       _upsertSegment(
         segment.id,
@@ -69,26 +69,45 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
       return;
     }
     _localPartialFlush.clearIfSameId(segment.id);
-    await _translateLocalSegment(segment);
+    await _translateLocalSegment(sessionId, segment, _localWorkGeneration);
   }
 
   Future<void> _flushPendingLocalPartialTranslation() async {
     final segment = _localPartialFlush.take();
     if (segment == null || !_config.useLocalSessions) return;
     if (_status != RealtimeStatus.active && !_stopInFlight) return;
-    await _translateLocalSegment(AsrTextSegment(
+    final sessionId = _session?.sessionId;
+    if (sessionId == null) return;
+    _checkpointLocalSession(sessionId);
+    await _translateLocalSegment(sessionId, AsrTextSegment(
       id: segment.id,
       text: segment.text,
       language: segment.language,
       isFinal: true,
       confidence: segment.confidence,
-    ));
+    ), _localWorkGeneration);
   }
 
-  Future<void> _translateLocalSegment(AsrTextSegment segment) async {
-    final translated = _canTranslateOnDevice(segment)
-        ? await _translateOnDevice(segment)
-        : null;
+  Future<void> _translateLocalSegment(
+      String sessionId, AsrTextSegment segment, int localGeneration) async {
+    bool current() => !_config.onDeviceOnly ||
+        (!_disposed && _session?.sessionId == sessionId &&
+         _localWorkGeneration == localGeneration &&
+         (_status == RealtimeStatus.active || _stopInFlight));
+    if (!current()) return;
+    MobileTranslationResult? translated;
+    try {
+      translated = _canTranslateOnDevice(segment)
+          ? await _translateOnDevice(segment)
+          : null;
+    } on _TranslationIntegrityFailure {
+      if (current()) {
+        _message = '翻译未完成，关键内容无法核实；原文已保留。';
+        _notify();
+      }
+      return;
+    }
+    if (!current()) return;
     if (translated != null) {
       final targetLanguage = _targetLanguageForAsr(segment);
       if (_message == 'On-device translation unavailable') {
@@ -104,6 +123,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
         stage: 'translation',
         provider: translated.provider,
       );
+      _checkpointLocalSession(sessionId);
       _speakTranslationIfNeeded(translated.text, targetLanguage);
       return;
     }
@@ -140,7 +160,8 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
       protected.text,
       config,
     );
-    if (translated == null || !protected.hasProtectedText) return translated;
+    if (translated == null) return null;
+    if (!protected.hasProtectedText && !_config.onDeviceOnly) return translated;
     final restoredText = protected.restore(translated.text);
     if (restoredText != null) {
       return MobileTranslationResult(
@@ -148,6 +169,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
         provider: translated.provider,
       );
     }
+    if (_config.onDeviceOnly) throw const _TranslationIntegrityFailure();
     // Some translators may rewrite an unfamiliar placeholder. Retry the
     // original sentence so an internal marker can never reach the UI.
     return _mobileTranslationProvider.translate(segment.text, config);
@@ -234,6 +256,10 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     if (RegExp(r'[A-Za-z]').hasMatch(char)) return 'en';
     return null;
   }
+}
+
+class _TranslationIntegrityFailure implements Exception {
+  const _TranslationIntegrityFailure();
 }
 
 class _LocalPartialTranslationFlush {

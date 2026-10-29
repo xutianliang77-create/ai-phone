@@ -67,3 +67,13 @@ abstract class MobileTranslationDiagnostics {
     MobileTranslationConfig config,
   );
 }
+
+/// Warms an already-installed, authorized pair without processing user text.
+abstract interface class MobileTranslationPreparation {
+  Future<void> warmUp(MobileTranslationConfig config);
+}
+
+/// Cancels only work owned by this provider instance, not other app features.
+abstract interface class MobileTranslationCancellation {
+  Future<void> cancelPending();
+}

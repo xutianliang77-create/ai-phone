@@ -9,6 +9,7 @@ class SessionMinutesTab extends StatelessWidget {
     required this.hasServerReview,
     required this.onGenerateReview,
     required this.generatingReview,
+    this.localExtractive = false,
     super.key,
   });
 
@@ -16,6 +17,7 @@ class SessionMinutesTab extends StatelessWidget {
   final bool hasServerReview;
   final VoidCallback onGenerateReview;
   final bool generatingReview;
+  final bool localExtractive;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +48,8 @@ class SessionMinutesTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        if (localExtractive)
+          Text(chinese ? '按本机记录摘录，不是 AI 归纳。' : 'Extracted from this device’s transcript, not an AI summary.'),
         SelectableText(
           review.summary.isEmpty
               ? (chinese ? '暂无纪要内容' : 'No notes available')

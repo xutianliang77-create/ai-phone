@@ -3,15 +3,20 @@ import 'package:flutter/services.dart';
 import 'mobile_translation_provider.dart';
 
 class IosSystemTranslationProvider
-    implements MobileTranslationProvider, MobileTranslationDiagnostics {
+    implements MobileTranslationProvider, MobileTranslationDiagnostics, MobileTranslationCancellation, MobileTranslationPreparation {
   IosSystemTranslationProvider({
     MethodChannel? channel,
     MobileTranslationProvider? fallback,
-  })  : _channel = channel ?? const MethodChannel(_channelName),
+  })  : _scope = '${DateTime.now().microsecondsSinceEpoch}-${_nextScope++}',
+        _channel = channel ?? const MethodChannel(_channelName),
         _fallback = fallback;
 
   static const _channelName = 'translation_mobile/on_device_translation';
+  static int _nextScope = 0;
 
+  final String _scope;
+  int _nextRequest = 0;
+  final _activeRequests = <String>{};
   final MethodChannel _channel;
   final MobileTranslationProvider? _fallback;
 
@@ -37,10 +42,12 @@ class IosSystemTranslationProvider
     String text,
     MobileTranslationConfig config,
   ) async {
+    final requestId='$_scope-${_nextRequest++}';
+    _activeRequests.add(requestId);
     try {
       final result = await _channel.invokeMapMethod<String, Object?>(
         'translate',
-        <String, Object?>{'text': text, ..._languageArguments(config)},
+        <String, Object?>{'text': text, 'requestId': requestId, ..._languageArguments(config)},
       );
       final translatedText = result?['text'] as String?;
       if (translatedText == null || translatedText.trim().isEmpty) {
@@ -53,13 +60,40 @@ class IosSystemTranslationProvider
     } on MissingPluginException {
       return _fallback?.translate(text, config);
     } on PlatformException catch (error) {
+      if (error.code == 'translation_cancelled') return null;
       if (const ['expired','authorization_required','device_component_scope','device_account_required'].contains(error.code)) rethrow;
       return _fallback?.translate(text, config);
+    } finally {
+      _activeRequests.remove(requestId);
+    }
+  }
+
+  @override
+  Future<void> warmUp(MobileTranslationConfig config) async {
+    final requestId = '$_scope-${_nextRequest++}';
+    _activeRequests.add(requestId);
+    try {
+      await _channel.invokeMethod<void>('warmup', {
+        'requestId': requestId, ..._languageArguments(config),
+      });
+    } finally {
+      _activeRequests.remove(requestId);
+    }
+  }
+
+  @override
+  Future<void> cancelPending() async {
+    final pending=List<String>.of(_activeRequests);
+    for (final requestId in pending) {
+      try { await _channel.invokeMethod<void>('cancel', {'requestId':requestId}); }
+      on MissingPluginException { /* Older non-product adapters have no cancel. */ }
+      on PlatformException { /* A completed request may already be gone. */ }
     }
   }
 
   @override
   Future<void> dispose() async {
+    await cancelPending();
     await _fallback?.dispose();
   }
 

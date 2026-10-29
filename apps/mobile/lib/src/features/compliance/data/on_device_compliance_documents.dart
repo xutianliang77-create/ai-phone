@@ -1,6 +1,6 @@
 part of 'compliance_document.dart';
 
-const onDevicePrivacyVersion = 'wujie-v10-device-privacy-r1';
+const onDevicePrivacyVersion = 'wujie-v10-device-privacy-r2';
 const onDeviceTermsVersion = 'wujie-v10-device-terms-r1';
 const onDeviceComplianceDocuments = <ComplianceDocument>[
   ComplianceDocument(
@@ -18,7 +18,7 @@ const onDeviceComplianceDocuments = <ComplianceDocument>[
       ComplianceSection(
         title: '手机处理',
         body:
-            '语音识别、翻译、系统朗读和图片文字识别在手机上运行。音频、图片、原文、译文与历史内容不会发送到模型供应商、自有模型服务器或Cloudflare。历史和导出保存在本机；主动分享的副本由你选择去向。',
+            '语音识别、翻译、系统朗读和图片文字识别在手机上运行。音频、图片、原文、译文与历史内容不会发送到模型供应商、自有模型服务器或Cloudflare。历史和导出保存在本机；主动分享的副本由你选择去向。根据你的设备设置，历史记录、术语和导出文件可能包含在 iCloud 或电脑备份中；删除本机记录不会自动删除已有备份里的副本。Apple 的翻译系统可能收集应用标识、语言及性能等指标，不包括原文和译文。',
       ),
       ComplianceSection(
         title: '账号和订阅',
@@ -45,7 +45,7 @@ const onDeviceComplianceDocuments = <ComplianceDocument>[
       ComplianceSection(
         title: 'On-device content',
         body:
-            'Recognition, translation, readout and OCR run on your phone. Audio, images, source text, translations and history are not uploaded to model vendors, our model servers or Cloudflare. You control exported copies and sharing.',
+            'Recognition, translation, readout and OCR run on your phone. Audio, images, source text, translations and history are not uploaded to model vendors, our model servers or Cloudflare. You control exported copies and sharing. Depending on your device settings, history, terms and exports may be included in iCloud or computer backups; deleting records on this device does not automatically remove existing backup copies. Apple may collect translation API usage and performance information, including app and language identifiers, but not source or translated content.',
       ),
       ComplianceSection(
         title: 'Account and billing',

@@ -3,6 +3,7 @@ import {X509Certificate} from 'node:crypto';
 import {verifyAppleJwsPayload} from '../../api-server/src/modules/billing/apple-iap-verifier.ts';
 import {fail,integer} from './common.mjs';
 import {normalizeTransaction} from './subscription-policy.mjs';
+import {AppleCertificateRevocationChecker} from './apple-revocation.mjs';
 // Apple StoreKit signing leaf and WWDR intermediate purpose extensions.
 const leafOid=Buffer.from('060a2a864886f76364060b01','hex');
 const intermediateOid=Buffer.from('060a2a864886f76364060201','hex');
@@ -21,21 +22,31 @@ export function verifiedApplePayload(jws,root,now){
  return result.payload;
 }
 export class AppleSubscriptionVerifier{
- constructor(config){this.config=config;}
- transaction(jws,now){return normalizeTransaction(verifiedApplePayload(jws,this.config.appleRootSha256,now),this.config,now);}
- renewal(jws,transaction,now){
-  const p=verifiedApplePayload(jws,this.config.appleRootSha256,now);
+ constructor(config,revocationChecker=new AppleCertificateRevocationChecker()){this.config=config;this.revocationChecker=revocationChecker;}
+ async verified(jws,now){
+  // Verify the signature and pinned chain first; never send untrusted AIA
+  // endpoints or transaction contents to a certificate status responder.
+  const payload=verifiedApplePayload(jws,this.config.appleRootSha256,now);
+  await this.revocationChecker.check(jws,now);
+  return payload;
+ }
+ async transaction(jws,now){return normalizeTransaction(await this.verified(jws,now),this.config,now);}
+ async renewal(jws,transaction,now){
+  const p=await this.verified(jws,now);
   if(p.environment!==this.config.environment||p.originalTransactionId!==transaction.originalTransactionId||p.productId!==this.config.productId||![0,1].includes(p.autoRenewStatus)||
     (p.isInBillingRetryPeriod!==undefined&&typeof p.isInBillingRetryPeriod!=='boolean')||
     (p.gracePeriodExpiresDate!==undefined&&!Number.isSafeInteger(p.gracePeriodExpiresDate)))fail('v10_apple_renewal_binding',403);
   return p;
  }
- notification(jws,now){
-  const p=verifiedApplePayload(jws,this.config.appleRootSha256,now),d=p.data;
+ async notification(jws,now){
+  const p=await this.verified(jws,now),d=p.data;
   if(!d||d.bundleId!==this.config.bundleId||d.environment!==this.config.environment||
    (this.config.environment==='Production'&&d.appAppleId!==this.config.appAppleId)||typeof p.notificationUUID!=='string'||typeof p.notificationType!=='string')fail('v10_apple_notification_binding',403);
-  const transaction=this.transaction(d.signedTransactionInfo,now);
-  const renewal=d.signedRenewalInfo?this.renewal(d.signedRenewalInfo,transaction,now):null;
+  // Apple's TEST notification deliberately has no transaction. Verify its
+  // outer signature and app binding but never create entitlement or ledger data.
+  if(p.notificationType==='TEST')return {id:p.notificationUUID,type:'TEST',transaction:null,renewal:null,payload:p};
+  const transaction=await this.transaction(d.signedTransactionInfo,now);
+  const renewal=d.signedRenewalInfo?await this.renewal(d.signedRenewalInfo,transaction,now):null;
   return {id:p.notificationUUID,type:p.notificationType,transaction,renewal,payload:p};
  }
 }

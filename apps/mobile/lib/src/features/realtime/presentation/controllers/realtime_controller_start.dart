@@ -17,6 +17,15 @@ extension RealtimeControllerStart on RealtimeController {
       await _failureCleanup?.catchError((Object _) {});
       if (_status != RealtimeStatus.failed) return;
     }
+    final pending=_pendingLocalSave, segments=_pendingLocalSegments;
+    if (_config.onDeviceOnly && pending!=null && segments!=null) {
+      try {
+        await _repository.end(pending.sessionId,segments);
+        _pendingLocalSave=null;_pendingLocalSegments=null;
+      } catch (_) {
+        _message='本机记录未保存，请保留页面并重试保存。';_notify();return;
+      }
+    }
 
     final generation = ++_startGeneration;
     _setStatus(RealtimeStatus.connecting);
@@ -30,6 +39,7 @@ extension RealtimeControllerStart on RealtimeController {
   }
 
   Future<void> _startSession(int generation) async {
+    if (_config.onDeviceOnly) _localWorkGeneration++;
     _captureInvalidated = false;
     _activeTimeClock.reset();
     _session = null;
@@ -64,6 +74,8 @@ extension RealtimeControllerStart on RealtimeController {
     _session = session;
     _startSessionTimeout(session);
     if (_usesDeviceAsr) {
+      await _warmOnDeviceTranslation(generation);
+      if (!_isCurrentStart(generation)) return;
       await _startDeviceAsr();
     } else {
       await _startAudioCapture();

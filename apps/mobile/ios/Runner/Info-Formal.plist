@@ -47,6 +47,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>拍照翻译需要使用相机拍摄菜单、截图、合同和表格。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>验证手机解锁身份后查看未绑定账号的本机旧记录。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>无界AI需要使用麦克风识别语音并翻译。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

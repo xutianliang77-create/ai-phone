@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../../account/data/account_session_events.dart';
+import '../../../billing/data/subscription_recovery_coordinator.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
@@ -17,21 +18,36 @@ class MainShellPage extends StatefulWidget {
   State<MainShellPage> createState() => _MainShellPageState();
 }
 
-class _MainShellPageState extends State<MainShellPage> {
+class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserver {
   late final AppConfig _config = AppConfig.fromEnvironment();
   int _selectedIndex = 0;
   final Set<int> _builtTabs = <int>{0};
   StreamSubscription<void>? _accountChanges;
   int _accountRevision = 0;
+  SubscriptionRecoveryCoordinator? _subscriptionRecovery;
   @override
   void initState() {
     super.initState();
-    if (_config.onDeviceOnly) { _accountChanges = AccountSessionEvents.changes.listen((_) {
+    if (_config.onDeviceOnly) {
+      WidgetsBinding.instance.addObserver(this);
+      _subscriptionRecovery = SubscriptionRecoveryCoordinator()..start();
+      _accountChanges = AccountSessionEvents.changes.listen((_) {
       if (mounted) setState(() { _accountRevision++; _builtTabs..clear()..add(_selectedIndex); });
+      _subscriptionRecovery?.retryPending();
     }); }
   }
   @override
-  void dispose() { _accountChanges?.cancel(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _subscriptionRecovery?.dispose();
+    _accountChanges?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _subscriptionRecovery?.retryPending();
+  }
 
   @override
   Widget build(BuildContext context) {

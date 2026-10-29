@@ -20,7 +20,7 @@ async function statusFixture(){
  ctx.f.db.prepare('DELETE FROM v10_subscription_chains WHERE original_transaction_id<>?').run('100');
  const r={environment:'Sandbox',productId:ctx.config.productId,originalTransactionId:'100',signedDate:now,autoRenewStatus:0,isInBillingRetryPeriod:false};
  const response=(status=1)=>({bundleId:ctx.config.bundleId,environment:'Sandbox',data:[{lastTransactions:[{originalTransactionId:'100',status,signedTransactionInfo:cert.sign(p),signedRenewalInfo:cert.sign(r)}]}]});
- return {u,p,r,response,verifier:new AppleSubscriptionVerifier(ctx.config)};
+ return {u,p,r,response,verifier:new AppleSubscriptionVerifier(ctx.config,{check:async()=>{}})};
 }
 it('refreshes signed status via GET only; cancellation preserves the paid period and fresh cache avoids another request',async()=>{
  const f=await statusFixture();let calls=0;
@@ -45,4 +45,25 @@ it('a verified revoked status fences a transaction even without a notification; 
  const service=new AppleSubscriptionStatus(ctx.f.store(),ctx.config,ctx.subscriptions(),f.verifier,async()=>Response.json(f.response(5)));
  await service.refresh('alice',now);expect((await ctx.subscriptions().entitlement('alice',now)).valid).toBe(false);
  expect((await ctx.subscriptions().entitlement('alice',now+60000)).valid).toBe(false);
+});
+it('accepts an older valid signed transaction returned by a fresh authenticated status response',async()=>{
+ const f=await statusFixture();
+ const old={...normalizeTransaction(f.p,ctx.config,now),signedAtMs:now-301000};
+ const verifier={transaction:()=>old,renewal:()=>f.r} as unknown as AppleSubscriptionVerifier;
+ const service=new AppleSubscriptionStatus(ctx.f.store(),ctx.config,ctx.subscriptions(),verifier,async()=>Response.json(f.response()));
+ await service.refresh('alice',now);
+ expect((await ctx.subscriptions().entitlement('alice',now)).valid).toBe(true);
+});
+it('restore requires exactly one fresh Apple status and an active period or signed grace',async()=>{
+ const f=await statusFixture();let payload=f.response();
+ const service=new AppleSubscriptionStatus(ctx.f.store(),ctx.config,ctx.subscriptions(),f.verifier,async()=>Response.json(payload));
+ expect((await service.activeRestoreEvidence('100',now)).status).toBe(1);
+ payload=f.response(3);await expect(service.activeRestoreEvidence('100',now)).rejects.toThrow('v10_restore_entitlement_not_active');
+ payload=f.response(5);await expect(service.activeRestoreEvidence('100',now)).rejects.toThrow('v10_restore_entitlement_not_active');
+ const expired={...f.p,expiresDate:now-1},grace={...f.r,gracePeriodExpiresDate:now+300000};
+ payload={bundleId:ctx.config.bundleId,environment:'Sandbox',data:[{lastTransactions:[{originalTransactionId:'100',status:4,
+  signedTransactionInfo:cert.sign(expired),signedRenewalInfo:cert.sign(grace)}]}]};
+ expect((await service.activeRestoreEvidence('100',now)).status).toBe(4);
+ payload.data[0].lastTransactions.push(payload.data[0].lastTransactions[0]);
+ await expect(service.activeRestoreEvidence('100',now)).rejects.toThrow('v10_restore_entitlement_not_active');
 });
