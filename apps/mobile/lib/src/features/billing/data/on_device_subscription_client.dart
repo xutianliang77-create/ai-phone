@@ -23,11 +23,15 @@ class OnDeviceSubscriptionClient {
   final Duration _storeKitTimeout;
   static final _storeKitLoads = <String, _StoreKitFlight>{};
   static final _syncs = <String, Future<String>>{};
+  static Future<Map<String, Object?>?>? _offerDiagnosticFlight;
 
   String _scopeKey(ScopedAccountOperation op) =>
       jsonEncode([channel.name, op.original.deploymentId, op.original.issuerOrigin, op.original.ownerId]);
 
   Future<Map<String, Object?>?> _loadProduct(ScopedAccountOperation op, String token, String requestId) {
+    if (_offerDiagnosticFlight != null) {
+      return Future.error(StateError('subscription_diagnostic_in_progress'));
+    }
     final owner = op.original.ownerId!;
     final key = jsonEncode([_scopeKey(op), token]);
     var flight = _storeKitLoads[key];
@@ -118,6 +122,30 @@ class OnDeviceSubscriptionClient {
       emit('failed', error);
       rethrow;
     }
+  }
+
+  /// QA-only product metadata. This is intentionally independent of the
+  /// entitlement server and never changes the purchase or authorization flow.
+  Future<void> diagnoseStoreOffer() async {
+    if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') != 'A13_QA') {
+      throw StateError('subscription_diagnostic_unavailable');
+    }
+    final op = await ScopedAccountOperation.capture(control.store);
+    if (_offerDiagnosticFlight != null || _storeKitLoads.isNotEmpty) {
+      throw StateError('subscription_diagnostic_in_progress');
+    }
+    final future = channel.invokeMapMethod<String, Object?>('diagnoseOffer', {
+      'ownerId': op.original.ownerId!,
+      'diagnosticId': _requestId(),
+    });
+    _offerDiagnosticFlight = future;
+    future.then<void>((_) {
+      if (identical(_offerDiagnosticFlight, future)) _offerDiagnosticFlight = null;
+    }, onError: (Object _, StackTrace __) {
+      if (identical(_offerDiagnosticFlight, future)) _offerDiagnosticFlight = null;
+    });
+    await future.timeout(_storeKitTimeout);
+    await op.check();
   }
 
   Future<String> purchase({

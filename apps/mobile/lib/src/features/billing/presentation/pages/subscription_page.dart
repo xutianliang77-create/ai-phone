@@ -45,6 +45,12 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 onPressed: _busy ? null : () => _action(_client.restore),
                 child: const Text('恢复购买'),
               ),
+              if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') ==
+                  'A13_QA')
+                TextButton(
+                  onPressed: _busy ? null : _diagnoseStoreOffer,
+                  child: const Text('检查商店试用信息（仅测试）'),
+                ),
               if (_message != null) Text(_message!),
             ],
           );
@@ -165,6 +171,18 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
       setState(() {
         _future = _client.load();
       });
+    }
+  }
+
+  Future<void> _diagnoseStoreOffer() async {
+    setState(() { _busy = true; _message = null; });
+    try {
+      await _client.diagnoseStoreOffer();
+      if (mounted) setState(() => _message = '检查已结束。');
+    } catch (_) {
+      if (mounted) setState(() => _message = '检查未完成，请保留当前页面。');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

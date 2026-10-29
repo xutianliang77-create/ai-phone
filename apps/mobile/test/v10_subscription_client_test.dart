@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:translation_mobile/src/features/account/data/account_auth_headers.dart';
 import 'package:translation_mobile/src/features/account/data/account_session_store.dart';
 import 'package:translation_mobile/src/features/billing/data/on_device_subscription_client.dart';
 import 'package:translation_mobile/src/platform/license/on_device_license.dart';
@@ -26,7 +27,7 @@ void main() {
     messenger.setMockMethodCallHandler(native, null);
     messenger.setMockMethodCallHandler(purchase, null);
   });
-  OnDeviceLicenseClient control({bool rejectSync = false, bool active = false}) {
+  OnDeviceLicenseClient control({bool rejectSync = false, bool active = false, List<String>? requests}) {
     final store = MemoryAccountSessionStore(
       const AccountSession(
         token: 'synthetic',
@@ -43,6 +44,7 @@ void main() {
           : {'devicePublicKey': 'fixture-device'},
     );
     final client = MockClient((r) async {
+      requests?.add(r.url.path);
       Object data = {};
       switch (r.url.path) {
         case '/auth/deployment':
@@ -101,6 +103,77 @@ void main() {
     'trialDays': 7,
     'trialEligible': true,
   };
+  test('QA offer diagnostics use StoreKit independently and never purchase or call the entitlement server', () async {
+    final methods = <String>[];
+    final requests = <String>[];
+    final reached = Completer<void>();
+    final result = Completer<Map<String, Object?>>();
+    messenger.setMockMethodCallHandler(purchase, (call) {
+      methods.add(call.method);
+      expect(call.method, 'diagnoseOffer');
+      final args = Map<String, Object?>.from(call.arguments as Map);
+      expect(args['ownerId'], 'alice');
+      expect(args.containsKey('appAccountToken'), isFalse);
+      expect(args['diagnosticId'], matches(RegExp(r'^[a-f0-9]{32}$')));
+      reached.complete();
+      return result.future;
+    });
+    final client = OnDeviceSubscriptionClient(control: control(requests: requests), channel: purchase);
+    if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') != 'A13_QA') {
+      await expectLater(client.diagnoseStoreOffer(), throwsStateError);
+      expect(methods, isEmpty);
+      expect(requests, isEmpty);
+      return;
+    }
+    final first = client.diagnoseStoreOffer();
+    await reached.future;
+    expect(requests, isEmpty);
+    await expectLater(client.diagnoseStoreOffer(), throwsStateError);
+    expect(methods, ['diagnoseOffer']);
+    await expectLater(client.load(), throwsStateError);
+    expect(requests, contains('/billing/entitlement'));
+    expect(methods, ['diagnoseOffer']);
+    result.complete({'offerPresent': false, 'trialConfigured': false});
+    await first;
+    expect(methods, ['diagnoseOffer']);
+  });
+  test('a timed out QA offer read cannot create a duplicate while StoreKit is still running', () async {
+    if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') != 'A13_QA') return;
+    final requests = <String>[];
+    final nativeResult = Completer<Map<String, Object?>>();
+    var nativeCalls = 0;
+    messenger.setMockMethodCallHandler(purchase, (call) {
+      expect(call.method, 'diagnoseOffer');
+      nativeCalls++;
+      return nativeResult.future;
+    });
+    final client = OnDeviceSubscriptionClient(
+      control: control(requests: requests), channel: purchase,
+      storeKitTimeout: const Duration(milliseconds: 20),
+    );
+    await expectLater(client.diagnoseStoreOffer(), throwsA(isA<TimeoutException>()));
+    await expectLater(client.diagnoseStoreOffer(), throwsStateError);
+    expect(nativeCalls, 1);
+    expect(requests, isEmpty);
+    nativeResult.complete({'offerPresent': false});
+    await Future<void>.delayed(Duration.zero);
+  });
+  test('a QA offer result is discarded after the account scope changes', () async {
+    if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') != 'A13_QA') return;
+    final reached = Completer<void>();
+    final nativeResult = Completer<Map<String, Object?>>();
+    messenger.setMockMethodCallHandler(purchase, (call) {
+      expect(call.method, 'diagnoseOffer');
+      reached.complete();
+      return nativeResult.future;
+    });
+    final client = OnDeviceSubscriptionClient(control: control(), channel: purchase);
+    final running = client.diagnoseStoreOffer();
+    await reached.future;
+    await client.control.store.clear();
+    nativeResult.complete({'offerPresent': true});
+    await expectLater(running, throwsA(isA<AccountAuthRequiredException>()));
+  });
   test(
     'only the matched actual CNY10 monthly product can be offered, and absence of consent invokes no purchase',
     () async {

@@ -69,6 +69,24 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('确认订阅 ¥10/月'), findsOneWidget);
   });
+  testWidgets('independent offer diagnosis is QA-only and never initiates a purchase', (t) async {
+    final client = _RetryClient();
+    await t.pumpWidget(MaterialApp(home: SubscriptionPage(client: client)));
+    await t.pumpAndSettle();
+    final diagnostic = find.text('检查商店试用信息（仅测试）');
+    if (const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') != 'A13_QA') {
+      expect(diagnostic, findsNothing);
+      expect(client.diagnoses, 0);
+      return;
+    }
+    expect(diagnostic, findsOneWidget);
+    await t.tap(diagnostic);
+    await t.pumpAndSettle();
+    expect(client.diagnoses, 1);
+    expect(client.purchases, 0);
+    expect(client.count, 1);
+    expect(find.text('检查已结束。'), findsOneWidget);
+  });
   testWidgets('an unresolved Apple approval disables a second purchase', (t) async {
     final c = _Client(true, pending: true);
     await t.pumpWidget(MaterialApp(home: SubscriptionPage(client: c)));
@@ -92,6 +110,7 @@ class _Client implements OnDeviceSubscriptionClient {
   bool pending;
   int purchases = 0;
   int clears = 0;
+  int diagnoses = 0;
   @override
   OnDeviceLicenseClient get control =>
       throw UnimplementedError('not used by widget fixture');
@@ -114,6 +133,8 @@ class _Client implements OnDeviceSubscriptionClient {
 
   @override
   Future<String> restore() async => 'restored';
+  @override
+  Future<void> diagnoseStoreOffer() async { diagnoses++; }
   @override
   Future<String> recoverPending() async => 'restored';
   @override

@@ -205,6 +205,29 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
         recordLoad(attempt,"load_failed",started:started,error:error)
         throw error
       }
+    case "diagnoseOffer":
+      // This entry is available only to a signed development QA build. It
+      // reads product metadata independently of the entitlement server and
+      // cannot initiate a purchase or return subscription eligibility.
+      guard Bundle.main.object(forInfoDictionaryKey:"WujieExecutionMode") as? String == "on_device",
+        Bundle.main.object(forInfoDictionaryKey:"WujieAppAttestEnvironment") as? String == "development",
+        Bundle.main.object(forInfoDictionaryKey:"WujieSubscriptionDiagnostics") as? String == "1"
+        else { throw V10LicenseFailure("storekit_unavailable") }
+      loadAttempt += 1
+      let attempt=loadAttempt,started=ProcessInfo.processInfo.systemUptime
+      if let id=a["diagnosticId"] as? String,id.range(of:"^[a-f0-9]{32}$",options:.regularExpression) != nil { loadIds[attempt]=id }
+      defer { loadIds.removeValue(forKey:attempt) }
+      recordLoad(attempt,"load_started",started:started)
+      do {
+        let p=try await product(diagnosticAttempt:attempt,started:started)
+        let flags=offerDiagnosticFlags(p.subscription?.introductoryOffer,configured:trialConfigured(p))
+        recordLoad(attempt,"trial_checked",started:started,flags:flags)
+        recordLoad(attempt,"load_completed",started:started)
+        return flags
+      } catch {
+        recordLoad(attempt,"load_failed",started:started,error:error)
+        throw error
+      }
     case "purchase":
       guard !busy,let token=a["appAccountToken"] as? String,let uuid=UUID(uuidString:token),
         let now=a["serverNowMs"] as? Int64,a["consentConfirmed"] as? Bool==true else{throw V10LicenseFailure("subscription_consent_required")}
