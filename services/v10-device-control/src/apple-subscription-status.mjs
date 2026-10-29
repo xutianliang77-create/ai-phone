@@ -6,7 +6,7 @@ import {hash,fail} from './common.mjs';
 export class AppleSubscriptionStatus {
  constructor(store,config,subscriptions,verifier,transport=(input,init)=>fetch(input,init)){Object.assign(this,{store,config,subscriptions,verifier,transport});}
  async refresh(owner,now){
-  const chains=await this.store.readAll(sql('SELECT c.*,s.verified_ms FROM v10_subscription_chains c LEFT JOIN v10_subscription_status s ON s.chain_key=c.chain_key WHERE c.owner_id=? ORDER BY c.updated_ms DESC LIMIT 2',owner));
+  const chains=await this.store.readAll(sql('SELECT c.*,s.verified_ms FROM v10_subscription_chains c LEFT JOIN v10_subscription_status s ON s.chain_key=c.chain_key WHERE c.owner_id=? AND c.environment=? ORDER BY c.updated_ms DESC LIMIT 2',owner,this.config.environment));
   for(const chain of chains){
    if(chain.verified_ms!==null&&chain.verified_ms!==undefined&&chain.verified_ms<=now&&now-chain.verified_ms<60000)continue;
    const body=await this.read(chain.original_transaction_id,now);

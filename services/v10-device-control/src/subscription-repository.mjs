@@ -6,6 +6,7 @@ export class SubscriptionRepository{
  chainKey(t){return hash([t.environment,t.bundleId,t.originalTransactionId]);}
  transactionKey(t){return hash([t.environment,t.bundleId,t.transactionId]);}
  async sync(actor,t,proof,now,event='client_sync',notificationId){
+  if(!t||t.environment!==this.config.environment)fail('v10_subscription_environment_mismatch',403);
   const chain=this.chainKey(t),tx=this.transactionKey(t);
   const owner=await this.store.read(sql('SELECT * FROM v10_subscription_chains WHERE chain_key=?',chain));
   if(owner&&owner.owner_id!==actor.id)fail('v10_subscription_owned_by_other_account',403);
@@ -34,6 +35,7 @@ export class SubscriptionRepository{
  }
  async restoreAfterDeletion(actor,presented,evidence,proofHash,now){
   digest(proofHash);
+  if(presented?.environment!==this.config.environment||evidence?.transaction?.environment!==this.config.environment)fail('v10_subscription_environment_mismatch',403);
   const chain=this.chainKey(presented),t=evidence.transaction,tx=this.transactionKey(t),
    prior=await this.store.read(sql(`SELECT c.owner_id,a.status,a.app_account_token,b.original_app_account_token
     FROM v10_subscription_chains c JOIN accounts a ON a.user_id=c.owner_id
@@ -74,7 +76,7 @@ export class SubscriptionRepository{
   return this.entitlement(actor.id,now);
  }
  async entitlement(ownerId,now){
-  const all=await this.store.readAll(sql(`SELECT t.*,s.status apple_status,s.verified_ms status_verified_ms,s.grace_expires_ms FROM v10_subscription_transactions t LEFT JOIN v10_subscription_status s ON s.chain_key=t.chain_key WHERE t.owner_id=?`,ownerId));
+  const all=await this.store.readAll(sql(`SELECT t.*,s.status apple_status,s.verified_ms status_verified_ms,s.grace_expires_ms FROM v10_subscription_transactions t LEFT JOIN v10_subscription_status s ON s.chain_key=t.chain_key WHERE t.owner_id=? AND t.environment=?`,ownerId,this.config.environment));
   const rows=all.filter(r=>(r.apple_status===null||[1,4].includes(r.apple_status))&&(!this.config.requireFreshStatus||(r.status_verified_ms>now-60000&&r.status_verified_ms<=now)));
   let e=currentEntitlement(rows,now);
   if(!e.valid&&all.length){const latest=[...all].sort((a,b)=>b.signed_ms-a.signed_ms)[0];
@@ -82,5 +84,5 @@ export class SubscriptionRepository{
   }
   return {...e,productId:this.config.productId,priceMinorCny:1000,currency:'CNY',period:'P1M',trialDays:7,billingBasis:'entitlement_period'};
  }
- async ledger(ownerId){return {ledger:await this.store.readAll(sql('SELECT event_key,event_type,transaction_key,recorded_ms FROM v10_subscription_events WHERE owner_id=? ORDER BY recorded_ms DESC LIMIT 500',ownerId))};}
+ async ledger(ownerId){return {ledger:await this.store.readAll(sql('SELECT e.event_key,e.event_type,e.transaction_key,e.recorded_ms FROM v10_subscription_events e JOIN v10_subscription_transactions t ON t.transaction_key=e.transaction_key WHERE e.owner_id=? AND t.environment=? ORDER BY e.recorded_ms DESC LIMIT 500',ownerId,this.config.environment))};}
 }
