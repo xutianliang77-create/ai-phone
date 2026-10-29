@@ -57,8 +57,9 @@ const stage=fs.mkdtempSync(path.join(os.tmpdir(),'wujie-v10-device-runtime-'));f
 if(process.env.WUJIE_LOCAL_RUNTIME_DIAGNOSTICS==='1'){
  const p=path.join(stage,'worker.mjs');fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('const code = String(error?.code ?? error?.message ?? "");', 'console.error(error?.stack);\n    const code = String(error?.code ?? error?.message ?? "");'));
 }
+const qaVersion='12345678-1234-4234-8234-123456789abc';
 const makeWorker=(name,enabled)=>({name,modulesRoot:stage,modules:[{type:'ESModule',path:path.join(stage,'worker.mjs')}],compatibilityDate:'2026-10-10',compatibilityFlags:['nodejs_compat'],
- bindings:{...env,V10_DEVICE_LICENSE_ENABLED:enabled?'true':'false'},d1Databases:{D1_COMMERCE:'00000000-0000-0000-0000-000000000011'},outboundService:outbound});
+ bindings:{...env,CF_VERSION_METADATA:{id:qaVersion},V10_DEVICE_LICENSE_ENABLED:enabled?'true':'false'},d1Databases:{D1_COMMERCE:'00000000-0000-0000-0000-000000000011'},outboundService:outbound});
 const envIsolation=process.env.WUJIE_TEST_ENV_ISOLATION==='1',workers=[makeWorker('closed',false),makeWorker('open',true)];
 if(envIsolation){const prod=makeWorker('production',true);prod.bindings={...prod.bindings,BILLING_ENVIRONMENT:'Production',DEVICE_APP_ATTEST_ENVIRONMENT:'production',V10_APP_APPLE_ID:'6821818845'};workers.push(prod);}
 const options=convertV4MiniflareOptions({telemetry:{enabled:false},workers});
@@ -86,6 +87,10 @@ try{
  ]);
  const closed=await mf.getWorker('closed'),open=await mf.getWorker('open'),production=envIsolation?await mf.getWorker('production'):null;
  expect((await call(closed,'/auth/deployment')).execution==='on_device','metadata');
+ const closedHealth=await call(closed,'/health'),openHealth=await call(open,'/health');
+ expect(closedHealth.licenseAdmission==='closed'&&closedHealth.qaWorkerVersion===qaVersion,'closed_edge_version');
+ expect(openHealth.licenseAdmission==='configured_open'&&openHealth.qaWorkerVersion===qaVersion,'open_edge_version');
+ if(production)expect(!Object.hasOwn(await call(production,'/health'),'qaWorkerVersion'),'production_hides_qa_version');
  const challenge=await call(open,'/auth/apple/request','POST',{deploymentId:env.PUBLIC_DEPLOYMENT_ID,action:'login'});
  const header=Buffer.from(JSON.stringify({alg:'RS256',kid:'fixture-identity'})).toString('base64url'),payload=Buffer.from(JSON.stringify({iss:'https://appleid.apple.com',aud:env.PUBLIC_BUNDLE_ID,sub:'SYNTHETIC_LOCAL_SUBJECT',nonce:challenge.nonce,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
  syntheticIdentityJwt=header+'.'+payload+'.'+sign('sha256',Buffer.from(header+'.'+payload),identityKey.privateKey).toString('base64url');

@@ -26,7 +26,14 @@ export default {async fetch(request,env,execution){
   const config=configuration(env,started);
   if(['/', '/privacy','/terms','/support','/refund','/account/delete','/providers','/permissions'].includes(path)&&['GET','HEAD'].includes(request.method))return documents(env,path,request.method==='HEAD');
   if(path==='/auth/deployment'&&request.method==='GET')return json({deploymentId:config.deploymentId,backend:'cloudflare',bundleId:config.bundleId,execution:'on_device',controlContract:'v10-device-license-v1',componentProfile:COMPONENT_PROFILE.profile});
-  if(path==='/health'&&request.method==='GET')return json({service:'wujie-v10-device-control',execution:'on_device',licenseAdmission:config.admissionOpen?'configured_open':'closed'});
+  if(path==='/health'&&request.method==='GET'){
+   // QA only: identify the Worker version that actually served this edge request.
+   // A missing or malformed binding is explicit and can never qualify readiness.
+   const id=env.CF_VERSION_METADATA?.id;
+   const qaVersion=typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id)?id:null;
+   return json({service:'wujie-v10-device-control',execution:'on_device',licenseAdmission:config.admissionOpen?'configured_open':'closed',
+    ...(env.PUBLIC_RELEASE_PURPOSE==='A13_QA'&&env.BILLING_ENVIRONMENT==='Sandbox'?{qaWorkerVersion:qaVersion}:{})});
+  }
   if(!accountPaths.has(path)&&!devicePaths.has(path)&&!billingPaths.has(path))fail('v10_route_not_supported',404);
   const noAccount=path==='/v10/device/close'||path==='/billing/apple/notifications'||path==='/account/delete/status';ctx=await context(env,!noAccount);
   const subscriptions=new SubscriptionRepository(ctx.store,config),billing=new BillingService(ctx.store,config,subscriptions,new AppleSubscriptionVerifier(config,revocationChecker)),licenses=new DeviceLicenseService(ctx.store,config,subscriptions);
