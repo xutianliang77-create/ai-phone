@@ -72,7 +72,9 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
       "at":ISO8601DateFormatter().string(from:Date()),
       "durationMs":Int(min(600000,max(0,(ProcessInfo.processInfo.systemUptime-started)*1000)))]
     if let id=loadIds[attempt] { event["requestId"]=id }
-    let allowedFlags = ["productConfigured","idMatch","typeMatch","priceMatch","currencyMatch","periodMatch","trialConfigured"]
+    let allowedFlags = ["productConfigured","idMatch","typeMatch","priceMatch","currencyMatch","periodMatch","trialConfigured",
+      "offerPresent","offerFreeTrial","offerPayUpFront","offerPayAsYouGo","offerUnitWeek","offerUnitDay",
+      "offerValueOne","offerValueSeven","offerCountOne"]
     for (key,value) in flags where allowedFlags.contains(key) { event[key]=value }
     if let count { event["productCount"] = min(3,max(0,count)) }
     if let error {
@@ -155,6 +157,21 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
     guard let offer=p.subscription?.introductoryOffer else{return false}
     return offer.paymentMode == .freeTrial && offer.period.unit == .week && offer.period.value==1 && offer.periodCount==1
   }
+  // Only product metadata is recorded. Offer eligibility, account identity,
+  // transaction data and raw StoreKit payloads remain excluded.
+  private func offerDiagnosticFlags(_ offer:Product.SubscriptionOffer?,configured:Bool) -> [String:Bool] {
+    var flags=["trialConfigured":configured,"offerPresent":offer != nil]
+    guard let offer else { return flags }
+    flags["offerFreeTrial"]=offer.paymentMode == .freeTrial
+    flags["offerPayUpFront"]=offer.paymentMode == .payUpFront
+    flags["offerPayAsYouGo"]=offer.paymentMode == .payAsYouGo
+    flags["offerUnitWeek"]=offer.period.unit == .week
+    flags["offerUnitDay"]=offer.period.unit == .day
+    flags["offerValueOne"]=offer.period.value == 1
+    flags["offerValueSeven"]=offer.period.value == 7
+    flags["offerCountOne"]=offer.periodCount == 1
+    return flags
+  }
   private func handle(_ call:FlutterMethodCall) async throws -> Any {
     guard #available(iOS 15.0,*) else{throw V10LicenseFailure("storekit_unavailable")}
     let a=call.arguments as? [String:Any] ?? [:]
@@ -175,7 +192,8 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
         let eligible=await p.subscription!.isEligibleForIntroOffer
         recordLoad(attempt,"eligibility_finished",started:started)
         let trial=trialConfigured(p)
-        recordLoad(attempt,"trial_checked",started:started,flags:["trialConfigured":trial])
+        recordLoad(attempt,"trial_checked",started:started,
+          flags:offerDiagnosticFlags(p.subscription?.introductoryOffer,configured:trial))
         guard trial else{throw V10LicenseFailure("subscription_trial_not_configured")}
         recordLoad(attempt,"load_completed",started:started)
         let approvalPending=(a["appAccountToken"] as? String).flatMap(UUID.init(uuidString:))
