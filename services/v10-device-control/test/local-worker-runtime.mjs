@@ -61,6 +61,8 @@ const qaVersion='12345678-1234-4234-8234-123456789abc';
 const makeWorker=(name,enabled)=>({name,modulesRoot:stage,modules:[{type:'ESModule',path:path.join(stage,'worker.mjs')}],compatibilityDate:'2026-10-10',compatibilityFlags:['nodejs_compat'],
  bindings:{...env,CF_VERSION_METADATA:{id:qaVersion},V10_DEVICE_LICENSE_ENABLED:enabled?'true':'false'},d1Databases:{D1_COMMERCE:'00000000-0000-0000-0000-000000000011'},outboundService:outbound});
 const envIsolation=process.env.WUJIE_TEST_ENV_ISOLATION==='1',workers=[makeWorker('closed',false),makeWorker('open',true)];
+const capabilityV2=makeWorker('capability-v2',true);
+capabilityV2.bindings={...capabilityV2.bindings,V10_CAPABILITY_PROFILE_V2_ENABLED:'true'};workers.push(capabilityV2);
 if(envIsolation){const prod=makeWorker('production',true);prod.bindings={...prod.bindings,BILLING_ENVIRONMENT:'Production',DEVICE_APP_ATTEST_ENVIRONMENT:'production',V10_APP_APPLE_ID:'6821818845'};workers.push(prod);}
 const options=convertV4MiniflareOptions({telemetry:{enabled:false},workers});
 if(options.workers.some(w=>w.dev.outboundService?.type!=='fetcher'))throw Error('outbound_guard_not_installed');
@@ -85,7 +87,7 @@ try{
   db.prepare("INSERT INTO account_tokens(token_hash,user_id,identity_key,authorization_epoch,created_ms,expires_ms) VALUES(?,?,'synthetic-identity',1,?,?)").bind(sha('auth-token:'+token),owner,now,now+86400000),
   db.prepare('INSERT INTO device_permit_keys VALUES(?,?,?,?,?,?,0,?,?)').bind(sha(deviceRaw),owner,deviceRaw.toString('base64'),'synthetic-attest-id','synthetic-attest-public','synthetic-attest-receipt',now,now),
  ]);
- const closed=await mf.getWorker('closed'),open=await mf.getWorker('open'),production=envIsolation?await mf.getWorker('production'):null;
+ const closed=await mf.getWorker('closed'),open=await mf.getWorker('open'),v2=await mf.getWorker('capability-v2'),production=envIsolation?await mf.getWorker('production'):null;
  expect((await call(closed,'/auth/deployment')).execution==='on_device','metadata');
  const closedHealth=await call(closed,'/health'),openHealth=await call(open,'/health');
  expect(closedHealth.licenseAdmission==='closed'&&closedHealth.qaWorkerVersion===qaVersion,'closed_edge_version');
@@ -120,6 +122,20 @@ try{
  const stop=envelope({domain:'wujie.v10.device-license.close.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),leaseId:a.leaseId,launchNonce:'synthetic-launch',sequence:1,activeMs:5000,issuedAtMs:Date.now(),reason:'ended'});
  const s=await call(open,'/v10/device/close','POST',stop);await call(open,'/v10/device/close','POST',stop);
  expect(s.chargedSeconds===0,'no_minute_charge');
+ expect(!Object.hasOwn(config,'availableProfiles'),'v2_not_advertised_by_default');
+ const options=(await call(v2,'/v10/device/configuration')).availableProfiles;
+ expect(options?.length===1&&options[0].componentProfile.profile==='apple-system-qualified-v10-r2'&&
+  JSON.stringify(options[0].componentProfile.languages)==='["zh","en"]','v2_explicit_profile_only');
+ const v2Request=envelope({domain:'wujie.v10.device-license.request.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,
+  devicePublicKey:deviceRaw.toString('base64'),requestKey:'7'.repeat(64),launchNonce:'synthetic-v2-launch',
+  profile:options[0].componentProfile.profile,implementationHash:options[0].implementationHash,issuedAtMs:Date.now(),operation:'acquire',leaseId:'',sequence:0});
+ await call(open,'/v10/device/acquire','POST',v2Request,409);
+ const v2License=await call(v2,'/v10/device/acquire','POST',v2Request);
+ const v2Claims=JSON.parse(Buffer.from(v2License.license.split('.')[1],'base64url'));
+ expect(v2Claims.version===2&&JSON.stringify(v2Claims.allowedLanguages)==='["zh","en"]','v2_signed_scope');
+ const v2Stop=envelope({domain:'wujie.v10.device-license.close.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,
+  devicePublicKey:deviceRaw.toString('base64'),leaseId:v2License.leaseId,launchNonce:'synthetic-v2-launch',sequence:1,activeMs:1000,issuedAtMs:Date.now(),reason:'ended'});
+ await call(v2,'/v10/device/close','POST',v2Stop);
  if(production){
   const proof=envelope({domain:'wujie.v10.storekit-proof.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'5'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(productionTransaction),storeKitCurrentEntitlement:false});
   await call(production,'/billing/subscription/sync','POST',proof);
@@ -136,7 +152,7 @@ try{
  expect((await db.prepare("SELECT revoked_ms FROM v10_subscription_transactions WHERE chain_key IN (SELECT chain_key FROM v10_subscription_chains WHERE original_transaction_id='100')").first())?.revoked_ms!=null,'refund_recorded');
  expect((await call(open,'/billing/entitlement')).entitlement.valid===true,'other_active_chain_survives_refund');
  const counts={};for(const table of ['v10_device_licenses','v10_device_statistics','v10_subscription_transactions','credit_ledger','credit_reservations'])counts[table]=(await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n;
- expect(counts.v10_device_statistics===(production?2:1)&&counts.credit_ledger===0&&counts.credit_reservations===0,'unique_statistics_no_wallet');
+ expect(counts.v10_device_statistics===(production?3:2)&&counts.credit_ledger===0&&counts.credit_reservations===0,'unique_statistics_no_wallet');
  const secret='Q'.repeat(43),receiptHash=sha('v10-deletion:'+secret);
  await call(open,'/account/delete','POST',{receiptHash});expect((await call(open,'/account/delete','POST',{})).replayed===true,'deletion_ack_replay');
  // The provider is synthetic and D1 is a fresh in-memory database. Advance
@@ -184,7 +200,7 @@ try{
  expect((await call(open,'/billing/entitlement','GET',undefined,200,'Bearer '+newToken)).entitlement.valid===false,'restored_refund_revokes_new_owner');
  expect(externalDenied===0&&syntheticOcsp>=2,'outbound_or_ocsp_guard');
  fs.writeFileSync(path.join(out,'WORKER_RUNTIME.json'),JSON.stringify({status:'PASS_LOCAL_WORKER_PRODUCTION_ENTRY',workerSha256:sha(fs.readFileSync(path.join(out,'worker-local.mjs'))),diagnosticInstrumentation:process.env.WUJIE_LOCAL_RUNTIME_DIAGNOSTICS==='1',results,counts,
-  assertions:['scoped_deletion_completed_and_old_bearer_rejected','restore_requires_explicit_proof_and_matching_account_generation','restore_checks_synthetic_apple_status_before_transfer','one_owner_one_transaction_one_restore_event','refund_after_restore_revokes_new_owner'],
+  assertions:['v2_disabled_by_default_and_requires_explicit_enable','v2_signed_claim_scope_zh_en','scoped_deletion_completed_and_old_bearer_rejected','restore_requires_explicit_proof_and_matching_account_generation','restore_checks_synthetic_apple_status_before_transfer','one_owner_one_transaction_one_restore_event','refund_after_restore_revokes_new_owner'],
   syntheticStatusGets,syntheticOcsp,syntheticIdentityCalls,externalDenied,modelsCalled:0,realAppleCalls:0,deployed:false,deviceAccess:false,limits:['Synthetic attested-key seed does not qualify real App Attest','Local D1/workerd does not qualify cloud capacity or phone inference']},null,2));
  console.log(JSON.stringify({status:'PASS',requests:results.length,counts,syntheticStatusGets}));
 }catch(error){fs.writeFileSync(path.join(out,'WORKER_RUNTIME_FAILURE.json'),JSON.stringify({error:String(error?.stack??error),results,syntheticStatusGets,externalDenied},null,2));throw error;}

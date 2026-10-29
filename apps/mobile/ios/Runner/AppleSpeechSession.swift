@@ -352,7 +352,10 @@ final class AppleSpeechSession {
   private func fail(_ error: Error) {
     guard open else { return }
     failed = error
-    emit(["type": "runtime.error", "code": "apple_asr_runtime_error",
+    let reason=(error as NSError).domain
+    let code=["automatic_language_uncertain","automatic_language_evidence_timeout"].contains(reason)
+      ? reason : "apple_asr_runtime_error"
+    emit(["type": "runtime.error", "code": code,
           "message": error.localizedDescription, "sessionId": id,
           "captureId": captureId, "languagePolicyKey": languagePolicyKey])
     invalidate()

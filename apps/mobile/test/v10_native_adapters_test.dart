@@ -7,6 +7,7 @@ import 'package:translation_mobile/src/platform/asr/asr_text_segment.dart';
 import 'package:translation_mobile/src/platform/translation/ios_system_translation_provider.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
 import 'package:translation_mobile/src/platform/speech/speech_output_provider.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/controllers/device_asr_failure_message.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -115,6 +116,28 @@ void main() {
       expect((await provider.availability(auto)).canStart, false);
     },
   );
+  test('automatic uncertainty survives the native event and produces a manual-choice hint', () async {
+    const eventChannel=EventChannel('fixture/apple-asr-uncertain-events');
+    final events=StreamController<Object?>.broadcast(), errors=<Object>[];
+    messenger.setMockStreamHandler(eventChannel,_FixtureEvents(events.stream));
+    addTearDown(() async {messenger.setMockStreamHandler(eventChannel,null);await events.close();});
+    Map<String,Object?>? start;
+    messenger.setMockMethodCallHandler(method,(call) async {
+      if(call.method=='start') start=Map<String,Object?>.from(call.arguments as Map);
+      return null;
+    });
+    final provider=AppleSpeechAsrProvider(channel:method,events:eventChannel);
+    final subscription=provider.segments.listen((_) {},onError:errors.add);
+    addTearDown(subscription.cancel);
+    await provider.start(const MobileAsrConfig(language:'auto'));
+    await pumpEventQueue();
+    events.add({'type':'runtime.error','code':'automatic_language_uncertain',
+      'captureId':start!['captureId'],'languagePolicyKey':start!['languagePolicyKey']});
+    await pumpEventQueue();
+    expect(errors,hasLength(1));
+    expect((errors.single as PlatformException).code,'automatic_language_uncertain');
+    expect(await deviceAsrFailureMessage(provider,errors.single),contains('请选择中文或英文'));
+  });
   test(
     'system translation failure cannot invoke another provider; unavailable voice blocks readiness',
     () async {
@@ -185,4 +208,12 @@ void main() {
     pending[ids.last]!.complete({'text':'second','provider':'fixture'});
     expect((await b)?.text,'second');
   });
+}
+
+class _FixtureEvents extends MockStreamHandler {
+  _FixtureEvents(this.stream);
+  final Stream<Object?> stream;
+  StreamSubscription<Object?>? subscription;
+  @override void onListen(Object? arguments, MockStreamHandlerEventSink sink) {subscription=stream.listen(sink.success);}
+  @override void onCancel(Object? arguments) {subscription?.cancel();}
 }

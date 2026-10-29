@@ -31,6 +31,7 @@ class AppleSpeechAsrProvider
         if (data['type'] == 'runtime.error') {
           throw PlatformException(
             code: data['code'] as String? ?? 'apple_asr_runtime_error',
+            message: data['message'] as String?,
           );
         }
         return data['type'] == 'segment'
