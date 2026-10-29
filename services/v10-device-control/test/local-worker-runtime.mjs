@@ -54,7 +54,9 @@ if(process.env.WUJIE_LOCAL_RUNTIME_DIAGNOSTICS==='1'){
 }
 const makeWorker=(name,enabled)=>({name,modulesRoot:stage,modules:[{type:'ESModule',path:path.join(stage,'worker.mjs')}],compatibilityDate:'2026-10-10',compatibilityFlags:['nodejs_compat'],
  bindings:{...env,V10_DEVICE_LICENSE_ENABLED:enabled?'true':'false'},d1Databases:{D1_COMMERCE:'00000000-0000-0000-0000-000000000011'},outboundService:outbound});
-const options=convertV4MiniflareOptions({telemetry:{enabled:false},workers:[makeWorker('closed',false),makeWorker('open',true)]});
+const envIsolation=process.env.WUJIE_TEST_ENV_ISOLATION==='1',workers=[makeWorker('closed',false),makeWorker('open',true)];
+if(envIsolation){const prod=makeWorker('production',true);prod.bindings={...prod.bindings,BILLING_ENVIRONMENT:'Production',DEVICE_APP_ATTEST_ENVIRONMENT:'production',V10_APP_APPLE_ID:'6821818845'};workers.push(prod);}
+const options=convertV4MiniflareOptions({telemetry:{enabled:false},workers});
 if(options.workers.some(w=>w.dev.outboundService?.type!=='fetcher'))throw Error('outbound_guard_not_installed');
 const mf=new Miniflare(options),results=[];let db;
 const expect=(ok,detail)=>{if(!ok)throw Error(detail);};
@@ -77,7 +79,7 @@ try{
   db.prepare("INSERT INTO account_tokens(token_hash,user_id,identity_key,authorization_epoch,created_ms,expires_ms) VALUES(?,?,'synthetic-identity',1,?,?)").bind(sha('auth-token:'+token),owner,now,now+86400000),
   db.prepare('INSERT INTO device_permit_keys VALUES(?,?,?,?,?,?,0,?,?)').bind(sha(deviceRaw),owner,deviceRaw.toString('base64'),'synthetic-attest-id','synthetic-attest-public','synthetic-attest-receipt',now,now),
  ]);
- const closed=await mf.getWorker('closed'),open=await mf.getWorker('open');
+ const closed=await mf.getWorker('closed'),open=await mf.getWorker('open'),production=envIsolation?await mf.getWorker('production'):null;
  expect((await call(closed,'/auth/deployment')).execution==='on_device','metadata');
  const challenge=await call(open,'/auth/apple/request','POST',{deploymentId:env.PUBLIC_DEPLOYMENT_ID,action:'login'});
  const header=Buffer.from(JSON.stringify({alg:'RS256',kid:'fixture-identity'})).toString('base64url'),payload=Buffer.from(JSON.stringify({iss:'https://appleid.apple.com',aud:env.PUBLIC_BUNDLE_ID,sub:'SYNTHETIC_LOCAL_SUBJECT',nonce:challenge.nonce,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
@@ -94,7 +96,13 @@ try{
  const restorable=envelope({domain:'wujie.v10.storekit-proof.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'3'.repeat(64),issuedAtMs:Date.now(),signedTransactionInfo:cert.sign(restoreTransaction),storeKitCurrentEntitlement:false});
  await call(open,'/billing/subscription/sync','POST',restorable);
  expect((await call(open,'/billing/entitlement')).entitlement.valid===true,'signed_status_entitlement');
+ if(production){
+  expect((await call(production,'/billing/entitlement')).entitlement.valid===false,'sandbox_must_not_grant_production_entitlement');
+  expect((await call(production,'/billing/ledger')).ledger.length===0,'sandbox_events_hidden_from_production_ledger');
+  await call(production,'/billing/subscription/sync','POST',purchase,409);
+ }
  const config=await call(open,'/v10/device/configuration'),request=envelope({domain:'wujie.v10.device-license.request.v1',ownerId:owner,deploymentId:env.PUBLIC_DEPLOYMENT_ID,devicePublicKey:deviceRaw.toString('base64'),requestKey:'2'.repeat(64),launchNonce:'synthetic-launch',profile:config.componentProfile.profile,implementationHash:config.implementationHash,issuedAtMs:Date.now(),operation:'acquire',leaseId:'',sequence:0});
+ if(production)await call(production,'/v10/device/acquire','POST',request,402);
  const a=await call(open,'/v10/device/acquire','POST',request),b=await call(open,'/v10/device/acquire','POST',request);
  const jwt=a.license.split('.');expect(verify('sha256',Buffer.from(jwt[0]+'.'+jwt[1]),{key:issuer.publicKey,dsaEncoding:'ieee-p1363'},Buffer.from(jwt[2],'base64url')),'runtime_issuer_signature');
  expect(a.license===b.license&&a.expiresAtMs===transaction.expiresDate,'exact_retry');
