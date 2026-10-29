@@ -27,6 +27,8 @@ class RealtimeRuntimeSettings {
     required this.voiceOutputMode,
     this.voicePresetId = defaultRealtimeVoicePresetId,
     this.domainLexiconPack = defaultDomainLexiconPack,
+    this.automaticPairA = 'zh',
+    this.automaticPairB = 'en',
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
@@ -43,6 +45,8 @@ class RealtimeRuntimeSettings {
       ),
       voicePresetId: config.realtimeVoicePresetId,
       domainLexiconPack: config.domainLexiconPack,
+      automaticPairA: config.automaticPairA,
+      automaticPairB: config.automaticPairB,
     ).normalizedForCapabilities();
   }
 
@@ -59,8 +63,8 @@ class RealtimeRuntimeSettings {
       ),
       voiceOutputMode: json['voiceOutputMode'] == null
           ? (json['autoSpeakTranslation'] == true
-              ? RealtimeVoiceOutputMode.natural
-              : RealtimeVoiceOutputMode.off)
+                ? RealtimeVoiceOutputMode.natural
+                : RealtimeVoiceOutputMode.off)
           : realtimeVoiceOutputModeFromString(
               json['voiceOutputMode'] as String? ?? 'off',
             ),
@@ -70,7 +74,9 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: normalizeDomainLexiconPack(
         json['domainLexiconPack'] as String? ?? defaultDomainLexiconPack,
       ),
-    ).normalizedForCapabilities();
+      automaticPairA: json['automaticPairA'] as String? ?? 'zh',
+      automaticPairB: json['automaticPairB'] as String? ?? 'en',
+    );
   }
 
   final RealtimeProcessingMode processingMode;
@@ -79,6 +85,8 @@ class RealtimeRuntimeSettings {
   final RealtimeVoiceOutputMode voiceOutputMode;
   final String voicePresetId;
   final String domainLexiconPack;
+  final String automaticPairA;
+  final String automaticPairB;
 
   bool get autoSpeakTranslation {
     return voiceOutputMode != RealtimeVoiceOutputMode.off;
@@ -96,22 +104,34 @@ class RealtimeRuntimeSettings {
       sourceLanguage: sourceLanguage,
       targetLanguage: concreteTarget,
       autoReverseTargetLanguage: autoReverseTargetLanguage,
-      useDeviceAsr: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
-      useLocalSessions: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
-      useOnDeviceTranslation: base.onDeviceOnly || processingMode == RealtimeProcessingMode.onDevice,
-      realtimeVoiceOutputMode: realtimeVoiceOutputModeToString(
-        voiceOutputMode,
-      ),
+      useDeviceAsr:
+          base.onDeviceOnly ||
+          processingMode == RealtimeProcessingMode.onDevice,
+      useLocalSessions:
+          base.onDeviceOnly ||
+          processingMode == RealtimeProcessingMode.onDevice,
+      useOnDeviceTranslation:
+          base.onDeviceOnly ||
+          processingMode == RealtimeProcessingMode.onDevice,
+      realtimeVoiceOutputMode: realtimeVoiceOutputModeToString(voiceOutputMode),
       realtimeVoicePresetId: voicePresetId,
       domainLexiconPack: domainLexiconPack,
+      automaticPairA: automaticPairA,
+      automaticPairB: automaticPairB,
     );
   }
 
   bool isSupportedIn(AppConfig config) =>
-      !config.isFormalRelease ||
-      (processingMode == (config.onDeviceOnly ? RealtimeProcessingMode.onDevice : RealtimeProcessingMode.online) &&
+      (!config.isFormalRelease && !config.onDeviceOnly) ||
+      (processingMode ==
+              (config.onDeviceOnly
+                  ? RealtimeProcessingMode.onDevice
+                  : RealtimeProcessingMode.online) &&
           const {'auto', 'zh', 'en'}.contains(sourceLanguage) &&
           const {'auto_reverse', 'zh', 'en'}.contains(targetLanguage) &&
+          const {'zh', 'en'}.contains(automaticPairA) &&
+          const {'zh', 'en'}.contains(automaticPairB) &&
+          automaticPairA != automaticPairB &&
           voiceOutputMode != RealtimeVoiceOutputMode.myVoice);
 
   RealtimeRuntimeSettings copyWith({
@@ -122,8 +142,11 @@ class RealtimeRuntimeSettings {
     RealtimeVoiceOutputMode? voiceOutputMode,
     String? voicePresetId,
     String? domainLexiconPack,
+    String? automaticPairA,
+    String? automaticPairB,
   }) {
-    final nextVoiceOutputMode = voiceOutputMode ??
+    final nextVoiceOutputMode =
+        voiceOutputMode ??
         (autoSpeakTranslation == null
             ? this.voiceOutputMode
             : _toggleVoiceOutputMode(autoSpeakTranslation));
@@ -142,6 +165,8 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: domainLexiconPack == null
           ? this.domainLexiconPack
           : normalizeDomainLexiconPack(domainLexiconPack),
+      automaticPairA: automaticPairA ?? this.automaticPairA,
+      automaticPairB: automaticPairB ?? this.automaticPairB,
     );
   }
 
@@ -155,17 +180,21 @@ class RealtimeRuntimeSettings {
       'voiceOutputMode': realtimeVoiceOutputModeToString(voiceOutputMode),
       'voicePresetId': voicePresetId,
       'domainLexiconPack': domainLexiconPack,
+      'automaticPairA': automaticPairA,
+      'automaticPairB': automaticPairB,
       'autoSpeakTranslation': autoSpeakTranslation,
     };
   }
 
   RealtimeRuntimeSettings normalizedForCapabilities() {
     if (processingMode != RealtimeProcessingMode.onDevice) return this;
-    final normalizedSource = sourceLanguage == autoSourceLanguageCode ||
+    final normalizedSource =
+        sourceLanguage == autoSourceLanguageCode ||
             onDeviceTranslationLanguageCodes.contains(sourceLanguage)
         ? sourceLanguage
         : autoSourceLanguageCode;
-    final normalizedTarget = targetLanguage == autoReverseTargetLanguageCode ||
+    final normalizedTarget =
+        targetLanguage == autoReverseTargetLanguageCode ||
             onDeviceTranslationLanguageCodes.contains(targetLanguage)
         ? targetLanguage
         : autoReverseTargetLanguageCode;

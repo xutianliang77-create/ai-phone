@@ -1,6 +1,15 @@
 import AVFoundation
 
 enum SystemSpeechVoiceCatalog {
+  static func list(language: String) -> [[String: Any]] {
+    let preferred = AVSpeechSynthesisVoice(language: language)?.identifier
+    return SystemSpeechVoicePolicy.candidates(AVSpeechSynthesisVoice.speechVoices().map(descriptor),
+      language: language, preferredIdentifier: preferred).map { voice in
+        ["identifier": voice.identifier, "name": voice.name,
+         "language": voice.language, "quality": voice.quality,
+         "availableOnDevice": true, "offlineVerified": false, "qualityQualified": false]
+      }
+  }
   static func descriptor(_ voice: AVSpeechSynthesisVoice) -> SystemSpeechVoiceDescriptor {
     var personal = false, novelty = false
     if #available(iOS 17.0, *) {

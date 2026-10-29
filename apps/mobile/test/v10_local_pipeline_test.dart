@@ -37,6 +37,54 @@ void main() {
     serverOwnedHistory: false,
   );
   test(
+    'automatic pair reverses each recognized turn and retains unknown turns without guessing',
+    () async {
+      final calls = <String>[],
+          asr = _Asr(calls),
+          mt = _Translation(calls),
+          license = _License(calls);
+      final dir = Directory.systemTemp.createTempSync('v10-selected-pair-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final c = RealtimeController(
+        config: config().copyWith(
+          sourceLanguage: 'auto',
+          autoReverseTargetLanguage: true,
+          automaticPairA: 'en',
+          automaticPairB: 'zh',
+        ),
+        repository: LocalRealtimeRepository(
+          store: LocalSessionStore(file: File('${dir.path}/r.json')),
+          license: license,
+        ),
+        mobileAsrProvider: asr,
+        mobileTranslationProvider: mt,
+        audioCapture: FakeAudioCapture(),
+        autoSpeakTranslation: false,
+      );
+      addTearDown(c.dispose);
+      await c.start();
+      asr.emit('one', '明天发货', language: 'zh');
+      await _until(() => mt.directions.length == 1);
+      asr.emit('two', 'send tomorrow', language: 'en');
+      await _until(() => mt.directions.length == 2);
+      asr.emit('ambiguous', '明天', language: 'auto');
+      await _until(() => c.segments.any((s) => s.id == 'ambiguous'));
+      asr.emit('outside', 'bonjour', language: 'fr');
+      await _until(() => c.segments.any((s) => s.id == 'outside'));
+      expect(mt.directions, ['zh->en', 'en->zh']);
+      expect(
+        c.segments.firstWhere((s) => s.id == 'ambiguous').translatedText,
+        isEmpty,
+      );
+      expect(
+        c.segments.firstWhere((s) => s.id == 'outside').translatedText,
+        isEmpty,
+      );
+      expect(c.message, contains('无法确定对话语言'));
+      await c.stop();
+    },
+  );
+  test(
     'local wiring readies components before authorization, interrupts old speech, then saves and stops at license expiry',
     () async {
       final calls = <String>[],
@@ -296,8 +344,8 @@ class _Asr
   final List<String> calls;
   bool ready = true;
   final controller = StreamController<AsrTextSegment>.broadcast();
-  void emit(String id, String text) =>
-      controller.add(AsrTextSegment(id: id, text: text, language: 'zh'));
+  void emit(String id, String text, {String language = 'zh'}) =>
+      controller.add(AsrTextSegment(id: id, text: text, language: language));
   @override
   Stream<AsrTextSegment> get segments => controller.stream;
   @override
@@ -338,6 +386,7 @@ class _Translation
   _Translation(this.log);
   final List<String> log;
   int calls = 0;
+  final directions = <String>[];
   @override
   Future<void> warmUp(MobileTranslationConfig c) async { log.add('mt.warm'); }
   @override
@@ -361,6 +410,7 @@ class _Translation
     MobileTranslationConfig c,
   ) async {
     calls++;
+    directions.add('${c.sourceLanguage}->${c.targetLanguage}');
     return MobileTranslationResult(
       text: 'Synthetic translation $calls',
       provider: 'fixture',

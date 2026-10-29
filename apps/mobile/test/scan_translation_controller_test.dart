@@ -13,6 +13,7 @@ void main() {
     final translator = _FakeTranslationProvider();
     final history = _FakeSessionHistoryRepository();
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('你好'),
       translationProvider: translator,
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -40,6 +41,7 @@ void main() {
 
   test('keeps recognized text when translation is unavailable', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('未收录菜单'),
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -58,6 +60,7 @@ void main() {
   test('does not silently change the selected target language', () async {
     final translator = _FakeTranslationProvider();
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('Welcome'),
       translationProvider: translator,
       pickImagePath: (_) async => _picked('/tmp/sign.jpg'),
@@ -78,6 +81,7 @@ void main() {
       () async {
     final englishSourceOcr = _RecordingOcrProvider('Welcome');
     final toChinese = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: englishSourceOcr,
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -95,6 +99,7 @@ void main() {
 
     final chineseSourceOcr = _RecordingOcrProvider('菜单');
     final toEnglish = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: chineseSourceOcr,
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -112,6 +117,7 @@ void main() {
 
   test('keeps a completed translation when the target is unchanged', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('你好'),
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -129,6 +135,7 @@ void main() {
 
   test('clears a stale translation error after changing the target', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('未收录菜单'),
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -150,6 +157,7 @@ void main() {
 
   test('reports no text when OCR result is empty', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider(''),
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/blank.jpg'),
@@ -165,6 +173,7 @@ void main() {
 
   test('reports image picker failures without remaining busy', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider(''),
       translationProvider: _FakeTranslationProvider(),
       pickImagePath: (_) => Future<PickedScanImage?>.error(
@@ -182,6 +191,7 @@ void main() {
 
   test('keeps OCR text when the translation provider throws', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('菜单'),
       translationProvider: _ThrowingTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -334,3 +344,6 @@ class _ThrowingTranslationProvider implements MobileTranslationProvider {
     throw StateError('translation provider offline');
   }
 }
+
+Future<String?> _fixtureLanguage(String text) async =>
+    RegExp(r'[\u4e00-\u9fff]').hasMatch(text) ? 'zh' : 'en';

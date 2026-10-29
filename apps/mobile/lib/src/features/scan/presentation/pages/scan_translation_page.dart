@@ -10,6 +10,7 @@ import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/ocr/platform_ocr_provider.dart';
 import '../../../../platform/license/licensed_local_providers.dart';
+import '../../../../platform/license/on_device_license.dart';
 import '../../../../platform/translation/api_translation_provider.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
@@ -25,6 +26,7 @@ class ScanTranslationPage extends StatefulWidget {
     this.historyRepository,
     this.pickImagePath,
     this.shareText,
+    this.detectLanguage,
     super.key,
   });
 
@@ -33,6 +35,7 @@ class ScanTranslationPage extends StatefulWidget {
   final SessionHistoryRepository? historyRepository;
   final ScanImagePicker? pickImagePath;
   final Future<void> Function(String text)? shareText;
+  final Future<String?> Function(String)? detectLanguage;
 
   @override
   State<ScanTranslationPage> createState() => _ScanTranslationPageState();
@@ -41,12 +44,23 @@ class ScanTranslationPage extends StatefulWidget {
 class _ScanTranslationPageState extends State<ScanTranslationPage> {
   late final SessionHistoryRepository _historyRepository =
       widget.historyRepository ??
-          SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
+      SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
   late final ScanTranslationController _controller = ScanTranslationController(
-    ocrProvider: widget.ocrProvider ?? (AppConfig.fromEnvironment().onDeviceOnly ? LicensedLocalOcr(PlatformOcrProvider()) : PlatformOcrProvider()),
+    ocrProvider:
+        widget.ocrProvider ??
+        (AppConfig.fromEnvironment().onDeviceOnly
+            ? LicensedLocalOcr(PlatformOcrProvider())
+            : PlatformOcrProvider()),
     translationProvider: widget.translationProvider ?? _defaultTranslator(),
     pickImagePath: widget.pickImagePath ?? _pickImagePath,
     historyRepository: _historyRepository,
+    detectLanguage: widget.detectLanguage,
+    startAuthorization: AppConfig.fromEnvironment().onDeviceOnly
+        ? () async => (await OnDeviceLicenseClient.shared.ensureValid()).leaseId
+        : null,
+    verifyAuthorization: AppConfig.fromEnvironment().onDeviceOnly
+        ? OnDeviceLicenseClient.shared.verifyExistingLease
+        : null,
   );
   final ImagePicker _picker = ImagePicker();
 
@@ -81,8 +95,8 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                       ? '拍照或选择图片，译文会贴合原文位置显示。'
                       : 'Take or choose a photo. Translation stays aligned with the original.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 _LanguageDirectionBar(controller: _controller),
@@ -95,15 +109,16 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                       onPressed: _controller.isBusy
                           ? null
                           : () =>
-                              _controller.selectImage(ScanImageSource.camera),
+                                _controller.selectImage(ScanImageSource.camera),
                       icon: const Icon(Icons.photo_camera_outlined),
                       label: Text(l10n.scanCamera),
                     ),
                     OutlinedButton.icon(
                       onPressed: _controller.isBusy
                           ? null
-                          : () =>
-                              _controller.selectImage(ScanImageSource.gallery),
+                          : () => _controller.selectImage(
+                              ScanImageSource.gallery,
+                            ),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: Text(l10n.scanGallery),
                     ),
@@ -143,11 +158,15 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(l10n.recognizedText,
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        l10n.recognizedText,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 8),
-                      SelectableText(_controller.recognizedText,
-                          style: Theme.of(context).textTheme.bodyLarge),
+                      SelectableText(
+                        _controller.recognizedText,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -174,14 +193,16 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                       OutlinedButton.icon(
                         onPressed: _controller.isBusy
                             ? null
-                            : () =>
-                                _controller.selectImage(ScanImageSource.camera),
+                            : () => _controller.selectImage(
+                                ScanImageSource.camera,
+                              ),
                         icon: const Icon(Icons.refresh),
                         label: const Text('重拍'),
                       ),
                       OutlinedButton.icon(
-                        onPressed:
-                            _controller.canShare ? () => _share(l10n) : null,
+                        onPressed: _controller.canShare
+                            ? () => _share(l10n)
+                            : null,
                         icon: const Icon(Icons.ios_share_outlined),
                         label: Text(l10n.export),
                       ),
@@ -221,7 +242,9 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
 
   MobileTranslationProvider _defaultTranslator() {
     final config = AppConfig.fromEnvironment();
-    if(config.onDeviceOnly)return LicensedLocalTranslation(IosSystemTranslationProvider());
+    if (config.onDeviceOnly) {
+      return LicensedLocalTranslation(IosSystemTranslationProvider());
+    }
     return IosSystemTranslationProvider(
       fallback: ApiTranslationProvider(
         baseUrl: config.apiBaseUrl,
@@ -298,8 +321,9 @@ class _StatusLine extends StatelessWidget {
       'en' => l10n.english,
       _ => l10n.isChinese ? '自动识别' : 'Auto detect',
     };
-    final target =
-        controller.targetLanguage == 'zh' ? l10n.chinese : l10n.english;
+    final target = controller.targetLanguage == 'zh'
+        ? l10n.chinese
+        : l10n.english;
     final direction = '$source -> $target';
     return Text('${l10n.statusLine(status)} · $direction');
   }
@@ -318,13 +342,31 @@ class _LanguageDirectionBar extends StatelessWidget {
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.auto_awesome_outlined, size: 18),
-            const SizedBox(width: 8),
-            Text(chinese ? '自动识别' : 'Auto detect'),
+        PopupMenuButton<String>(
+          enabled: !controller.isBusy,
+          initialValue: controller.selectedSourceLanguage,
+          onSelected: controller.setSourceLanguage,
+          itemBuilder: (context) => <PopupMenuEntry<String>>[
+            PopupMenuItem(
+              value: 'auto',
+              child: Text(chinese ? '自动识别' : 'Auto detect'),
+            ),
+            const PopupMenuItem(value: 'zh', child: Text('中文')),
+            const PopupMenuItem(value: 'en', child: Text('English')),
           ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                controller.selectedSourceLanguage == 'zh'
+                    ? '中文'
+                    : controller.selectedSourceLanguage == 'en'
+                    ? 'English'
+                    : (chinese ? '自动识别' : 'Auto detect'),
+              ),
+              const Icon(Icons.arrow_drop_down),
+            ],
+          ),
         ),
         const Icon(Icons.arrow_forward, size: 18),
         PopupMenuButton<String>(

@@ -36,6 +36,7 @@ void main() {
           case 'status':
             return {
               'valid': valid,
+              'componentProfile': 'fixture-v1',
               'implementationHash': 'fixture-profile',
               'devicePublicKey': 'fixture-key',
               'remainingMs': 50000,
@@ -73,6 +74,7 @@ void main() {
             data = {
               'execution': 'on_device',
               'licenseAdmission': 'configured_open',
+              'componentProfile': {'profile': 'fixture-v1'},
               'implementationHash': 'fixture-profile',
               'deploymentId': configuredPublicDeploymentId,
               'serverNowMs': 1800000000000,
@@ -122,7 +124,11 @@ void main() {
           return {'valid': true, 'leaseId': 'new', 'remainingMs': 10000};
         }
         if (c.method == 'status') {
-          return {'valid': false, 'implementationHash': 'fixture-profile'};
+          return {
+            'valid': false,
+            'implementationHash': 'fixture-profile',
+            'componentProfile': 'fixture-v1',
+          };
         }
         return {'clientData': 'synthetic-device-proof'};
       });
@@ -141,6 +147,7 @@ void main() {
           body = {
             'execution': 'on_device',
             'licenseAdmission': 'configured_open',
+            'componentProfile': {'profile': 'fixture-v1'},
             'implementationHash': 'fixture-profile',
             'deploymentId': configuredPublicDeploymentId,
             'serverNowMs': 1800000000000,

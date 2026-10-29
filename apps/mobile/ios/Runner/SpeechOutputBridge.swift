@@ -37,9 +37,13 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
 
     private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "voices":
+            let a=call.arguments as? [String:Any] ?? [:], language=a["language"] as? String ?? ""
+            result(SystemSpeechVoiceCatalog.list(language:language))
         case "availability", "prepare":
             let a=call.arguments as? [String:Any] ?? [:],language=a["language"] as? String ?? ""
-            result(SystemSpeechVoiceCatalog.payload(language:language,voice:SystemSpeechVoiceCatalog.resolve(language:language)))
+            let identifier=a["voiceIdentifier"] as? String
+            result(SystemSpeechVoiceCatalog.payload(language:language,voice:SystemSpeechVoiceCatalog.resolve(language:language,identifier:identifier)))
         case "speak":
             speak(call: call, result: result)
         case "stop":
@@ -68,8 +72,9 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "_", with: "-")
         do{try authorizationCheck?(language)}catch{result(speechError("authorization_required","请联网更新本机授权"));return}
-        guard !language.isEmpty, let voice = SystemSpeechVoiceCatalog.resolve(language: language) else {
-            result(speechError("speech_language_unavailable", "No system voice is available for \(language)."))
+        let identifier = stringArgument("voiceIdentifier", from: call)
+        guard !language.isEmpty, let voice = SystemSpeechVoiceCatalog.resolve(language: language, identifier: identifier) else {
+            result(speechError("speech_voice_unavailable", "所选系统声音不可用，请重新选择或准备语言资源。"))
             return
         }
         do {

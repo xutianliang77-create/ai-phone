@@ -25,15 +25,21 @@ AudioCapture createDefaultAudioCapture(AppConfig config) {
 
 RealtimeRepository createDefaultRealtimeRepository(AppConfig config) {
   if (config.useLocalSessions) {
-    return LocalRealtimeRepository(store: config.onDeviceOnly ? OwnedLocalSessionStore() : LocalSessionStore(),
-      license: config.onDeviceOnly ? OnDeviceLicenseClient.shared : null);
+    return LocalRealtimeRepository(
+      store: config.onDeviceOnly
+          ? OwnedLocalSessionStore()
+          : LocalSessionStore(),
+      license: config.onDeviceOnly ? OnDeviceLicenseClient.shared : null,
+    );
   }
   return RealtimeRepository.fromConfig(config);
 }
 
 MobileAsrProvider? createDefaultMobileAsrProvider(AppConfig config) {
   if (!config.useDeviceAsr) return null;
-  if (config.onDeviceOnly || config.deviceAsrProvider == 'apple_speech_transcriber') return AppleSpeechAsrProvider();
+  if (config.onDeviceOnly ||
+      config.deviceAsrProvider == 'apple_speech_transcriber')
+    return AppleSpeechAsrProvider();
   if (config.deviceAsrProvider == 'coreml_nemotron') {
     return CoreMlNemotronAsrProvider();
   }
@@ -74,14 +80,21 @@ List<MobileTranslationConfig> createOnDeviceTranslationPreflightConfigs(
 ) {
   if (config.autoReverseTargetLanguage &&
       config.sourceLanguage == autoSourceLanguageCode) {
-    return const <MobileTranslationConfig>[
-      MobileTranslationConfig(sourceLanguage: 'en', targetLanguage: 'zh'),
-      MobileTranslationConfig(sourceLanguage: 'zh', targetLanguage: 'en'),
+    return <MobileTranslationConfig>[
+      MobileTranslationConfig(
+        sourceLanguage: config.automaticPairA,
+        targetLanguage: config.automaticPairB,
+      ),
+      MobileTranslationConfig(
+        sourceLanguage: config.automaticPairB,
+        targetLanguage: config.automaticPairA,
+      ),
     ];
   }
   if (config.sourceLanguage == autoSourceLanguageCode) {
-    final sourceLanguage =
-        isChineseFamilyLanguage(config.targetLanguage) ? 'en' : 'zh';
+    final sourceLanguage = isChineseFamilyLanguage(config.targetLanguage)
+        ? 'en'
+        : 'zh';
     return <MobileTranslationConfig>[
       MobileTranslationConfig(
         sourceLanguage: sourceLanguage,
@@ -97,7 +110,10 @@ MobileAsrConfig createDeviceAsrConfig(
   String? diagnosticSessionId,
 }) {
   return MobileAsrConfig(
-    language: config.onDeviceOnly ? config.sourceLanguage : config.deviceAsrLanguage,
+    language: config.onDeviceOnly
+        ? config.sourceLanguage
+        : config.deviceAsrLanguage,
+    automaticPair: [config.automaticPairA, config.automaticPairB],
     chunkDurationMs: config.deviceAsrChunkDurationMs,
     modelChunkMs: config.deviceAsrModelChunkMs,
     autoDownloadModel: config.deviceAsrAutoDownloadModel,
@@ -108,8 +124,9 @@ MobileAsrConfig createDeviceAsrConfig(
     vadThreshold: config.deviceAsrVadThreshold,
     vadNegativeThreshold: config.deviceAsrVadNegativeThreshold,
     vadPreRollMs: config.deviceAsrVadPreRollMs,
-    turnRoutingPolicy:
-        config.realtimeMode == 'conversation' ? 'alternate' : 'sticky',
+    turnRoutingPolicy: config.realtimeMode == 'conversation'
+        ? 'alternate'
+        : 'sticky',
     diagnosticCaptureEnabled: config.deviceAsrDiagnosticCaptureEnabled,
     diagnosticSessionId: diagnosticSessionId,
   );

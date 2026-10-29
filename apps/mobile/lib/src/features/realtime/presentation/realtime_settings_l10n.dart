@@ -21,9 +21,8 @@ extension RealtimeSettingsL10n on AppLocalizations {
       : 'On-device mode currently supports Chinese-English translation and '
           'checks system language packs before starting.';
   String get onDeviceVoiceCapabilityHint => isChinese
-      ? '端侧使用系统自然声音；“我的声音”和行业词库仅在线模式可用。'
-      : 'On-device mode uses the system voice. My Voice and industry terms '
-          'are available online only.';
+      ? '端侧使用系统自然声音，可分别选择中英文音色；旧在线音色不会自动替代。'
+      : 'Choose a system voice for each language. Legacy online voices are not substituted.';
   String get autoSpeakTranslationLabel =>
       isChinese ? '自动朗读译文' : 'Speak translation';
   String get voiceOutputSettingLabel => isChinese ? '朗读声音' : 'Spoken voice';

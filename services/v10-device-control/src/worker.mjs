@@ -1,7 +1,7 @@
 import {context,authorize} from './environment.mjs';
 import {readJson,onlyKeys,GatewayDeviceRegistration,AppAttestVerifier} from '../../v10-cloudflare-control/vendor/reused-control-core.mjs';
 import {configuration,requireProduct,qaOwnerAllowed} from './config.mjs';
-import {COMPONENT_PROFILE,IMPLEMENTATION_HASH} from './component-profile.mjs';
+import {COMPONENT_PROFILE,IMPLEMENTATION_HASH,COMPONENT_PROFILE_V2,IMPLEMENTATION_HASH_V2} from './component-profile.mjs';
 import {SubscriptionRepository} from './subscription-repository.mjs';
 import {AppleSubscriptionVerifier} from './apple-subscription-verifier.mjs';
 import {BillingService} from './billing-service.mjs';
@@ -50,7 +50,9 @@ export default {async fetch(request,env,execution){
   }
   if(path==='/billing/ledger'&&request.method==='GET')return json(await subscriptions.ledger(actor.id),ctx,started);
   if(path==='/billing/subscription/sync'&&request.method==='POST')return json(await billing.sync(actor,await readJson(request,100000),started),ctx,started);
-  if(path==='/v10/device/configuration'&&request.method==='GET')return json({execution:'on_device',deploymentId:config.deploymentId,componentProfile:COMPONENT_PROFILE,implementationHash:IMPLEMENTATION_HASH,licenseAdmission:config.admissionOpen?'configured_open':'closed',maximumOfflineSeconds:1800,serverNowMs:started},ctx,started);
+  if(path==='/v10/device/configuration'&&request.method==='GET')return json({execution:'on_device',deploymentId:config.deploymentId,componentProfile:COMPONENT_PROFILE,implementationHash:IMPLEMENTATION_HASH,
+   ...(config.capabilityProfileV2Enabled?{availableProfiles:[{componentProfile:COMPONENT_PROFILE_V2,implementationHash:IMPLEMENTATION_HASH_V2}]}:{}),
+   licenseAdmission:config.admissionOpen?'configured_open':'closed',maximumOfflineSeconds:1800,serverNowMs:started},ctx,started);
   if(request.method==='POST'&&['/v10/device/challenge','/v10/device/register'].includes(path)){
    const b=await readJson(request,32768),registration=new GatewayDeviceRegistration(ctx.store,new AppAttestVerifier({appId:env.DEVICE_APP_ATTEST_APP_ID,environment:env.DEVICE_APP_ATTEST_ENVIRONMENT}),config.deploymentId);
    if(path.endsWith('/challenge')){onlyKeys(b,['devicePublicKey']);return json(await registration.challenge(actor,b.devicePublicKey,IMPLEMENTATION_HASH,started),ctx,started);}

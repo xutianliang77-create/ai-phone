@@ -13,6 +13,7 @@ void main() {
     const source = '制造商 Dell Technologies 型号 DPS-750AB-29A 输入 100-240V';
     final translator = _EntityEchoTranslationProvider();
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider(source),
       translationProvider: translator,
       pickImagePath: (_) async => _picked('/tmp/label.jpg'),
@@ -33,6 +34,7 @@ void main() {
 
   test('bypasses translation for a standalone certification mark', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('CE'),
       translationProvider: _ThrowingTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/label.jpg'),
@@ -48,8 +50,9 @@ void main() {
     expect(controller.translatedText, 'CE');
   });
 
-  test('normalizes the Vision CE confusable before translation', () async {
+  test('keeps the original Vision confusable instead of changing its meaning', () async {
     final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
       ocrProvider: const _FakeOcrProvider('C€'),
       translationProvider: _ThrowingTranslationProvider(),
       pickImagePath: (_) async => _picked('/tmp/label.jpg'),
@@ -61,10 +64,10 @@ void main() {
     await controller.recognizeSelectedImage();
     await controller.translateRecognizedText();
 
-    expect(controller.recognizedText, 'CE');
-    expect(controller.recognizedBlocks.single.text, 'CE');
-    expect(controller.status, ScanTranslationStatus.translated);
-    expect(controller.translatedText, 'CE');
+    expect(controller.recognizedText, 'C€');
+    expect(controller.recognizedBlocks.single.text, 'C€');
+    expect(controller.status, ScanTranslationStatus.recognized);
+    expect(controller.translatedText, isEmpty);
   });
 }
 
@@ -178,3 +181,6 @@ class _EntityEchoTranslationProvider implements MobileTranslationProvider {
     );
   }
 }
+
+Future<String?> _fixtureLanguage(String text) async =>
+    RegExp(r'[\u4e00-\u9fff]').hasMatch(text) ? 'zh' : 'en';

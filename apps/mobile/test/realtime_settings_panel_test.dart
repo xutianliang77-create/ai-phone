@@ -180,7 +180,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('中文'), findsOneWidget);
     expect(find.text('英语'), findsOneWidget);
-    expect(find.text('法语'), findsNothing);
+    final french = tester.widget<ListTile>(find.ancestor(
+      of: find.text('法语'), matching: find.byType(ListTile)).first);
+    expect(french.enabled, false);
+    expect(find.textContaining('fr · 尚未验收'), findsOneWidget);
   });
 
   testWidgets('normalizes online-only settings when switching on-device',

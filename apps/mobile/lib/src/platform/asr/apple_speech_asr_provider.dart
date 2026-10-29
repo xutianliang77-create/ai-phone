@@ -41,6 +41,7 @@ class AppleSpeechAsrProvider
       .cast<AsrTextSegment>();
   Map<String, Object?> arguments(MobileAsrConfig c) => {
     'language': c.language,
+    'automaticPair': c.automaticPair,
     'autoDownloadModel': false,
     'chunkDurationMs': c.chunkDurationMs,
     'endpointMinSpeechMs': c.endpointMinSpeechMs,
@@ -69,10 +70,9 @@ class AppleSpeechAsrProvider
     final languageMatches = c.language == 'auto'
         ? p['automaticLanguageImplemented'] == true &&
               p['languagePolicy'] == 'apple-dual-zh-en-confidence-r1' &&
-              const [
-                'zh',
-                'en',
-              ].every((l) => locales.any((v) => v.startsWith(l)))
+              c.automaticPair.length == 2 &&
+              c.automaticPair.toSet().containsAll(const ['zh', 'en']) &&
+              c.automaticPair.every((l) => locales.any((v) => v.startsWith(l)))
         : const ['zh', 'en'].contains(c.language) &&
               (p['locale'] as String? ?? '').toLowerCase().startsWith(
                 c.language,
@@ -127,7 +127,7 @@ class AppleSpeechAsrProvider
   Future<void> start(MobileAsrConfig c) async {
     _capture = 'capture-${DateTime.now().microsecondsSinceEpoch}';
     _policy = c.language == 'auto'
-        ? 'apple-dual-zh-en-confidence-r1'
+        ? 'apple-dual-zh-en-confidence-r1:${c.automaticPair.join(':')}'
         : 'fixed-${c.language}';
     await _method.invokeMethod<void>('start', {
       ...arguments(c),

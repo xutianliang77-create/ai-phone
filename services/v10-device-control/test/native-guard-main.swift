@@ -15,6 +15,16 @@ import Foundation
   time=130;try g.accept(valid);assert(g.snapshot()["remainingMs"] as! Int==1770000);passed.append("duplicate_does_not_reset_clock")
   try g.requireValid(component:"asr",language:"zh");try g.requireValid(component:"translation",language:"zh",target:"en")
   try expectFailure("unqualified_language"){try g.requireValid(component:"asr",language:"auto")}
+  for language in ["zh-Hant","zh-TW","zh-HK","yue","zh-Hans-HK"] {
+    try expectFailure("unqualified_variant_\(language)"){try g.requireValid(component:"asr",language:language)}
+  }
+  time=100;let versionMismatch=try guardInstance();_=try versionMismatch.request(nonce:String(repeating:"1",count:64),operation:"acquire")
+  try expectFailure("v1_request_rejects_v2"){try versionMismatch.accept(input["validV2"] as! String)}
+  let v2=try guardInstance();_=try v2.request(nonce:String(repeating:"1",count:64),operation:"acquire",profile:V10DeviceLicenseGuard.profileV2,implementationHash:V10DeviceLicenseGuard.implementationHashV2)
+  try v2.accept(input["validV2"] as! String);try v2.requireValid(component:"translation",language:"zh",target:"en");passed.append("v2_contract_accepted")
+  let widened=try guardInstance();_=try widened.request(nonce:String(repeating:"1",count:64),operation:"acquire",profile:V10DeviceLicenseGuard.profileV2,implementationHash:V10DeviceLicenseGuard.implementationHashV2)
+  try expectFailure("v2_unqualified_widening"){try widened.accept(input["widenedV2"] as! String)}
+  time=130
   try expectFailure("wrong_component"){try g.requireValid(component:"cloud_model")}
   try g.activity("asr",active:true);time=140;try g.activity("tts",active:true);time=150;try g.activity("asr",active:false);time=160;try g.activity("tts",active:false)
   assert(g.snapshot()["activeMs"] as! Int==30000);passed.append("parallel_activity_union_no_duplicate_charge")

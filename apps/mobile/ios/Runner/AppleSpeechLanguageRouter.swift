@@ -21,6 +21,9 @@ struct AppleSpeechLanguageRouter {
   static let languages = ["zh", "en"]
   static let minimumConfidence = 0.72
   static let minimumMargin = 0.12
+  let languages: [String]
+  init(languages: [String] = Self.languages) { self.languages = languages }
+  private var validPair: Bool { languages.count == 2 && Set(languages) == Set(Self.languages) }
   private struct Turn { let id: Int, start: Int, end: Int, deadline: Double }
   private var turns = [Turn]()
   private var fragments = [String:[Int:AppleSpeechLanguageCandidate]]()
@@ -29,17 +32,17 @@ struct AppleSpeechLanguageRouter {
   private(set) var completedThrough = 0
   var pendingTurnCount: Int { turns.count }
   var diagnostics: [String:Any] {
-    ["policy":Self.version,"requiredLanguages":Self.languages,"finalizedThrough":finalized,
+    ["policy":Self.version,"requiredLanguages":languages,"finalizedThrough":finalized,
       "pendingTurns":turns.count,"heldFragments":fragments.values.reduce(0,{$0+$1.count}),
       "minimumConfidence":Self.minimumConfidence,"minimumMargin":Self.minimumMargin,"qualityQualified":false]
   }
   mutating func observeFinalization(language:String,through:Int) throws {
-    guard Self.languages.contains(language),through>=0 else{throw AppleSpeechRoutingError.invalidEvidence}
+    guard validPair,languages.contains(language),through>=0 else{throw AppleSpeechRoutingError.invalidEvidence}
     finalized[language]=max(finalized[language] ?? 0,through)
   }
 
   mutating func accept(_ c: AppleSpeechLanguageCandidate, finalizedThrough: Int) throws {
-    guard Self.languages.contains(c.language), c.start >= 0, c.end >= c.start,
+    guard validPair,languages.contains(c.language), c.start >= 0, c.end >= c.start,
       c.text.utf8.count <= 16384, finalizedThrough >= 0,
       c.confidence == nil || (c.confidence!.isFinite && (0...1).contains(c.confidence!)) else {
       throw AppleSpeechRoutingError.invalidEvidence
@@ -55,19 +58,19 @@ struct AppleSpeechLanguageRouter {
     }
   }
   mutating func endTurn(start:Int,end:Int,now:Double) throws {
-    guard now.isFinite, start >= completedThrough, end > start,
+    guard validPair,now.isFinite, start >= completedThrough, end > start,
       turns.last.map({start >= $0.end}) ?? true else {throw AppleSpeechRoutingError.invalidEvidence}
     serial += 1
     turns.append(Turn(id:serial,start:start,end:end,deadline:now+2))
     guard turns.count <= 16 else {throw AppleSpeechRoutingError.bufferOverflow}
   }
   mutating func drain(now:Double) throws -> [AppleSpeechLanguageDecision] {
-    guard now.isFinite else {throw AppleSpeechRoutingError.invalidEvidence}
+    guard validPair,now.isFinite else {throw AppleSpeechRoutingError.invalidEvidence}
     var decisions = [AppleSpeechLanguageDecision]()
     while let turn=turns.first {
-      let complete=Self.languages.allSatisfy{(finalized[$0] ?? 0) >= turn.end}
+      let complete=languages.allSatisfy{(finalized[$0] ?? 0) >= turn.end}
       if !complete && now < turn.deadline {break}
-      let values=Self.languages.compactMap{aggregate(language:$0,turn:turn)}
+      let values=languages.compactMap{aggregate(language:$0,turn:turn)}
       let ranked=values.sorted{$0.confidence > $1.confidence}
       let winner=ranked.first
       let confident=complete && ranked.count==2 && winner!.confidence >= Self.minimumConfidence &&
@@ -77,7 +80,7 @@ struct AppleSpeechLanguageRouter {
         confidence:confident ? winner!.confidence:nil,
         reason:confident ? "dual_decoder_confidence":complete ? "automatic_language_uncertain":"automatic_language_evidence_timeout"))
       turns.removeFirst();completedThrough=turn.end
-      for language in Self.languages {
+      for language in languages {
         fragments[language] = fragments[language,default:[:]].filter{$0.value.end > turn.end}
       }
     }

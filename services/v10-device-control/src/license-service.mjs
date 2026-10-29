@@ -1,14 +1,16 @@
 import {sql,command,activeAccount,assertion} from '../../v10-cloudflare-control/vendor/reused-control-core.mjs';
 import {deviceProof} from './device-proof.mjs';
-import {PROFILE,MAX_LEASE_MS,LEASE_DOMAIN,hash,fail,id,integer,digest} from './common.mjs';
-import {IMPLEMENTATION_HASH} from './component-profile.mjs';
+import {MAX_LEASE_MS,LEASE_DOMAIN,hash,fail,id,integer,digest} from './common.mjs';
+import {licenseProfile} from './component-profile.mjs';
 import {signLicense} from './license-signing.mjs';
 const requestFields=['domain','ownerId','deploymentId','devicePublicKey','requestKey','launchNonce','profile','implementationHash','issuedAtMs','operation','leaseId','sequence'];
 export class DeviceLicenseService{
  constructor(store,config,subscriptions){this.store=store;this.config=config;this.subscriptions=subscriptions;}
  async issue(actor,envelope,now){
   const p=await deviceProof(this.store,actor,envelope,LEASE_DOMAIN,this.config.deploymentId,now,requestFields,Infinity),b=p.body;
-  digest(b.requestKey);id(b.launchNonce);integer(b.sequence);if(!['acquire','renew'].includes(b.operation)||b.profile!==PROFILE||b.implementationHash!==IMPLEMENTATION_HASH)fail('v10_license_contract');
+  digest(b.requestKey);id(b.launchNonce);integer(b.sequence);
+  const contract=licenseProfile(b.profile,b.implementationHash,this.config.capabilityProfileV2Enabled);
+  if(!['acquire','renew'].includes(b.operation)||!contract)fail('v10_license_contract');
   if(!this.config.admissionOpen)fail('v10_license_admission_closed',503);
   const actorRow=await this.store.read(sql("SELECT t.expires_ms FROM account_tokens t JOIN accounts a ON a.user_id=t.user_id WHERE t.token_hash=? AND t.user_id=? AND t.revoked_ms IS NULL AND t.authorization_epoch=? AND a.authorization_epoch=? AND a.status='active'",actor.tokenHash,actor.id,actor.authorizationEpoch,actor.authorizationEpoch));
   if(!actorRow||actorRow.expires_ms<=now)fail('v10_auth_required',401);
@@ -23,7 +25,7 @@ export class DeviceLicenseService{
   let leaseId,sequence,starts=now,current,replaced;
   if(b.operation==='renew'){
    id(b.leaseId);current=await this.store.read(sql('SELECT * FROM v10_device_licenses WHERE lease_id=? AND owner_id=?',b.leaseId,actor.id));
-   if(!current||current.device_key_hash!==p.keyHash||current.launch_nonce!==b.launchNonce||current.state!=='active'||current.sequence!==b.sequence||now>=current.expires_ms)fail('v10_license_renewal_conflict');
+   if(!current||current.device_key_hash!==p.keyHash||current.launch_nonce!==b.launchNonce||current.state!=='active'||current.sequence!==b.sequence||current.profile!==contract.profile.profile||current.resource_hash!==contract.hash||now>=current.expires_ms)fail('v10_license_renewal_conflict');
    if(current.expires_ms-now>60000)fail('v10_license_renewal_too_early');
    leaseId=current.lease_id;sequence=current.sequence+1;
   }else{
@@ -36,11 +38,11 @@ export class DeviceLicenseService{
   if(!entitlement.valid)fail('v10_entitlement_'+entitlement.status,402);
   const end=Math.min(starts+MAX_LEASE_MS,entitlement.expiresAtMs,actorRow.expires_ms,this.config.windowEndMs??Infinity);
   if(end<=starts||end<=now)fail('v10_entitlement_expired',402);
-  const claims={version:1,purpose:'wujie-v10-device-license',execution:'on_device',leaseId,ownerId:actor.id,
+  const claims={version:contract.version,purpose:'wujie-v10-device-license',execution:'on_device',leaseId,ownerId:actor.id,
    deploymentId:this.config.deploymentId,bundleId:this.config.bundleId,deviceKeyHash:p.keyHash,launchNonce:b.launchNonce,
    requestNonce:b.requestKey,sequence,issuedAtMs:now,notBeforeMs:starts,expiresAtMs:end,
    entitlementKey:entitlement.transactionKey,entitlementRevision:entitlement.revisionHash,
-   componentProfile:PROFILE,implementationHash:IMPLEMENTATION_HASH,allowedLanguages:['zh','en']};
+   componentProfile:contract.profile.profile,implementationHash:contract.hash,allowedLanguages:contract.profile.languages};
   const token=signLicense(claims,this.config.signingKeyId,this.config.signingKeyPem),receipt={leaseId,sequence,license:token,expiresAtMs:end,notBeforeMs:starts,entitlementStatus:entitlement.status};
   const c=command('v10-license:'+requestId,actor.id,'v10.device-license.'+b.operation,{dataHash:p.dataHash},now);
   const statusFence=this.config.requireFreshStatus
@@ -58,7 +60,7 @@ export class DeviceLicenseService{
   if(current){statements.push(assertion(c,'license_sequence',"EXISTS(SELECT 1 FROM v10_device_licenses WHERE lease_id=? AND state='active' AND sequence=? AND expires_ms=?)",leaseId,current.sequence,current.expires_ms),
    sql("UPDATE v10_device_licenses SET sequence=?,starts_ms=?,expires_ms=?,entitlement_key=?,entitlement_revision=?,updated_ms=? WHERE lease_id=? AND sequence=?",sequence,starts,end,entitlement.transactionKey,entitlement.revisionHash,now,leaseId,current.sequence));
   }else{statements.push(assertion(c,'device_not_busy',"NOT EXISTS(SELECT 1 FROM v10_device_licenses WHERE owner_id=? AND device_key_hash=? AND state='active' AND expires_ms>?)",actor.id,p.keyHash,now),
-   sql("INSERT INTO v10_device_licenses VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)",leaseId,actor.id,p.keyHash,b.launchNonce,PROFILE,IMPLEMENTATION_HASH,'zh','en',sequence,starts,end,entitlement.transactionKey,entitlement.revisionHash,now,now));}
+   sql("INSERT INTO v10_device_licenses VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)",leaseId,actor.id,p.keyHash,b.launchNonce,contract.profile.profile,contract.hash,'zh','en',sequence,starts,end,entitlement.transactionKey,entitlement.revisionHash,now,now));}
   statements.push(sql('INSERT INTO v10_device_license_requests VALUES(?,?,?,?,?,?)',requestId,actor.id,p.dataHash,leaseId,JSON.stringify(receipt),now));
   const result=await this.store.execute(c,{statements,receipt:sql('SELECT ? AS receipt',JSON.stringify(receipt))});return result.receipt;
  }

@@ -17,7 +17,13 @@ final class V10DeviceLicenseBridge: NSObject, FlutterStreamHandler {
   private var stoppedLeaseId: String?
   private var timeAnchor: (server: Int64, monotonic: Double)?
   var onStop: (() async -> Bool)?
+  #if WUJIE_V10_PROFILE_V2
+  var profile: String { V10DeviceLicenseGuard.profileV2 }
+  private var implementationHash: String { V10DeviceLicenseGuard.implementationHashV2 }
+  #else
   var profile: String { V10DeviceLicenseGuard.profile }
+  private var implementationHash: String { V10DeviceLicenseGuard.implementationHash }
+  #endif
   private var deployment: String { Bundle.main.object(forInfoDictionaryKey:"WujiePublicDeploymentId") as? String ?? "" }
   private var environment: String { Bundle.main.object(forInfoDictionaryKey:"WujieAppAttestEnvironment") as? String ?? "" }
 
@@ -94,10 +100,10 @@ final class V10DeviceLicenseBridge: NSObject, FlutterStreamHandler {
       if operation=="acquire",permit.snapshot()["valid"] as? Bool != true {
         selected=try V10DeviceLicenseGuard(ownerId:owner,deploymentId:deployment,bundleId:Bundle.main.bundleIdentifier ?? "",deviceKeyHash:identity.keyHash,keys:try configuredKeys());self.permit=selected
       }
-      let request=try selected.request(nonce:nonce,operation:operation)
+      let request=try selected.request(nonce:nonce,operation:operation,profile:profile,implementationHash:implementationHash)
       let body:[String:Any]=["domain":"wujie.v10.device-license.request.v1","ownerId":owner,"deploymentId":deployment,
         "devicePublicKey":identity.publicKey,"requestKey":nonce,"launchNonce":selected.launchNonce,
-        "profile":profile,"implementationHash":V10DeviceLicenseGuard.implementationHash,"issuedAtMs":serverNow,
+        "profile":profile,"implementationHash":implementationHash,"issuedAtMs":serverNow,
         "operation":operation,"leaseId":request.leaseId,"sequence":request.sequence]
       let proof=try signed(body,identity:identity);requestEnvelope=proof;return proof
     case "install":
@@ -159,7 +165,7 @@ final class V10DeviceLicenseBridge: NSObject, FlutterStreamHandler {
     var s=permit?.snapshot() ?? ["valid":false,"reason":"authorization_required"]
     if stopping{s["valid"]=false;s["reason"]="device_stop_unconfirmed"}
     s["devicePublicKey"]=identity?.publicKey ?? "";s["deviceKeyHash"]=identity?.keyHash ?? ""
-    s["implementationHash"]=V10DeviceLicenseGuard.implementationHash;s["componentProfile"]=profile
+    s["implementationHash"]=implementationHash;s["componentProfile"]=profile
     s["deploymentId"]=deployment;s["stopping"]=stopping
     s["receiptPersistenceFailed"]=receiptPersistenceFailed
     return s

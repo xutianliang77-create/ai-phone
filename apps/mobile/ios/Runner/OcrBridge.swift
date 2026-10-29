@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import Vision
+import NaturalLanguage
 
 final class OcrBridge: NSObject {
   var authorizationCheck: ((String?) throws -> Void)?
@@ -17,12 +18,48 @@ final class OcrBridge: NSObject {
       binaryMessenger: messenger
     )
     channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "supportedLanguages" {
+        let request=VNRecognizeTextRequest();request.recognitionLevel = .accurate
+        do { result(try request.supportedRecognitionLanguages()) }
+        catch { result(FlutterError(code:"ocr_capability_unavailable",message:"无法读取文字识别语言",details:nil)) }
+        return
+      }
+      if call.method == "detectLanguage" {
+        self?.detectLanguage(arguments: call.arguments, result: result)
+        return
+      }
       guard call.method == "recognizeImage" else {
         result(FlutterMethodNotImplemented)
         return
       }
       self?.recognizeImage(arguments: call.arguments, result: result)
     }
+  }
+
+  private func detectLanguage(arguments: Any?, result: @escaping FlutterResult) {
+    let boundLease:String?
+    do { boundLease=try currentLicense?();try authorizationCheck?(boundLease) }
+    catch { result(FlutterError(code:"authorization_required",message:"请联网更新本机授权",details:nil));return }
+    guard let args=arguments as? [String:Any],let text=args["text"] as? String,
+      text.utf8.count <= 65536 else {
+      result(FlutterError(code:"invalid_text",message:"无法识别文字语言",details:nil));return
+    }
+    let characters=text.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
+    guard characters >= 4 else { result(["reason":"insufficient_evidence"]);return }
+    let detector=NLLanguageRecognizer();detector.processString(text)
+    let ranked=detector.languageHypotheses(withMaximum:3).sorted { $0.value > $1.value }
+    guard let first=ranked.first,first.value >= 0.75,
+      first.value-(ranked.dropFirst().first?.value ?? 0) >= 0.20 else {
+      result(["reason":"uncertain"]);return
+    }
+    let raw=first.key.rawValue.lowercased()
+    let language: String?
+    if raw == "en" || raw.hasPrefix("en-") { language="en" }
+    else if raw == "zh-hans" || raw == "zh" { language="zh" }
+    else { language=nil } // Do not classify traditional Chinese, Japanese or another language as Mandarin/English.
+    do { try authorizationCheck?(boundLease) }
+    catch { result(FlutterError(code:"authorization_required",message:"本机授权已停止",details:nil));return }
+    result(language.map { ["language":$0,"confidence":first.value] } ?? ["reason":"outside_pair"])
   }
 
   private func recognizeImage(arguments: Any?, result: @escaping FlutterResult) {

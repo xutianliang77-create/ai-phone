@@ -123,6 +123,20 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
   @override
   Future<DeviceLicenseSnapshot> ensureValid() =>
       _inFlight ??= _ensure().whenComplete(() => _inFlight = null);
+
+  /// Completion fence: inspect the existing native lease only. Never obtain a
+  /// new lease to make a result produced under an expired/replaced one valid.
+  Future<void> verifyExistingLease(String leaseId) async {
+    final operation = await ScopedAccountOperation.capture(store);
+    final value = DeviceLicenseSnapshot(
+      await native('status', {'ownerId': operation.original.ownerId!}),
+    );
+    await operation.check();
+    if (!value.valid || value.leaseId != leaseId || leaseId.isEmpty) {
+      throw StateError('authorization_required');
+    }
+  }
+
   Future<DeviceLicenseSnapshot> _ensure({bool renewal = false}) async {
     final op = await ScopedAccountOperation.capture(store),
         owner = op.original.ownerId!;
@@ -181,9 +195,20 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
       'ownerId': owner,
       'serverNowMs': config['serverNowMs'],
     });
+    final selectedProfile = state.data['componentProfile'];
+    final selectedHash = state.data['implementationHash'];
+    final primaryProfile = config['componentProfile'];
+    final primaryMatches = primaryProfile is Map &&
+        primaryProfile['profile'] == selectedProfile &&
+        config['implementationHash'] == selectedHash;
+    final available = config['availableProfiles'];
+    final alternativeMatches = available is List && available.any((entry) =>
+        entry is Map && entry['componentProfile'] is Map &&
+        (entry['componentProfile'] as Map)['profile'] == selectedProfile &&
+        entry['implementationHash'] == selectedHash);
     if (config['execution'] != 'on_device' ||
         config['licenseAdmission'] != 'configured_open' ||
-        config['implementationHash'] != state.data['implementationHash'] ||
+        !(primaryMatches || alternativeMatches) ||
         config['deploymentId'] != configuredPublicDeploymentId) {
       throw StateError('device_license_configuration_closed');
     }

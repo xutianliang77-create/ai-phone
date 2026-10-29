@@ -78,7 +78,7 @@ void main() {
       messenger.setMockMethodCallHandler(method, (c) async {
         final args = Map<String, Object?>.from(c.arguments as Map);
         if (c.method == 'start') {
-          expect(args['languagePolicyKey'], 'apple-dual-zh-en-confidence-r1');
+          expect(args['languagePolicyKey'], 'apple-dual-zh-en-confidence-r1:zh:en');
           return null;
         }
         return {

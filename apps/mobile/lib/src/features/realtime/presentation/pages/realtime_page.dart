@@ -111,7 +111,8 @@ class _RealtimePageState extends State<RealtimePage>
   Future<void> _handleLifecycleState(AppLifecycleState state) async {
     final current = controller;
     if (state == AppLifecycleState.resumed) {
-      if (_config.onDeviceOnly) unawaited(OnDeviceLicenseClient.shared.reconcileOnline());
+      if (_config.onDeviceOnly)
+        unawaited(OnDeviceLicenseClient.shared.reconcileOnline());
       await current.recoverPendingFinalizations();
     }
     await current.handleLifecycleState(state);
@@ -143,9 +144,18 @@ class _RealtimePageState extends State<RealtimePage>
           ),
         ),
         actions: <Widget>[
-          if (_config.onDeviceOnly) IconButton(tooltip: '离线语言资源',
-            onPressed: _canChangeSettings ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => OnDeviceResourcesPage(config: _config))) : null,
-            icon: const Icon(Icons.download_for_offline_outlined)),
+          if (_config.onDeviceOnly)
+            IconButton(
+              tooltip: '离线语言资源',
+              onPressed: _canChangeSettings
+                  ? () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => OnDeviceResourcesPage(config: _config),
+                      ),
+                    )
+                  : null,
+              icon: const Icon(Icons.download_for_offline_outlined),
+            ),
           RealtimeLanguageMenu(
             locale: languageScope.locale,
             onLocaleChanged: languageScope.onChanged,
@@ -296,6 +306,7 @@ class _RealtimePageState extends State<RealtimePage>
   RealtimeRuntimeSettings _normalizeVoicePreset(
     RealtimeRuntimeSettings settings,
   ) {
+    if (_config.onDeviceOnly) return settings;
     if (_voicePresetCatalog.presets.isEmpty ||
         _voicePresetCatalog.find(settings.voicePresetId) != null) {
       return settings;

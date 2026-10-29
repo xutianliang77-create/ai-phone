@@ -20,7 +20,8 @@ export function configuration(env,now){
   appAppleId:Number(env.V10_APP_APPLE_ID),appleRootSha256:env.APPLE_IAP_ROOT_CERT_SHA256,
   signingKeyId:env.V10_LICENSE_SIGNING_KEY_ID,signingKeyPem:env.V10_LICENSE_SIGNING_KEY_PEM,
   iapIssuerId:env.V10_IAP_ISSUER_ID,iapKeyId:env.V10_IAP_KEY_ID,iapPrivateKeyPem:env.V10_IAP_PRIVATE_KEY_PEM,
-  admissionOpen,windowEndMs:Number.isFinite(end)?end:null,qaOwners:env.V10_QA_ALLOWED_ACCOUNT_IDS,profile:PROFILE};
+  admissionOpen,windowEndMs:Number.isFinite(end)?end:null,qaOwners:env.V10_QA_ALLOWED_ACCOUNT_IDS,profile:PROFILE,
+  capabilityProfileV2Enabled:env.V10_CAPABILITY_PROFILE_V2_ENABLED==='true'};
 }
 export function requireProduct(c){if(typeof c.productId!=='string'||!/^[A-Za-z0-9._-]{1,160}$/.test(c.productId))fail('v10_subscription_product_not_configured',503);}
 export function qaOwnerAllowed(c,id){if(c.windowEndMs===null)return true;try{const a=JSON.parse(c.qaOwners??'[]');return Array.isArray(a)&&a.length<=32&&a.includes(id);}catch{return false;}}

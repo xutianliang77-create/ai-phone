@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
-import '../../../../platform/translation/text_language_detector.dart';
+import '../../../../platform/translation/scan_language_detector.dart';
 import '../../../../platform/license/license_failure_text.dart';
 import '../../domain/scan_translation_entity_protector.dart';
+import '../../domain/scan_translation_integrity.dart';
 
 enum ScanImageSource { camera, gallery }
 
@@ -41,9 +42,8 @@ class ScanTranslatedBlock {
   final String translation;
 }
 
-typedef ScanImagePicker = Future<PickedScanImage?> Function(
-  ScanImageSource source,
-);
+typedef ScanImagePicker =
+    Future<PickedScanImage?> Function(ScanImageSource source);
 
 class ScanTranslationController extends ChangeNotifier {
   ScanTranslationController({
@@ -51,15 +51,26 @@ class ScanTranslationController extends ChangeNotifier {
     required MobileTranslationProvider translationProvider,
     required ScanImagePicker pickImagePath,
     required SessionHistoryRepository historyRepository,
-  })  : _ocrProvider = ocrProvider,
-        _translationProvider = translationProvider,
-        _pickImagePath = pickImagePath,
-        _historyRepository = historyRepository;
+    Future<String?> Function(String)? detectLanguage,
+    Future<String> Function()? startAuthorization,
+    Future<void> Function(String)? verifyAuthorization,
+  }) : _ocrProvider = ocrProvider,
+       _translationProvider = translationProvider,
+       _pickImagePath = pickImagePath,
+       _historyRepository = historyRepository,
+       _detectLanguage = detectLanguage ?? ScanLanguageDetector().detect,
+       _startAuthorization = startAuthorization,
+       _verifyAuthorization = verifyAuthorization;
 
   final MobileOcrProvider _ocrProvider;
   final MobileTranslationProvider _translationProvider;
   final ScanImagePicker _pickImagePath;
   final SessionHistoryRepository _historyRepository;
+  final Future<String?> Function(String) _detectLanguage;
+  final Future<String> Function()? _startAuthorization;
+  final Future<void> Function(String)? _verifyAuthorization;
+  int _generation = 0;
+  bool _disposed = false;
 
   ScanTranslationStatus status = ScanTranslationStatus.idle;
   String imagePath = '';
@@ -70,6 +81,7 @@ class ScanTranslationController extends ChangeNotifier {
   List<MobileOcrBlock> recognizedBlocks = const <MobileOcrBlock>[];
   List<ScanTranslatedBlock> translatedBlocks = const <ScanTranslatedBlock>[];
   String sourceLanguage = 'auto';
+  String selectedSourceLanguage = 'auto';
   String targetLanguage = 'en';
   String? message;
   String? savedSessionId;
@@ -83,6 +95,24 @@ class ScanTranslationController extends ChangeNotifier {
 
   bool get canShare {
     return recognizedText.trim().isNotEmpty || translatedText.trim().isNotEmpty;
+  }
+
+  bool _current(int generation) => !_disposed && generation == _generation;
+
+  void setSourceLanguage(String language) {
+    if (isBusy ||
+        !const {'auto', 'zh', 'en'}.contains(language) ||
+        language == selectedSourceLanguage) {
+      return;
+    }
+    selectedSourceLanguage = language;
+    sourceLanguage = language;
+    translatedText = '';
+    translatedBlocks = const <ScanTranslatedBlock>[];
+    savedSessionId = null;
+    if (recognizedText.isNotEmpty) status = ScanTranslationStatus.recognized;
+    message = null;
+    notifyListeners();
   }
 
   void setTargetLanguage(String language) {
@@ -103,6 +133,9 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   Future<void> selectImage(ScanImageSource source) async {
+    if (isBusy || _disposed) return;
+    final generation = ++_generation;
+    final previousStatus = status;
     status = ScanTranslationStatus.picking;
     message = null;
     notifyListeners();
@@ -111,13 +144,15 @@ class ScanTranslationController extends ChangeNotifier {
     try {
       image = await _pickImagePath(source);
     } on Object {
+      if (!_current(generation)) return;
       status = ScanTranslationStatus.failed;
       message = 'scan_image_pick_failed';
       notifyListeners();
       return;
     }
+    if (!_current(generation)) return;
     if (image == null || image.path.trim().isEmpty) {
-      status = ScanTranslationStatus.idle;
+      status = previousStatus;
       notifyListeners();
       return;
     }
@@ -135,6 +170,8 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   Future<void> recognizeSelectedImage() async {
+    if (isBusy || _disposed) return;
+    final generation = ++_generation;
     final path = imagePath.trim();
     if (path.isEmpty) {
       status = ScanTranslationStatus.failed;
@@ -147,29 +184,36 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final lease = await _startAuthorization?.call();
+      if (!_current(generation)) return;
       final result = await _ocrProvider.recognizeImage(
         path,
         preferredScripts: targetLanguage == 'zh'
             ? const <String>['latin', 'chinese']
             : const <String>['chinese', 'latin'],
       );
-      recognizedText = normalizeScanTranslationEntities(
-        result?.text.trim() ?? '',
+      if (lease != null) await _verifyAuthorization?.call(lease);
+      if (!_current(generation)) return;
+      // Do not guess that an OCR currency symbol is a certification mark.
+      final nextText = result?.text.trim() ?? '';
+      if (nextText.isEmpty) {
+        status = ScanTranslationStatus.failed;
+        message = 'scan_no_text';
+        notifyListeners();
+        return;
+      }
+      recognizedText = nextText;
+      recognizedBlocks = List<MobileOcrBlock>.unmodifiable(
+        result?.blocks ?? const <MobileOcrBlock>[],
       );
-      recognizedBlocks = (result?.blocks ?? const <MobileOcrBlock>[])
-          .map(_normalizeOcrBlock)
-          .toList(growable: false);
+      translatedText = '';
+      translatedBlocks = const <ScanTranslatedBlock>[];
+      savedSessionId = null;
     } on Object catch (error) {
+      if (!_current(generation)) return;
       status = ScanTranslationStatus.failed;
       message = 'scan_ocr_failed';
       message = deviceLicenseFailureText(error) ?? message;
-      notifyListeners();
-      return;
-    }
-
-    if (recognizedText.isEmpty) {
-      status = ScanTranslationStatus.failed;
-      message = 'scan_no_text';
       notifyListeners();
       return;
     }
@@ -178,17 +222,9 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  MobileOcrBlock _normalizeOcrBlock(MobileOcrBlock block) {
-    return MobileOcrBlock(
-      text: normalizeScanTranslationEntities(block.text),
-      left: block.left,
-      top: block.top,
-      width: block.width,
-      height: block.height,
-    );
-  }
-
   Future<void> translateRecognizedText() async {
+    if (isBusy || _disposed) return;
+    final generation = ++_generation;
     final text = recognizedText.trim();
     if (text.isEmpty) {
       status = ScanTranslationStatus.failed;
@@ -197,34 +233,70 @@ class ScanTranslationController extends ChangeNotifier {
       return;
     }
 
-    sourceLanguage = detectTextLanguage(text);
     status = ScanTranslationStatus.translating;
     savedSessionId = null;
     message = null;
     notifyListeners();
 
     try {
+      final lease = await _startAuthorization?.call();
+      if (!_current(generation)) return;
+      final standalone = ScanTranslationEntityProtector(
+        text,
+      ).canBypassTranslation;
+      final detected = selectedSourceLanguage == 'auto'
+          ? (standalone ? 'auto' : await _detectLanguage(text))
+          : selectedSourceLanguage;
+      if (!_current(generation)) return;
+      if (detected == null) {
+        status = ScanTranslationStatus.recognized;
+        message = 'scan_language_uncertain';
+        notifyListeners();
+        return;
+      }
+      sourceLanguage = detected;
+      String nextText;
+      List<ScanTranslatedBlock> nextBlocks;
       if (recognizedBlocks.isEmpty) {
-        translatedText = await _translateText(text, sourceLanguage);
-        translatedBlocks = const <ScanTranslatedBlock>[];
+        nextText = await _translateText(text, sourceLanguage);
+        nextBlocks = const <ScanTranslatedBlock>[];
       } else {
         final blocks = <ScanTranslatedBlock>[];
         for (final block in recognizedBlocks) {
-          final blockLanguage = detectTextLanguage(block.text);
+          final standaloneBlock = ScanTranslationEntityProtector(
+            block.text,
+          ).canBypassTranslation;
+          final blockLanguage = selectedSourceLanguage != 'auto'
+              ? selectedSourceLanguage
+              : standaloneBlock
+              ? 'auto'
+              : recognizedBlocks.length == 1
+              ? detected
+              : await _detectLanguage(block.text);
+          if (!_current(generation)) return;
+          if (blockLanguage == null) throw const _ScanLanguageUncertain();
           final translation = await _translateText(block.text, blockLanguage);
-          if (translation.isNotEmpty) {
-            blocks.add(ScanTranslatedBlock(
-              source: block,
-              translation: translation,
-            ));
-          }
+          if (!_current(generation)) return;
+          if (translation.isEmpty) throw StateError('scan_block_untranslated');
+          blocks.add(
+            ScanTranslatedBlock(source: block, translation: translation),
+          );
         }
-        translatedBlocks = List<ScanTranslatedBlock>.unmodifiable(blocks);
-        translatedText = blocks.map((block) => block.translation).join('\n');
+        nextBlocks = List<ScanTranslatedBlock>.unmodifiable(blocks);
+        nextText = blocks.map((block) => block.translation).join('\n');
       }
+      if (lease != null) await _verifyAuthorization?.call(lease);
+      if (!_current(generation)) return;
+      translatedText = nextText;
+      translatedBlocks = nextBlocks;
     } on Object catch (error) {
+      if (!_current(generation)) return;
       status = ScanTranslationStatus.recognized;
-      message = 'scan_translation_unavailable';
+      message = error is _ScanLanguageUncertain
+          ? 'scan_language_uncertain'
+          : error is ScanEntityRestorationFailure
+          ? 'scan_entities_unverified'
+          : 'scan_translation_unavailable';
       message = deviceLicenseFailureText(error) ?? message;
       notifyListeners();
       return;
@@ -239,9 +311,9 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   Future<String> _translateText(String text, String detectedLanguage) async {
-    if (detectedLanguage == targetLanguage) return text;
     final entityProtector = ScanTranslationEntityProtector(text);
     if (entityProtector.canBypassTranslation) return text;
+    if (detectedLanguage == targetLanguage) return text;
     final result = await _translationProvider.translate(
       entityProtector.translationInput,
       MobileTranslationConfig(
@@ -250,10 +322,22 @@ class ScanTranslationController extends ChangeNotifier {
       ),
     );
     final translation = result?.text.trim() ?? '';
-    return translation.isEmpty ? '' : entityProtector.restore(translation);
+    if (translation.isEmpty) return '';
+    final restored = entityProtector.restore(translation);
+    if (!scanTranslationIntegrity(
+      text,
+      restored,
+      sourceLanguage: detectedLanguage,
+      targetLanguage: targetLanguage,
+    )) {
+      throw const ScanEntityRestorationFailure();
+    }
+    return restored;
   }
 
   Future<void> save() async {
+    if (isBusy || _disposed) return;
+    final generation = ++_generation;
     if (recognizedText.trim().isEmpty) {
       status = ScanTranslationStatus.failed;
       message = 'scan_no_text';
@@ -272,11 +356,13 @@ class ScanTranslationController extends ChangeNotifier {
         targetLanguage: targetLanguage,
         sourceKind: 'scan',
       );
+      if (!_current(generation)) return;
       savedSessionId = detail.sessionId;
       status = ScanTranslationStatus.saved;
       message = 'scan_saved';
       notifyListeners();
     } on Object {
+      if (!_current(generation)) return;
       status = ScanTranslationStatus.failed;
       message = 'scan_save_failed';
       notifyListeners();
@@ -285,8 +371,14 @@ class ScanTranslationController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _generation++;
     _ocrProvider.dispose();
     _translationProvider.dispose();
     super.dispose();
   }
+}
+
+class _ScanLanguageUncertain implements Exception {
+  const _ScanLanguageUncertain();
 }

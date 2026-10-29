@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../../account/data/account_session_store.dart' show onDeviceExecution;
 import 'realtime_runtime_settings.dart';
 
 abstract class RealtimeSettingsStore {
@@ -11,12 +12,18 @@ abstract class RealtimeSettingsStore {
 }
 
 class FileRealtimeSettingsStore implements RealtimeSettingsStore {
-  const FileRealtimeSettingsStore();
+  const FileRealtimeSettingsStore({this.directory, this.useVersionedFile});
+  final Future<Directory> Function()? directory;
+  final bool? useVersionedFile;
+  bool get _versioned => useVersionedFile ?? onDeviceExecution;
 
   @override
   Future<RealtimeRuntimeSettings?> load() async {
     try {
-      final file = await _settingsFile();
+      var file = await _settingsFile();
+      if (!await file.exists() && _versioned) {
+        file = await _legacySettingsFile();
+      }
       if (!await file.exists()) return null;
       final json = jsonDecode(await file.readAsString());
       if (json is! Map<String, Object?>) return null;
@@ -34,7 +41,16 @@ class FileRealtimeSettingsStore implements RealtimeSettingsStore {
   }
 
   Future<File> _settingsFile() async {
-    final directory = await getApplicationSupportDirectory();
+    final directory =
+        await (this.directory ?? getApplicationSupportDirectory)();
+    return File(
+      '${directory.path}/${_versioned ? 'realtime_settings_on_device_v1.json' : 'realtime_settings.json'}',
+    );
+  }
+
+  Future<File> _legacySettingsFile() async {
+    final directory =
+        await (this.directory ?? getApplicationSupportDirectory)();
     return File('${directory.path}/realtime_settings.json');
   }
 }

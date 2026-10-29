@@ -38,10 +38,11 @@ enum AppleSpeechResources {
   #if os(iOS)
   static func availability(language: String,
                            configuration: AppleSpeechConfiguration,
+                           automaticPair: [String] = AppleSpeechLanguageRouter.languages,
                            requiresMicrophone: Bool = true) async -> [String: Any] {
     if language=="auto" {
       var observations=[[String:Any]]()
-      for value in AppleSpeechLanguageRouter.languages {
+      for value in automaticPair {
         observations.append(await availability(language:value,configuration:configuration,requiresMicrophone:requiresMicrophone))
       }
       let ready=observations.allSatisfy{$0["canStart"] as? Bool==true}

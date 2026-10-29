@@ -1,6 +1,6 @@
 class ScanTranslationEntityProtector {
   ScanTranslationEntityProtector(this._sourceText)
-      : _entities = _findProtectedEntities(_sourceText);
+    : _entities = _findProtectedEntities(_sourceText);
 
   final String _sourceText;
   final List<_ProtectedEntity> _entities;
@@ -27,37 +27,36 @@ class ScanTranslationEntityProtector {
 
   String restore(String translatedText) {
     var restored = translatedText.trim();
-    final missing = <String>[];
-    final appended = <String>{};
-
     for (final entity in _entities) {
       final marker = entity.markerPattern;
-      if (marker.hasMatch(restored)) {
+      final matches = marker.allMatches(restored).length;
+      if (matches > 1) throw const ScanEntityRestorationFailure();
+      if (matches == 1) {
         restored = restored.replaceFirst(marker, entity.text);
-        restored = restored.replaceAll(marker, '');
-        continue;
-      }
-
-      final match = _findStandaloneEntity(restored, entity.text);
-      if (match != null) {
-        restored = restored.replaceRange(match.$1, match.$2, entity.text);
-      } else if (appended.add(entity.text)) {
-        missing.add(entity.text);
       }
     }
-
-    restored = restored.replaceAll(
-      RegExp(
-        r'\s*[_\[\]⟦⟧]*WJ_(?:[^\s_]+_)?\d+_\d+[_\[\]⟦⟧]*\s*',
-        caseSensitive: false,
-      ),
-      ' ',
-    );
-    restored = restored.trim();
-    if (missing.isEmpty) return restored;
-    if (restored.isEmpty) return missing.join(' · ');
-    return '$restored · ${missing.join(' · ')}';
+    if (RegExp(r'WJ_', caseSensitive: false).hasMatch(restored)) {
+      throw const ScanEntityRestorationFailure();
+    }
+    final expected = <String, int>{};
+    for (final entity in _entities) {
+      expected.update(entity.text, (count) => count + 1, ifAbsent: () => 1);
+    }
+    for (final entry in expected.entries) {
+      var start = 0;
+      for (var index = 0; index < entry.value; index++) {
+        final match = _findStandaloneEntity(restored, entry.key, start: start);
+        if (match == null) throw const ScanEntityRestorationFailure();
+        restored = restored.replaceRange(match.$1, match.$2, entry.key);
+        start = match.$2;
+      }
+    }
+    return restored;
   }
+}
+
+class ScanEntityRestorationFailure implements Exception {
+  const ScanEntityRestorationFailure();
 }
 
 class _ProtectedEntity {
@@ -74,9 +73,9 @@ class _ProtectedEntity {
   String get marker => '__WJ_${start}_${end}__';
 
   RegExp get markerPattern => RegExp(
-        '[_\\[\\]⟦⟧]*WJ_(?:[^\\s_]+_)?${start}_$end[_\\[\\]⟦⟧]*',
-        caseSensitive: false,
-      );
+    '[_\\[\\]⟦⟧]*WJ_(?:[^\\s_]+_)?${start}_$end[_\\[\\]⟦⟧]*',
+    caseSensitive: false,
+  );
 }
 
 String normalizeScanTranslationEntities(String text) {
@@ -93,15 +92,14 @@ List<_ProtectedEntity> _findProtectedEntities(String source) {
     for (final match in pattern.allMatches(source)) {
       final text = match.group(0)!;
       if (excluded.contains(text.toUpperCase()) ||
-          entities.any((entity) =>
-              match.start < entity.end && match.end > entity.start)) {
+          entities.any(
+            (entity) => match.start < entity.end && match.end > entity.start,
+          )) {
         continue;
       }
-      entities.add(_ProtectedEntity(
-        start: match.start,
-        end: match.end,
-        text: text,
-      ));
+      entities.add(
+        _ProtectedEntity(start: match.start, end: match.end, text: text),
+      );
     }
   }
 
@@ -112,26 +110,20 @@ List<_ProtectedEntity> _findProtectedEntities(String source) {
       final end = match.end;
       final start = end - text.length;
       if (end <= start ||
-          entities.any(
-            (entity) => start < entity.end && end > entity.start,
-          )) {
+          entities.any((entity) => start < entity.end && end > entity.start)) {
         continue;
       }
-      entities.add(_ProtectedEntity(
-        start: start,
-        end: end,
-        text: text,
-      ));
+      entities.add(_ProtectedEntity(start: start, end: end, text: text));
     }
   }
 
-  addMatches(RegExp(
-    r'\b(?:[A-Z][A-Za-z0-9&.+-]*)(?:[ \t]+[A-Z][A-Za-z0-9&.+-]*){0,4}[ \t]+(?:Technologies|Technology|Electronics|Electric|Corporation|Company|Limited|Holdings|Systems|Solutions|Semiconductors?|Enterprise|Group|Inc\.?|Corp\.?|Ltd\.?|LLC|Co\.?)\b',
-  ));
-  addGroupMatches(
+  addMatches(
     RegExp(
-      r'(?:制造商|厂商|品牌)\s*[:：]?\s*([A-Z][A-Za-z0-9&.+-]*)',
+      r'\b(?:[A-Z][A-Za-z0-9&.+-]*)(?:[ \t]+[A-Z][A-Za-z0-9&.+-]*){0,4}[ \t]+(?:Technologies|Technology|Electronics|Electric|Corporation|Company|Limited|Holdings|Systems|Solutions|Semiconductors?|Enterprise|Group|Inc\.?|Corp\.?|Ltd\.?|LLC|Co\.?)\b',
     ),
+  );
+  addGroupMatches(
+    RegExp(r'(?:制造商|厂商|品牌)\s*[:：]?\s*([A-Z][A-Za-z0-9&.+-]*)'),
     1,
   );
   addGroupMatches(
@@ -140,12 +132,14 @@ List<_ProtectedEntity> _findProtectedEntities(String source) {
     ),
     1,
   );
-  addMatches(RegExp(
-    r'\b(?=[A-Za-z0-9./_+-]*[A-Za-z])(?=[A-Za-z0-9./_+-]*\d)[A-Za-z0-9]+(?:[./_+-][A-Za-z0-9]+)+\b',
-  ));
-  addMatches(RegExp(
-    r'\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{2,}\b',
-  ));
+  addMatches(
+    RegExp(
+      r'\b(?=[A-Za-z0-9./_+-]*[A-Za-z])(?=[A-Za-z0-9./_+-]*\d)[A-Za-z0-9]+(?:[./_+-][A-Za-z0-9]+)+\b',
+    ),
+  );
+  addMatches(
+    RegExp(r'\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{2,}\b'),
+  );
   addMatches(RegExp(r'\b\d+(?:,\d{3})*(?:\.\d+)?\b'));
   addMatches(
     RegExp(r'\b[A-Z][A-Z0-9]{1,23}\b'),
@@ -165,18 +159,17 @@ List<_ProtectedEntity> _findProtectedEntities(String source) {
       'MANUAL',
     },
   );
-  addMatches(RegExp(
-    r'\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z]+[A-Z][A-Za-z0-9]*)\b',
-  ));
+  addMatches(
+    RegExp(r'\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z]+[A-Z][A-Za-z0-9]*)\b'),
+  );
 
   entities.sort((left, right) => left.start.compareTo(right.start));
   return List<_ProtectedEntity>.unmodifiable(entities);
 }
 
-(int, int)? _findStandaloneEntity(String text, String entity) {
+(int, int)? _findStandaloneEntity(String text, String entity, {int start = 0}) {
   final haystack = text.toLowerCase();
   final needle = entity.toLowerCase();
-  var start = 0;
   while (start <= haystack.length - needle.length) {
     final index = haystack.indexOf(needle, start);
     if (index < 0) return null;

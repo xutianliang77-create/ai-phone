@@ -6,7 +6,9 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     AsrTextSegment segment,
   ) async {
     if (segment.isRetraction) {
-      _localPartialFlush.clearIfSameId(segment.id); _removeSegment(segment.id); return;
+      _localPartialFlush.clearIfSameId(segment.id);
+      _removeSegment(segment.id);
+      return;
     }
     final cleanText = _cleanRealtimeText(segment.text);
     if (cleanText == null) return;
@@ -56,7 +58,10 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     if (!sent) _fail('Realtime connection lost');
   }
 
-  Future<void> _handleLocalAsrTextSegment(String sessionId, AsrTextSegment segment) async {
+  Future<void> _handleLocalAsrTextSegment(
+    String sessionId,
+    AsrTextSegment segment,
+  ) async {
     if (!segment.isFinal) {
       _upsertSegment(
         segment.id,
@@ -79,22 +84,50 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     final sessionId = _session?.sessionId;
     if (sessionId == null) return;
     _checkpointLocalSession(sessionId);
-    await _translateLocalSegment(sessionId, AsrTextSegment(
-      id: segment.id,
-      text: segment.text,
-      language: segment.language,
-      isFinal: true,
-      confidence: segment.confidence,
-    ), _localWorkGeneration);
+    await _translateLocalSegment(
+      sessionId,
+      AsrTextSegment(
+        id: segment.id,
+        text: segment.text,
+        language: segment.language,
+        isFinal: true,
+        confidence: segment.confidence,
+      ),
+      _localWorkGeneration,
+    );
   }
 
   Future<void> _translateLocalSegment(
-      String sessionId, AsrTextSegment segment, int localGeneration) async {
-    bool current() => !_config.onDeviceOnly ||
-        (!_disposed && _session?.sessionId == sessionId &&
-         _localWorkGeneration == localGeneration &&
-         (_status == RealtimeStatus.active || _stopInFlight));
+    String sessionId,
+    AsrTextSegment segment,
+    int localGeneration,
+  ) async {
+    bool current() =>
+        !_config.onDeviceOnly ||
+        (!_disposed &&
+            _session?.sessionId == sessionId &&
+            _localWorkGeneration == localGeneration &&
+            (_status == RealtimeStatus.active || _stopInFlight));
     if (!current()) return;
+    if (_config.onDeviceOnly && _config.sourceLanguage == 'auto') {
+      final detected = _recognizedSpeechLanguage(segment.language);
+      if (detected == null ||
+          !{
+            _config.automaticPairA,
+            _config.automaticPairB,
+          }.contains(detected)) {
+        _upsertSegment(
+          segment.id,
+          sourceText: segment.text,
+          sourceLanguage: segment.language,
+          confidence: segment.confidence,
+          stage: 'asr',
+        );
+        _message = '无法确定对话语言，请手动选择；原文已保留。';
+        _notify();
+        return;
+      }
+    }
     MobileTranslationResult? translated;
     try {
       translated = _canTranslateOnDevice(segment)
@@ -176,8 +209,17 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   }
 
   MobileTranslationConfig? _translationConfigForAsr(AsrTextSegment segment) {
-    final language = _recognizedSpeechLanguage(segment.language) ??
-        _dominantTextLanguage(segment.text);
+    final recognized = _recognizedSpeechLanguage(segment.language);
+    if (_config.onDeviceOnly &&
+        _config.sourceLanguage == 'auto' &&
+        (recognized == null ||
+            !{
+              _config.automaticPairA,
+              _config.automaticPairB,
+            }.contains(recognized))) {
+      return null; // Never infer an automatic turn from its written script.
+    }
+    final language = recognized ?? _dominantTextLanguage(segment.text);
     if (language != null) return _translationConfigForLanguage(language);
     return _translationConfigForLanguage(language) ??
         createMobileTranslationConfig(_config);
@@ -195,7 +237,8 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   }
 
   String _targetLanguageForAsr(AsrTextSegment segment) {
-    final language = _recognizedSpeechLanguage(segment.language) ??
+    final language =
+        _recognizedSpeechLanguage(segment.language) ??
         _dominantTextLanguage(segment.text);
     return _translationConfigForLanguage(language)?.targetLanguage ??
         _config.targetLanguage;
@@ -211,13 +254,21 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
 
   String _targetLanguageForSource(String sourceLanguage) {
     if (_config.autoReverseTargetLanguage) {
+      if (_config.onDeviceOnly) {
+        if (sourceLanguage == _config.automaticPairA)
+          return _config.automaticPairB;
+        if (sourceLanguage == _config.automaticPairB)
+          return _config.automaticPairA;
+        return sourceLanguage;
+      }
       return oppositeTargetLanguageCode(sourceLanguage);
     }
     final targetLanguage = _config.targetLanguage;
     if (_config.realtimeMode != 'conversation') return targetLanguage;
     if (sourceLanguage != targetLanguage) return targetLanguage;
-    final pairSourceLanguage =
-        _normalizedTranslationSource(_config.sourceLanguage);
+    final pairSourceLanguage = _normalizedTranslationSource(
+      _config.sourceLanguage,
+    );
     if (pairSourceLanguage == null || pairSourceLanguage == sourceLanguage) {
       return targetLanguage;
     }
@@ -226,6 +277,13 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
 
   String? _recognizedSpeechLanguage(String rawLanguage) {
     final language = rawLanguage.trim().toLowerCase();
+    if (_config.onDeviceOnly &&
+        (language.contains('hant') ||
+            language.startsWith('zh-tw') ||
+            language.startsWith('zh-hk') ||
+            language.startsWith('zh-mo'))) {
+      return null;
+    }
     if (language == 'zh' ||
         language.startsWith('zh-') ||
         language == 'cmn' ||

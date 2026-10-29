@@ -19,7 +19,8 @@ void main() {
     final history = _FakeSessionHistoryRepository();
     await tester.pumpWidget(_TestApp(
       child: ScanTranslationPage(
-        ocrProvider: const _FakeOcrProvider('你好'),
+        detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: history,
         pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
@@ -81,7 +82,8 @@ void main() {
   testWidgets('shows OCR empty-state message', (WidgetTester tester) async {
     await tester.pumpWidget(_TestApp(
       child: ScanTranslationPage(
-        ocrProvider: const _FakeOcrProvider(''),
+        detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider(''),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: _FakeSessionHistoryRepository(),
         pickImagePath: (_) async => _picked('/tmp/blank.jpg'),
@@ -105,7 +107,8 @@ void main() {
       (WidgetTester tester) async {
     await tester.pumpWidget(_TestApp(
       child: ScanTranslationPage(
-        ocrProvider: const _FakeOcrProvider('Welcome'),
+        detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('Welcome'),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: _FakeSessionHistoryRepository(),
         pickImagePath: (_) async => _picked('/tmp/sign.jpg'),
@@ -139,7 +142,8 @@ void main() {
     await tester.pumpWidget(_TestApp(
       textScale: 2,
       child: ScanTranslationPage(
-        ocrProvider: const _FakeOcrProvider('你好'),
+        detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: _FakeSessionHistoryRepository(),
       ),
@@ -161,7 +165,8 @@ void main() {
       (WidgetTester tester) async {
     await tester.pumpWidget(_TestApp(
       child: ScanTranslationPage(
-        ocrProvider: const _FakeOcrProvider('你好'),
+        detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
         translationProvider: _FakeTranslationProvider(fail: true),
         historyRepository: _FakeSessionHistoryRepository(),
         pickImagePath: (_) async => _picked('/tmp/offline.jpg'),
@@ -325,3 +330,6 @@ class _FakeFileShareService implements FileShareService {
   @override
   Future<void> shareFile(String path, {String? mimeType}) async {}
 }
+
+Future<String?> _fixtureLanguage(String text) async =>
+    RegExp(r'[\u4e00-\u9fff]').hasMatch(text) ? 'zh' : 'en';

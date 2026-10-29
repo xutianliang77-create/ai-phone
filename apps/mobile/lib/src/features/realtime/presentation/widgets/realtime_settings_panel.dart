@@ -9,6 +9,8 @@ import 'translation_language_picker.dart';
 import 'voice_preset_picker.dart';
 import 'domain_lexicon_picker.dart';
 import 'realtime_language_button.dart';
+import 'system_voice_picker.dart';
+import '../pages/language_capability_page.dart';
 
 class RealtimeSettingsPanel extends StatelessWidget {
   const RealtimeSettingsPanel({
@@ -95,11 +97,49 @@ class RealtimeSettingsPanel extends StatelessWidget {
             ],
           ),
           if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
+            if (settings.sourceLanguage == 'auto' ||
+                settings.autoReverseTargetLanguage) ...[
+              const SizedBox(height: 8),
+              Text(
+                l10n.isChinese
+                    ? '自动识别只在以下两种对话语言之间进行；不确定时不会猜测。'
+                    : 'Automatic detection is limited to the selected pair; uncertain turns are not guessed.',
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: enabled ? () => _pickPair(context, true) : null,
+                    child: Text(
+                      '${l10n.isChinese ? '语言 A' : 'Language A'}：${l10n.languageDisplayName(settings.automaticPairA)}',
+                    ),
+                  ),
+                  OutlinedButton(
+                    onPressed: enabled ? () => _pickPair(context, false) : null,
+                    child: Text(
+                      '${l10n.isChinese ? '语言 B' : 'Language B'}：${l10n.languageDisplayName(settings.automaticPairB)}',
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               l10n.onDeviceLanguageCapabilityHint,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const LanguageCapabilityPage(),
+                ),
+              ),
+              child: Text(
+                l10n.isChinese
+                    ? '查看 38 项语言的本机能力与验收状态'
+                    : 'View device capabilities for 38 languages',
               ),
             ),
           ],
@@ -172,13 +212,42 @@ class RealtimeSettingsPanel extends StatelessWidget {
       supportedCodes: onlineCoreOnly
           ? const {'zh', 'en'}
           : settings.processingMode == RealtimeProcessingMode.onDevice
-              ? onDeviceTranslationLanguageCodes
-              : null,
+          ? onDeviceTranslationLanguageCodes
+          : null,
+      showUnqualified:
+          settings.processingMode == RealtimeProcessingMode.onDevice,
     );
     if (selected == null) return;
-    onChanged(kind == LanguagePickerKind.source
-        ? settings.copyWith(sourceLanguage: selected)
-        : settings.copyWith(targetLanguage: selected));
+    onChanged(
+      kind == LanguagePickerKind.source
+          ? settings.copyWith(sourceLanguage: selected)
+          : settings.copyWith(targetLanguage: selected),
+    );
+  }
+
+  Future<void> _pickPair(BuildContext context, bool first) async {
+    final selected = await showTranslationLanguagePicker(
+      context: context,
+      kind: LanguagePickerKind.source,
+      includeAutomatic: false,
+      showUnqualified: true,
+      supportedCodes: onDeviceTranslationLanguageCodes,
+      selectedCode: first ? settings.automaticPairA : settings.automaticPairB,
+    );
+    if (selected == null) return;
+    final oldFirst = settings.automaticPairA,
+        oldSecond = settings.automaticPairB;
+    onChanged(
+      first
+          ? settings.copyWith(
+              automaticPairA: selected,
+              automaticPairB: selected == oldSecond ? oldFirst : oldSecond,
+            )
+          : settings.copyWith(
+              automaticPairB: selected,
+              automaticPairA: selected == oldFirst ? oldSecond : oldFirst,
+            ),
+    );
   }
 }
 
@@ -216,9 +285,9 @@ class _VoiceOutputSelector extends StatelessWidget {
     final selected = !enabled
         ? RealtimeVoiceOutputMode.off
         : settings.processingMode == RealtimeProcessingMode.onDevice &&
-                settings.voiceOutputMode == RealtimeVoiceOutputMode.myVoice
-            ? RealtimeVoiceOutputMode.natural
-            : settings.voiceOutputMode;
+              settings.voiceOutputMode == RealtimeVoiceOutputMode.myVoice
+        ? RealtimeVoiceOutputMode.natural
+        : settings.voiceOutputMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -251,9 +320,8 @@ class _VoiceOutputSelector extends StatelessWidget {
           ],
           selected: <RealtimeVoiceOutputMode>{selected},
           onSelectionChanged: enabled
-              ? (values) => onChanged(
-                    settings.copyWith(voiceOutputMode: values.single),
-                  )
+              ? (values) =>
+                    onChanged(settings.copyWith(voiceOutputMode: values.single))
               : null,
         ),
         if (settings.processingMode == RealtimeProcessingMode.online &&
@@ -266,6 +334,11 @@ class _VoiceOutputSelector extends StatelessWidget {
             enabled: enabled,
             onChanged: onChanged,
           ),
+        ],
+        if (settings.processingMode == RealtimeProcessingMode.onDevice &&
+            settings.voiceOutputMode == RealtimeVoiceOutputMode.natural) ...[
+          const SizedBox(height: 8),
+          SystemVoicePicker(enabled: enabled),
         ],
       ],
     );
@@ -293,7 +366,7 @@ class _VoicePresetButton extends StatelessWidget {
     final label = loading
         ? context.l10n.voicePresetLoadingLabel
         : selected?.label(chinese: context.l10n.isChinese) ??
-            context.l10n.voicePresetUnavailableLabel;
+              context.l10n.voicePresetUnavailableLabel;
     return OutlinedButton.icon(
       onPressed: enabled && !loading && presets.isNotEmpty
           ? () => _pick(context)
@@ -303,8 +376,10 @@ class _VoicePresetButton extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(context.l10n.voicePresetSettingLabel,
-              style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            context.l10n.voicePresetSettingLabel,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
           Text(label),
         ],
       ),

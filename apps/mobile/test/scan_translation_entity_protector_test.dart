@@ -85,21 +85,12 @@ void main() {
     expect(normalizeScanTranslationEntities('Price C€100'), 'Price C€100');
   });
 
-  test('appends stripped entities once and restores their exact casing', () {
+  test('rejects translations that strip protected entities', () {
     const source = 'CE 型号 DPS-750AB 金额 1,299.00';
     final protector = ScanTranslationEntityProtector(source);
-    final restored = protector.restore(
-      'Certified ce model dps-750ab amount',
+    expect(
+      () => protector.restore('Certified ce model dps-750ab amount'),
+      throwsA(isA<ScanEntityRestorationFailure>()),
     );
-
-    expect(_occurrences(restored, 'CE'), 1);
-    expect(_occurrences(restored, 'DPS-750AB'), 1);
-    expect(_occurrences(restored, '1,299.00'), 1);
-    expect(restored, isNot(contains(' ce ')));
-    expect(restored, isNot(contains('dps-750ab')));
   });
-}
-
-int _occurrences(String text, String value) {
-  return value.allMatches(text).length;
 }

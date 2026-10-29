@@ -56,6 +56,7 @@ void main() {
             'leaseId': 'fixture-lease',
             'remainingMs': remaining,
             'expiresAtMs': expires,
+            'componentProfile': 'fixture-v1',
             'implementationHash': 'fixture-profile',
             'devicePublicKey': 'fixture-key',
           };
@@ -88,6 +89,7 @@ void main() {
           body = {
             'execution': 'on_device',
             'licenseAdmission': 'configured_open',
+            'componentProfile': {'profile': 'fixture-v1'},
             'implementationHash': 'fixture-profile',
             'deploymentId': configuredPublicDeploymentId,
             'serverNowMs': 1800000000000,

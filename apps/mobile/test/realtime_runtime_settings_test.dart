@@ -97,7 +97,7 @@ void main() {
     expect(settings.domainLexiconPack, 'product');
   });
 
-  test('normalizes unsupported saved features for on-device mode', () {
+  test('preserves unsupported saved features for on-device mode', () {
     final settings = RealtimeRuntimeSettings.fromJson(const {
       'processingMode': 'onDevice',
       'sourceLanguage': 'fr',
@@ -106,10 +106,10 @@ void main() {
       'domainLexiconPack': 'medical',
     });
 
-    expect(settings.sourceLanguage, autoSourceLanguageCode);
-    expect(settings.targetLanguage, autoReverseTargetLanguageCode);
-    expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
-    expect(settings.domainLexiconPack, 'product');
+    expect(settings.sourceLanguage, 'fr');
+    expect(settings.targetLanguage, 'ja');
+    expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.myVoice);
+    expect(settings.domainLexiconPack, 'medical');
   });
 
   test('allows explicit speech output in Listening sessions', () {

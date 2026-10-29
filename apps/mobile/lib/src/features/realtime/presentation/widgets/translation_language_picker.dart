@@ -11,6 +11,8 @@ Future<String?> showTranslationLanguagePicker({
   required LanguagePickerKind kind,
   required String selectedCode,
   Set<String>? supportedCodes,
+  bool showUnqualified = false,
+  bool includeAutomatic = true,
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -21,6 +23,8 @@ Future<String?> showTranslationLanguagePicker({
         kind: kind,
         selectedCode: selectedCode,
         supportedCodes: supportedCodes,
+        showUnqualified: showUnqualified,
+        includeAutomatic: includeAutomatic,
       );
     },
   );
@@ -31,11 +35,15 @@ class _TranslationLanguagePicker extends StatefulWidget {
     required this.kind,
     required this.selectedCode,
     this.supportedCodes,
+    this.showUnqualified = false,
+    this.includeAutomatic = true,
   });
 
   final LanguagePickerKind kind;
   final String selectedCode;
   final Set<String>? supportedCodes;
+  final bool showUnqualified;
+  final bool includeAutomatic;
 
   @override
   State<_TranslationLanguagePicker> createState() {
@@ -97,10 +105,17 @@ class _TranslationLanguagePickerState
                     final choice = choices[index];
                     final selected = choice.code == widget.selectedCode;
                     return ListTile(
+                      enabled: choice.enabled,
                       leading: selected ? const Icon(Icons.check) : null,
                       title: Text(choice.label),
-                      subtitle: Text(choice.code),
-                      onTap: () => Navigator.of(context).pop(choice.code),
+                      subtitle: Text(
+                        choice.enabled
+                            ? choice.code
+                            : '${choice.code} · ${l10n.isChinese ? '尚未验收' : 'Not qualified'}',
+                      ),
+                      onTap: choice.enabled
+                          ? () => Navigator.of(context).pop(choice.code)
+                          : null,
                     );
                   },
                 ),
@@ -116,24 +131,29 @@ class _TranslationLanguagePickerState
     final query = _searchController.text.trim().toLowerCase();
     final l10n = context.l10n;
     final choices = <_LanguageChoice>[
-      if (widget.kind == LanguagePickerKind.source)
-        _LanguageChoice(
-          autoSourceLanguageCode,
-          l10n.autoDetectLanguageLabel,
-        ),
-      if (widget.kind == LanguagePickerKind.target)
+      if (widget.includeAutomatic && widget.kind == LanguagePickerKind.source)
+        _LanguageChoice(autoSourceLanguageCode, l10n.autoDetectLanguageLabel),
+      if (widget.includeAutomatic && widget.kind == LanguagePickerKind.target)
         _LanguageChoice(
           autoReverseTargetLanguageCode,
           l10n.autoReverseTargetLabel,
         ),
       ...supportedHyMtLanguages
-          .where((language) =>
-              widget.supportedCodes?.contains(language.code) ?? true)
+          .where(
+            (language) =>
+                widget.showUnqualified ||
+                (widget.supportedCodes?.contains(language.code) ?? true),
+          )
           .map((language) {
-        final label =
-            l10n.isChinese ? language.chineseName : language.englishName;
-        return _LanguageChoice(language.code, label);
-      }),
+            final label = l10n.isChinese
+                ? language.chineseName
+                : language.englishName;
+            return _LanguageChoice(
+              language.code,
+              label,
+              enabled: widget.supportedCodes?.contains(language.code) ?? true,
+            );
+          }),
     ];
     if (query.isEmpty) return choices;
     return choices.where((choice) {
@@ -144,8 +164,9 @@ class _TranslationLanguagePickerState
 }
 
 class _LanguageChoice {
-  const _LanguageChoice(this.code, this.label);
+  const _LanguageChoice(this.code, this.label, {this.enabled = true});
 
   final String code;
   final String label;
+  final bool enabled;
 }

@@ -62,10 +62,12 @@ final class AppleSpeechSession {
 
   func start(language: String, download: Bool, captureId: String,
              languagePolicyKey: String,
+             automaticPair: [String] = AppleSpeechLanguageRouter.languages,
              configuration: AppleSpeechConfiguration = try! AppleSpeechConfiguration()) async throws {
     self.language = language
     self.captureId = captureId
     self.languagePolicyKey = languagePolicyKey
+    automaticRouter = AppleSpeechLanguageRouter(languages: automaticPair)
     self.configuration = configuration
     endpoint = CoreMlNemotronEndpointDetector(vadThreshold: configuration.threshold,
       vadNegativeThreshold: configuration.negativeThreshold,
@@ -73,7 +75,7 @@ final class AppleSpeechSession {
     speechActivity = AppleSpeechActivityGate(preRollSamples: configuration.preRollSamples,
       evidenceWaitSamples: configuration.preRollSamples + configuration.minSpeechSamples + 4096)
     #if canImport(FluidAudio)
-    let languages=language=="auto" ? AppleSpeechLanguageRouter.languages:[language]
+    let languages=language=="auto" ? automaticPair:[language]
     for value in languages {
       let locale=try await AppleSpeechResources.locale(value)
       let lane=AppleSpeechRecognitionLane(language:value,locale:locale,automatic:language=="auto")

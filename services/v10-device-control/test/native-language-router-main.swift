@@ -21,6 +21,13 @@ import Foundation
     var en=pair(0.4,0.92);try en.endTurn(start:0,end:16000,now:0);let e=try en.drain(now:0).first!
     try check("clear_english_preserves_negation_and_id",e.language=="en" && e.text=="Do not cancel order A120")
     try check("model_sample_timeline",e.start==0 && e.end==16000)
+    var reversed=AppleSpeechLanguageRouter(languages:["en","zh"])
+    try reversed.accept(candidate("zh","请明天发货",0.95),finalizedThrough:16000)
+    try reversed.accept(candidate("en","tomorrow",0.4),finalizedThrough:16000)
+    try reversed.endTurn(start:0,end:16000,now:0)
+    try check("selected_pair_reverse_order",try reversed.drain(now:0).first?.language=="zh")
+    try expectFailure("duplicate_pair_rejected"){var r=AppleSpeechLanguageRouter(languages:["zh","zh"]);try r.endTurn(start:0,end:16000,now:0)}
+    try expectFailure("unqualified_pair_rejected"){var r=AppleSpeechLanguageRouter(languages:["zh","fr"]);try r.endTurn(start:0,end:16000,now:0)}
     var tied=pair(0.90,0.85);try tied.endTurn(start:0,end:16000,now:0)
     try check("close_scores_do_not_guess",try tied.drain(now:0).first?.language==nil)
     var low=pair(0.5,0.7);try low.endTurn(start:0,end:16000,now:0)

@@ -53,6 +53,7 @@ class MobileAsrConfig {
     this.turnRoutingPolicy = 'alternate',
     this.diagnosticCaptureEnabled = false,
     this.diagnosticSessionId,
+    this.automaticPair = const ['zh', 'en'],
   });
 
   final String language;
@@ -69,6 +70,7 @@ class MobileAsrConfig {
   final String turnRoutingPolicy;
   final bool diagnosticCaptureEnabled;
   final String? diagnosticSessionId;
+  final List<String> automaticPair;
 }
 
 class MobileAsrAvailability {

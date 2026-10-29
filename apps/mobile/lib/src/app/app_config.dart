@@ -47,6 +47,8 @@ class AppConfig {
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
+    this.automaticPairA = 'zh',
+    this.automaticPairB = 'en',
   }) : deviceAsrChunkDurationMs =
            deviceAsrChunkDurationMs ??
            (deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320),
@@ -101,6 +103,8 @@ class AppConfig {
   final String realtimeMode;
   final String sourceLanguage;
   final String targetLanguage;
+  final String automaticPairA;
+  final String automaticPairB;
   final String deviceAsrProvider;
   final String deviceAsrLanguage;
   final bool deviceAsrAutoDownloadModel;
@@ -135,6 +139,8 @@ class AppConfig {
     String? realtimeMode,
     String? sourceLanguage,
     String? targetLanguage,
+    String? automaticPairA,
+    String? automaticPairB,
     bool? useDeviceAsr,
     bool? useLocalSessions,
     bool? useOnDeviceTranslation,
@@ -153,6 +159,8 @@ class AppConfig {
       realtimeMode: realtimeMode ?? this.realtimeMode,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
       targetLanguage: targetLanguage ?? this.targetLanguage,
+      automaticPairA: automaticPairA ?? this.automaticPairA,
+      automaticPairB: automaticPairB ?? this.automaticPairB,
       deviceAsrProvider: deviceAsrProvider,
       deviceAsrLanguage: deviceAsrLanguage,
       deviceAsrAutoDownloadModel: deviceAsrAutoDownloadModel,

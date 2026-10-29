@@ -40,6 +40,10 @@ final class V10AppleSpeechBridge: NSObject, FlutterStreamHandler {
       throw V10LicenseFailure("ios_26_required")
     }
     let a=call.arguments as? [String:Any] ?? [:],language=a["language"] as? String ?? "auto"
+    let pair=a["automaticPair"] as? [String] ?? AppleSpeechLanguageRouter.languages
+    if language=="auto" && (pair.count != 2 || Set(pair) != Set(AppleSpeechLanguageRouter.languages)) {
+      throw V10LicenseFailure("device_language_not_qualified")
+    }
     if a["prerecordedInput"] != nil||a["inputKind"] != nil{throw V10LicenseFailure("product_capture_only")}
     switch call.method {
     case "requestPermission":
@@ -47,16 +51,19 @@ final class V10AppleSpeechBridge: NSObject, FlutterStreamHandler {
       let speech=await withCheckedContinuation{c in SFSpeechRecognizer.requestAuthorization{c.resume(returning:$0)}}
       guard microphone,speech == .authorized else{throw V10LicenseFailure("permission_denied")};return [:]
     case "isAvailable":
-      var payload=await AppleSpeechResources.availability(language:language,configuration:try AppleSpeechConfiguration(arguments:a))
+      var payload=await AppleSpeechResources.availability(language:language,configuration:try AppleSpeechConfiguration(arguments:a),automaticPair:pair)
       if preparation != nil{payload["canStart"]=false;payload["reason"]="resource_preparation_busy"};return payload
     case "prepare":
-      try await prepare(language,a);return [:]
+      try await prepare(language,a,pair);return [:]
     case "cancelPreparation":
       if preparationId==a["requestId"] as? String{preparation?.cancel();progress?.cancel()};return [:]
     case "start":
       guard session==nil,preparation==nil,let capture=a["captureId"] as? String,!capture.isEmpty,
         let policy=a["languagePolicyKey"] as? String,!policy.isEmpty else{throw AppleSpeechFailure.busy}
-      let checkedLanguages=language=="auto" ? AppleSpeechLanguageRouter.languages:[language]
+      if language=="auto" && policy != "\(AppleSpeechLanguageRouter.version):\(pair.joined(separator:":"))" {
+        throw V10LicenseFailure("device_language_policy_mismatch")
+      }
+      let checkedLanguages=language=="auto" ? pair:[language]
       let lease=try license.currentLeaseId()
       for value in checkedLanguages{try license.require(component:"asr",language:value,leaseId:lease)}
       let current=AppleSpeechSession(coordinator:coordinator,authorizationCheck:{[weak license] in
@@ -64,7 +71,7 @@ final class V10AppleSpeechBridge: NSObject, FlutterStreamHandler {
         for value in checkedLanguages{try license.require(component:"asr",language:value,leaseId:lease)}
       }){[weak self]event in self?.sink?(event)}
       session=current;leaseId=lease
-      do{try await current.start(language:language,download:false,captureId:capture,languagePolicyKey:policy,configuration:try AppleSpeechConfiguration(arguments:a))}
+      do{try await current.start(language:language,download:false,captureId:capture,languagePolicyKey:policy,automaticPair:pair,configuration:try AppleSpeechConfiguration(arguments:a))}
       catch{let stopped=await current.stopForAuthorization();if stopped,session===current{session=nil;leaseId=nil};throw error};return [:]
     case "stop":
       if let current=session as? AppleSpeechSession{try await current.stop();if session===current{session=nil;leaseId=nil}};return [:]
@@ -73,14 +80,14 @@ final class V10AppleSpeechBridge: NSObject, FlutterStreamHandler {
     }
   }
   @available(iOS 26.0,*)
-  private func prepare(_ language:String,_ a:[String:Any]) async throws {
+  private func prepare(_ language:String,_ a:[String:Any],_ pair:[String]) async throws {
     guard preparation==nil,session==nil else{throw LocalResourcePreparationError.busy}
     let download=a["autoDownloadModel"] as? Bool==true
     let id=download ? try authorizedResourceRequestID(a):UUID().uuidString
     preparationId=id
     let task=Task{@MainActor in
       _=try AppleSpeechResources.sileroURL()
-      for value in (language=="auto" ? AppleSpeechLanguageRouter.languages:[language]) {
+      for value in (language=="auto" ? pair:[language]) {
       let locale=try await AppleSpeechResources.locale(value)
       let transcriber=SpeechTranscriber(locale:locale,preset:.timeIndexedProgressiveTranscription)
       var state=await AppleSpeechResources.snapshot(language:value,locale:locale,transcriber:transcriber,stage:"prepare")

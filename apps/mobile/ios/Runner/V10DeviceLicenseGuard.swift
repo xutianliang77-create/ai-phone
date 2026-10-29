@@ -16,12 +16,14 @@ struct V10DeviceLicenseClaims: Codable {
   let allowedLanguages: [String]
 }
 struct V10LicenseRequestContext {
-  let nonce: String, operation: String, sentAt: Double
+  let nonce: String, operation: String, profile: String, implementationHash: String, sentAt: Double
 }
 /// Our implementation contract fingerprint. Never a hash of OS model weights.
 final class V10DeviceLicenseGuard: @unchecked Sendable {
   static let profile = "apple-system-zh-en-v10-r1"
   static let implementationHash = "96afb4a9820e642bbfdbe5c9109ebb289deb10c2903f056fab383017814f8c99"
+  static let profileV2 = "apple-system-qualified-v10-r2"
+  static let implementationHashV2 = "a50649808adf104202545c8920d99d5bb58374515c4ff20eea0b838554e3fbfd"
   private static let origin = ContinuousClock.now
   static func continuousSeconds() -> Double {
     let c = origin.duration(to: .now).components
@@ -52,16 +54,22 @@ final class V10DeviceLicenseGuard: @unchecked Sendable {
     self.keys=try keys.mapValues { try P256.Signing.PublicKey(x963Representation:$0) }
     lastObserved=now()
   }
-  func request(nonce: String, operation: String) throws -> (leaseId: String, sequence: Int) {
+  func request(nonce: String, operation: String, profile: String = V10DeviceLicenseGuard.profile,
+               implementationHash: String = V10DeviceLicenseGuard.implementationHash) throws -> (leaseId: String, sequence: Int) {
     lock.lock();defer{lock.unlock()};let t=try clock()
-    guard ["acquire","renew"].contains(operation),nonce.count==64 else {throw V10LicenseFailure("device_request_binding")}
+    guard ["acquire","renew"].contains(operation),nonce.count==64,
+      (profile==Self.profile && implementationHash==Self.implementationHash) ||
+      (profile==Self.profileV2 && implementationHash==Self.implementationHashV2) else {throw V10LicenseFailure("device_request_binding")}
     if let p=pending {
-      guard p.nonce==nonce,p.operation==operation else {throw V10LicenseFailure("device_request_in_progress")}
+      guard p.nonce==nonce,p.operation==operation,p.profile==profile,p.implementationHash==implementationHash else {throw V10LicenseFailure("device_request_in_progress")}
       return (grant?.leaseId ?? "",grant?.sequence ?? 0)
     }
-    if operation=="renew" {try valid(t)}
+    if operation=="renew" {
+      try valid(t)
+      guard grant?.componentProfile==profile,grant?.implementationHash==implementationHash else {throw V10LicenseFailure("device_license_sequence")}
+    }
     if operation=="acquire",grant != nil,terminalReason==nil,t<deadline {throw V10LicenseFailure("device_license_already_valid")}
-    pending=V10LicenseRequestContext(nonce:nonce,operation:operation,sentAt:t)
+    pending=V10LicenseRequestContext(nonce:nonce,operation:operation,profile:profile,implementationHash:implementationHash,sentAt:t)
     return operation=="renew" ? (grant!.leaseId,grant!.sequence) : ("",0)
   }
   func accept(_ token: String) throws {
@@ -82,10 +90,12 @@ final class V10DeviceLicenseGuard: @unchecked Sendable {
       "issuedAtMs","notBeforeMs","expiresAtMs","entitlementKey","entitlementRevision","componentProfile","implementationHash","allowedLanguages"])
       else {throw V10LicenseFailure("device_license_fields")}
     let value=try JSONDecoder().decode(V10DeviceLicenseClaims.self,from:payload)
-    guard value.version==1,value.purpose=="wujie-v10-device-license",value.execution=="on_device",
+    let validContract = (value.version==1 && context.profile==Self.profile && context.implementationHash==Self.implementationHash) ||
+      (value.version==2 && context.profile==Self.profileV2 && context.implementationHash==Self.implementationHashV2)
+    guard validContract,value.purpose=="wujie-v10-device-license",value.execution=="on_device",
       value.ownerId==ownerId,value.deploymentId==deploymentId,value.bundleId==bundleId,
       value.deviceKeyHash==deviceKeyHash,value.launchNonce==launchNonce,value.requestNonce==context.nonce,
-      value.allowedLanguages==["zh","en"],value.componentProfile==Self.profile,value.implementationHash==Self.implementationHash,
+      value.allowedLanguages==["zh","en"],value.componentProfile==context.profile,value.implementationHash==context.implementationHash,
       !value.leaseId.isEmpty,value.sequence>0,value.issuedAtMs>0,value.notBeforeMs>=value.issuedAtMs,
       value.expiresAtMs>value.notBeforeMs,value.expiresAtMs-value.notBeforeMs<=1_800_000,
       value.notBeforeMs-value.issuedAtMs<=60_000 else {throw V10LicenseFailure("device_license_binding")}
@@ -103,8 +113,9 @@ final class V10DeviceLicenseGuard: @unchecked Sendable {
     lock.lock();defer{lock.unlock()};let t=try clock();try valid(t)
     guard ["asr","translation","tts","ocr"].contains(component),
       leaseId==nil||leaseId==grant?.leaseId else {throw V10LicenseFailure("device_component_scope")}
-    if let language {guard ["zh","en"].contains(Self.language(language)) else {throw V10LicenseFailure("device_language_not_qualified")}}
-    if let target {guard ["zh","en"].contains(Self.language(target)),Self.language(target) != Self.language(language ?? "") else {throw V10LicenseFailure("device_language_not_qualified")}}
+    let allowed=grant?.allowedLanguages ?? []
+    if let language {guard allowed.contains(Self.language(language)) else {throw V10LicenseFailure("device_language_not_qualified")}}
+    if let target {guard allowed.contains(Self.language(target)),Self.language(target) != Self.language(language ?? "") else {throw V10LicenseFailure("device_language_not_qualified")}}
   }
   func abandonRequest() {lock.lock();pending=nil;lock.unlock()}
   func activity(_ scope: String, active: Bool) throws {
@@ -142,5 +153,11 @@ final class V10DeviceLicenseGuard: @unchecked Sendable {
     guard let data=Data(base64Encoded:normalized+String(repeating:"=",count:(4-normalized.count%4)%4)) else {throw V10LicenseFailure("device_license_encoding")};return data
   }
   static func hex(_ d: Data) -> String {SHA256.hash(data:d).map{String(format:"%02x",$0)}.joined()}
-  static func language(_ s:String) -> String {let v=s.lowercased();return v.hasPrefix("zh") ? "zh":v.hasPrefix("en") ? "en":v}
+  static func language(_ s:String) -> String {
+    let v=s.trimmingCharacters(in:.whitespacesAndNewlines).replacingOccurrences(of:"_",with:"-").lowercased()
+    if v=="en" || v.hasPrefix("en-") {return "en"}
+    if ["zh","zh-cn","zh-hans","zh-hans-cn","cmn","cmn-cn","cmn-hans","cmn-hans-cn"].contains(v) {return "zh"}
+    if v=="zh-hant" || v.hasPrefix("zh-hant-") || v=="zh-tw" {return "zh-Hant"}
+    return v
+  }
 }

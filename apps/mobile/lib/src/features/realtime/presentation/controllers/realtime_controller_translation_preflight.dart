@@ -25,7 +25,9 @@ extension RealtimeControllerTranslationPreflight on RealtimeController {
     if (_config.onDeviceOnly && _autoSpeakTranslation) {
       final speech = _speechOutputProvider;
       if (speech is! SpeechOutputPreparation) throw StateError('本机系统声音未就绪');
-      for (final language in const ['zh', 'en']) { await (speech as SpeechOutputPreparation).prepareVoice(language); }
+      for (final language in {_config.automaticPairA, _config.automaticPairB}) {
+        await (speech as SpeechOutputPreparation).prepareVoice(language);
+      }
     }
     _notify();
   }
@@ -41,7 +43,8 @@ extension RealtimeControllerTranslationPreflight on RealtimeController {
     try {
       for (final config in createOnDeviceTranslationPreflightConfigs(_config)) {
         if (!_isCurrentStart(generation)) return;
-        await (provider as MobileTranslationPreparation).warmUp(config)
+        await (provider as MobileTranslationPreparation)
+            .warmUp(config)
             .timeout(const Duration(seconds: 30));
       }
     } on TimeoutException {
