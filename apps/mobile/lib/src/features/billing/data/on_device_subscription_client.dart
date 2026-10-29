@@ -261,6 +261,7 @@ class OnDeviceSubscriptionClient {
         'appAccountToken': e['appAccountToken'],
         'restoreAcknowledged': receipt['restoreAcknowledged'] == true,
       });
+      await control.verifiedEntitlementUpdated(op, receipt['entitlement']);
     }
     return result?['status'] as String? ?? 'unknown';
   }

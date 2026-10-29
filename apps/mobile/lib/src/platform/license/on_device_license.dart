@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../features/account/data/account_scoped_http.dart';
 import '../../features/account/data/account_session_store.dart';
 import '../http/public_http_client.dart';
+
+part 'on_device_license_recovery.dart';
 
 /// A process-local view of the native, monotonic license. Never persist a JWT
 /// or reconstruct its lifetime using DateTime or the arrival of a retry.
@@ -45,6 +48,9 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
             .receiveBroadcastStream()
             .listen(
               (event) {
+                if (event is Map && event['closeReceiptQueued'] == true) {
+                  _scheduleReceiptFlush();
+                }
                 if (event is Map &&
                     event['valid'] == false &&
                     _scopes.isNotEmpty) {
@@ -75,6 +81,13 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
   Map<String, Object?>? _pending;
   int? _pendingEpoch;
   bool _automaticRenewalFailed = false;
+  String? _automaticRenewalKey;
+  int _automaticRenewalAttempts = 0;
+  String? _notifiedEntitlementOwner;
+  int _notifiedEntitlementExpiry = 0;
+  bool _receiptFlushRunning = false;
+  bool _receiptFlushAgain = false;
+  Future<void>? _receiptFlushFlight;
   @override
   Stream<void> get invalidations => _invalidations.stream;
 
@@ -221,29 +234,7 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
     await request('/v10/device/register', body: proof, operation: op);
   }
 
-  Future<void> flushReceipts(ScopedAccountOperation op) async {
-    final outbox = await native('outbox', {'ownerId': op.original.ownerId});
-    for (final row in (outbox['receipts'] as List? ?? [])) {
-      await op.check();
-      final value = Map<String, Object?>.from(row as Map);
-      final result = await request(
-        '/v10/device/close',
-        body: Map<String, Object?>.from(value['envelope'] as Map),
-        operation: op,
-      );
-      if (result['status'] != 'closed' ||
-          result['leaseId'] != value['leaseId'] ||
-          result['sequence'] != value['sequence'] ||
-          result['chargedSeconds'] != 0) {
-        throw StateError('device_close_ack_binding');
-      }
-      await native('ackClose', {
-        'ownerId': op.original.ownerId,
-        'leaseId': value['leaseId'],
-        'sequence': value['sequence'],
-      });
-    }
-  }
+  Future<void> flushReceipts(ScopedAccountOperation op) => _flushReceipts(op);
 
   Future<void> reconcileOnline() async {
     try {
@@ -263,6 +254,11 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
     }
   }
 
+  Future<void> verifiedEntitlementUpdated(
+    ScopedAccountOperation op,
+    Object? entitlement,
+  ) => _verifiedEntitlementUpdated(op, entitlement);
+
   @override
   Future<void> activity(String scope, bool active) async {
     final op = await ScopedAccountOperation.capture(store);
@@ -275,29 +271,8 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
     active ? _scopes.add(scope) : _scopes.remove(scope);
   }
 
-  Future<void> _renewIfNeeded() async {
-    if (_scopes.isEmpty || _inFlight != null || _automaticRenewalFailed) return;
-    try {
-      final op = await ScopedAccountOperation.capture(store);
-      final state = DeviceLicenseSnapshot(
-        await native('status', {'ownerId': op.original.ownerId}),
-      );
-      await op.check();
-      if (!state.valid) {
-        _invalidations.add(null);
-        return;
-      }
-      if (state.remainingMs > 60000) return;
-      _inFlight = _ensure(renewal: true);
-      await _inFlight;
-    } catch (_) {
-      // One automatic renewal attempt per period; failure preserves the old
-      // cutoff. A foreground action can explicitly resolve its original nonce.
-      _automaticRenewalFailed = true;
-    } finally {
-      _inFlight = null;
-    }
-  }
+  @visibleForTesting
+  Future<void> debugPollRenewal() => _renewIfNeeded();
 
   Future<void> dispose() async {
     _timer?.cancel();

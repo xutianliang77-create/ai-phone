@@ -139,19 +139,21 @@ final class V10DeviceLicenseBridge: NSObject, FlutterStreamHandler {
     permit?.invalidate(reason,preservePending:reason=="expired")
     if reason != "expired" {requestEnvelope=nil};stopping=true;publish()
     let stopped=await onStop?() ?? true;stopping = !stopped;wasValid=false
-    if let before {persistClose(before,reason:reason)}
+    if let before, persistClose(before,reason:reason), stopped {
+      var event=snapshot();event["closeReceiptQueued"]=true;sink?(event)
+    }
   }
-  private func persistClose(_ s:[String:Any],reason:String){
-    guard let identity,let lease=s["leaseId"] as? String,!lease.isEmpty else{return}
+  private func persistClose(_ s:[String:Any],reason:String)->Bool{
+    guard let identity,let lease=s["leaseId"] as? String,!lease.isEmpty else{return false}
     do{
-      var rows=try identity.deviceLicenseOutbox();if rows.contains(where:{$0["leaseId"] as? String==lease && $0["sequence"] as? Int==s["sequence"] as? Int}){return}
+      var rows=try identity.deviceLicenseOutbox();if rows.contains(where:{$0["leaseId"] as? String==lease && $0["sequence"] as? Int==s["sequence"] as? Int}){receiptPersistenceFailed=false;return true}
       let safe=["expired","account_changed","authorization_required","monotonic_clock_invalid"].contains(reason) ? reason:"authorization_stopped"
       let body:[String:Any]=["domain":"wujie.v10.device-license.close.v1","ownerId":identity.ownerId,"deploymentId":deployment,
         "devicePublicKey":identity.publicKey,"leaseId":lease,"launchNonce":s["launchNonce"] ?? "","sequence":s["sequence"] ?? 0,
         "activeMs":s["activeMs"] ?? 0,"issuedAtMs":s["observedServerTimeMs"] ?? 0,"reason":safe]
       rows.append(["leaseId":lease,"sequence":s["sequence"] ?? 0,"envelope":try signed(body,identity:identity)])
-      try identity.saveDeviceLicenseOutbox(rows);receiptPersistenceFailed=false
-    }catch{receiptPersistenceFailed=true}
+      try identity.saveDeviceLicenseOutbox(rows);receiptPersistenceFailed=false;return true
+    }catch{receiptPersistenceFailed=true;return false}
   }
   private func snapshot()->[String:Any]{
     var s=permit?.snapshot() ?? ["valid":false,"reason":"authorization_required"]
