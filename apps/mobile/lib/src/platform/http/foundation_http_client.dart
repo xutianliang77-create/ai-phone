@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:objective_c/objective_c.dart';
 import 'deployment_identity_cache.dart';
 import 'observed_http_request.dart';
+import 'native_task_metrics.dart';
 
 /// Bounded public JSON control traffic over URLSession completion handlers.
 /// Redirects remain disabled, and close cancels outstanding native tasks.
@@ -32,6 +33,7 @@ class FoundationHttpClient extends http.BaseClient
   }
 
   final _tasks = <URLSessionTask, Completer<http.StreamedResponse>>{};
+  final _metricDelegates = <URLSessionTask, Object>{};
   bool _closed = false;
 
   @override
@@ -40,9 +42,19 @@ class FoundationHttpClient extends http.BaseClient
     var aborted = false;
     URLSessionTask? nativeTask;
     Completer<http.StreamedResponse>? pending;
-    void observe(String phase, {int? errorCode}) {
+    void observe(
+      String phase, {
+      int? errorCode,
+      String? errorDomain,
+      List<Map<String, Object?>>? metrics,
+    }) {
       if (request is ObservedHttpRequest) {
-        request.observeNative(phase, errorCode: errorCode);
+        request.observeNative(
+          phase,
+          errorCode: errorCode,
+          errorDomain: errorDomain,
+          metrics: metrics,
+        );
       }
     }
 
@@ -93,8 +105,21 @@ class FoundationHttpClient extends http.BaseClient
       error,
     ) {
       _tasks.remove(task);
+      _metricDelegates.remove(task);
       nativeTask = null;
-      observe('native_task_completed', errorCode: error?.code);
+      String? errorDomain;
+      if (request is ObservedHttpRequest) {
+        try {
+          errorDomain = error?.domain.toDartString();
+        } catch (_) {
+          // Observation cannot suppress the transport completion callback.
+        }
+      }
+      observe(
+        'native_task_completed',
+        errorCode: error?.code,
+        errorDomain: errorDomain,
+      );
       if (result.isCompleted) return;
       try {
         if (aborted) {
@@ -130,6 +155,23 @@ class FoundationHttpClient extends http.BaseClient
     });
     nativeTask = task;
     _tasks[task] = result;
+    if (request is ObservedHttpRequest &&
+        const bool.fromEnvironment('WUJIE_CONTROL_DIAGNOSTICS') &&
+        const String.fromEnvironment('PUBLIC_RELEASE_PURPOSE') == 'A13_QA') {
+      final delegate = createNativeMetricsDelegate((metrics) {
+        observe('native_task_metrics', metrics: metrics);
+      });
+      if (delegate != null) {
+        try {
+          task.taskDelegate = delegate;
+          _metricDelegates[task] = delegate;
+        } catch (_) {
+          observe('native_metrics_unavailable');
+        }
+      } else {
+        observe('native_metrics_unavailable');
+      }
+    }
     observe('native_task_started');
     task.resume();
     return result.future;
@@ -146,6 +188,7 @@ class FoundationHttpClient extends http.BaseClient
       }
     }
     _tasks.clear();
+    _metricDelegates.clear();
     _session.finishTasksAndInvalidate();
   }
 }

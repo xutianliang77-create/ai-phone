@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../../features/account/data/account_scoped_http.dart';
 import '../../features/account/data/account_session_store.dart';
 import '../http/public_http_client.dart';
+import '../diagnostics/control_diagnostic_policy.dart';
 
 part 'on_device_license_recovery.dart';
 
@@ -18,6 +19,13 @@ class DeviceLicenseSnapshot {
   bool get valid => data['valid'] == true;
   String get leaseId => data['leaseId'] as String? ?? '';
   int get remainingMs => (data['remainingMs'] as num?)?.toInt() ?? 0;
+}
+
+/// Retains the status for receipt-specific conflict handling without changing
+/// the existing StateError contract exposed to callers.
+class _DeviceControlResponseError extends StateError {
+  _DeviceControlResponseError(super.message, this.statusCode);
+  final int statusCode;
 }
 
 abstract interface class OnDeviceLicense {
@@ -88,6 +96,7 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
   bool _receiptFlushRunning = false;
   bool _receiptFlushAgain = false;
   Future<void>? _receiptFlushFlight;
+  ScopedAccountOperation? _receiptFlushOperation;
   @override
   Stream<void> get invalidations => _invalidations.stream;
 
@@ -115,14 +124,21 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
     final json = jsonDecode(response.body);
     if (json is! Map<String, Object?> || response.statusCode != 200) {
       final code = json is Map ? ((json['error'] as Map?)?['code']) : null;
-      throw StateError(code is String ? code : 'device_control_unavailable');
+      throw _DeviceControlResponseError(
+        code is String ? code : 'device_control_unavailable',
+        response.statusCode,
+      );
     }
     return json;
   }
 
   @override
-  Future<DeviceLicenseSnapshot> ensureValid() =>
-      _inFlight ??= _ensure().whenComplete(() => _inFlight = null);
+  Future<DeviceLicenseSnapshot> ensureValid() {
+    if (controlDiagnosticReadOnly) {
+      return Future.error(StateError('control_diagnostic_read_only'));
+    }
+    return _inFlight ??= _ensure().whenComplete(() => _inFlight = null);
+  }
 
   /// Completion fence: inspect the existing native lease only. Never obtain a
   /// new lease to make a result produced under an expired/replaced one valid.
@@ -185,11 +201,11 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
         );
       }
     }
-    try {
-      await flushReceipts(op);
-    } catch (_) {
-      await op.check();
-    }
+    // Receipt recovery must not hold the next authorization hostage. Signed
+    // receipts remain in their account's native outbox until a bound server
+    // acknowledgement has been verified. The server closes by lease ID, so a
+    // delayed receipt cannot close the new lease.
+    _scheduleReceiptFlush(expectedOperation: op);
     final config = await request('/v10/device/configuration', operation: op);
     await native('anchorTime', {
       'ownerId': owner,
@@ -198,14 +214,21 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
     final selectedProfile = state.data['componentProfile'];
     final selectedHash = state.data['implementationHash'];
     final primaryProfile = config['componentProfile'];
-    final primaryMatches = primaryProfile is Map &&
+    final primaryMatches =
+        primaryProfile is Map &&
         primaryProfile['profile'] == selectedProfile &&
         config['implementationHash'] == selectedHash;
     final available = config['availableProfiles'];
-    final alternativeMatches = available is List && available.any((entry) =>
-        entry is Map && entry['componentProfile'] is Map &&
-        (entry['componentProfile'] as Map)['profile'] == selectedProfile &&
-        entry['implementationHash'] == selectedHash);
+    final alternativeMatches =
+        available is List &&
+        available.any(
+          (entry) =>
+              entry is Map &&
+              entry['componentProfile'] is Map &&
+              (entry['componentProfile'] as Map)['profile'] ==
+                  selectedProfile &&
+              entry['implementationHash'] == selectedHash,
+        );
     if (config['execution'] != 'on_device' ||
         config['licenseAdmission'] != 'configured_open' ||
         !(primaryMatches || alternativeMatches) ||
@@ -262,13 +285,10 @@ class OnDeviceLicenseClient implements OnDeviceLicense {
   Future<void> flushReceipts(ScopedAccountOperation op) => _flushReceipts(op);
 
   Future<void> reconcileOnline() async {
+    if (controlDiagnosticReadOnly) return;
     try {
       final op = await ScopedAccountOperation.capture(store);
-      try {
-        await flushReceipts(op);
-      } catch (_) {
-        await op.check();
-      }
+      _scheduleReceiptFlush(expectedOperation: op);
       final result = await request('/billing/entitlement', operation: op);
       if ((result['entitlement'] as Map?)?['valid'] != true) {
         await native('invalidate', {'reason': 'subscription_ended'});

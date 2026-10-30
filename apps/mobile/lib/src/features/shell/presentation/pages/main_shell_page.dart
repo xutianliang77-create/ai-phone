@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../../account/data/account_session_events.dart';
 import '../../../billing/data/subscription_recovery_coordinator.dart';
+import '../../../../platform/diagnostics/control_diagnostic_policy.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
@@ -10,6 +11,7 @@ import '../../../realtime/presentation/pages/realtime_page.dart';
 import '../../../scan/presentation/pages/scan_translation_page.dart';
 import 'call_home_page.dart';
 import 'settings_home_page.dart';
+import 'control_diagnostic_page.dart';
 
 class MainShellPage extends StatefulWidget {
   const MainShellPage({super.key});
@@ -30,7 +32,9 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
     super.initState();
     if (_config.onDeviceOnly) {
       WidgetsBinding.instance.addObserver(this);
-      _subscriptionRecovery = SubscriptionRecoveryCoordinator()..start();
+      if (!controlDiagnosticReadOnly) {
+        _subscriptionRecovery = SubscriptionRecoveryCoordinator()..start();
+      }
       _accountChanges = AccountSessionEvents.changes.listen((_) {
       if (mounted) setState(() { _accountRevision++; _builtTabs..clear()..add(_selectedIndex); });
       _subscriptionRecovery?.retryPending();
@@ -51,6 +55,7 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    if (controlDiagnosticReadOnly) return const ControlDiagnosticPage();
     final l10n = context.l10n;
     return Scaffold(
       body: IndexedStack(

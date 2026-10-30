@@ -107,6 +107,8 @@
 	<string>$(WUJIE_V10_SUBSCRIPTION_PRODUCT_ID)</string>
 	<key>WujieSubscriptionDiagnostics</key>
 	<string>$(WUJIE_SUBSCRIPTION_DIAGNOSTICS)</string>
+	<key>WujieControlDiagnosticsReadOnly</key>
+	<string>$(WUJIE_CONTROL_DIAGNOSTICS_READONLY)</string>
 	<key>WujiePublicDeploymentId</key>
 	<string>$(WUJIE_CONTROL_DEPLOYMENT_ID)</string>
 	<key>WujieAppAttestEnvironment</key>

@@ -21,6 +21,10 @@ final class V10SubscriptionBridge: NSObject, @preconcurrency FlutterStreamHandle
   init(license: V10DeviceLicenseBridge) { self.license = license; super.init() }
   private var productId: String { Bundle.main.object(forInfoDictionaryKey:"WujieV10SubscriptionProductId") as? String ?? "" }
   func register(messenger: FlutterBinaryMessenger) {
+    // The explicit development diagnostic build must not subscribe to or
+    // synchronize existing StoreKit transactions on launch.
+    if Bundle.main.object(forInfoDictionaryKey:"WujieControlDiagnosticsReadOnly") as? String == "1",
+       Bundle.main.object(forInfoDictionaryKey:"WujieAppAttestEnvironment") as? String == "development" { return }
     FlutterEventChannel(name:"translation_mobile/v10_subscription/events",binaryMessenger:messenger).setStreamHandler(self)
     if updatesTask == nil {
       updatesTask=Task { @MainActor [weak self] in

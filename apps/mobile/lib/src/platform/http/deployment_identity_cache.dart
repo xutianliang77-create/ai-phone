@@ -2,6 +2,8 @@ import '../../features/account/data/account_session_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../diagnostics/control_transport_trace.dart';
+import 'observed_http_request.dart';
 
 /// A fresh connection for subsequent sends, without canceling unrelated
 /// requests already in flight. Only read-only deployment metadata retries use it.
@@ -124,16 +126,69 @@ class DeploymentIdentityCache {
     Duration timeout,
   ) async {
     final abort = Completer<void>();
-    final request = http.AbortableRequest(
-      'GET',
-      base.resolve('/auth/deployment'),
-      abortTrigger: abort.future,
-    )..followRedirects = false;
+    const path = '/auth/deployment';
+    final diagnosticId = newControlDiagnosticId(path: path);
+    final watch = Stopwatch()..start();
+    void diagnostic(
+      String phase, {
+      int? status,
+      int? errorCode,
+      String? errorDomain,
+      String? errorType,
+      String? cfRay,
+      List<Map<String, Object?>>? metrics,
+    }) {
+      recordControlTransportEvent(
+        id: diagnosticId,
+        path: path,
+        phase: phase,
+        method: 'GET',
+        elapsedMs: watch.elapsedMilliseconds,
+        attempt: 1,
+        status: status,
+        errorCode: errorCode,
+        errorDomain: errorDomain,
+        errorType: errorType,
+        cfRay: cfRay,
+        metrics: metrics,
+      );
+    }
+
+    final http.Request request = diagnosticId == null
+        ? http.AbortableRequest(
+            'GET',
+            base.resolve(path),
+            abortTrigger: abort.future,
+          )
+        : ObservedHttpRequest(
+            'GET',
+            base.resolve(path),
+            abortTrigger: abort.future,
+            onNativeObservation: (event) => diagnostic(
+              event.phase,
+              errorCode: event.errorCode,
+              errorDomain: event.errorDomain,
+              metrics: event.metrics,
+            ),
+          );
+    request.followRedirects = false;
+    if (diagnosticId != null) {
+      request.headers['x-wujie-diagnostic-id'] = diagnosticId;
+    }
     late final http.Response response;
+    diagnostic('request_started');
     try {
       response = await (() async => http.Response.fromStream(
         await client.send(request),
       ))().timeout(timeout);
+      diagnostic(
+        'request_completed',
+        status: response.statusCode,
+        cfRay: response.headers['cf-ray'],
+      );
+    } catch (error) {
+      diagnostic('request_failed', errorType: error.runtimeType.toString());
+      rethrow;
     } finally {
       if (!abort.isCompleted) abort.complete();
     }
@@ -152,8 +207,12 @@ class DeploymentIdentityCache {
             (decoded is! Map ||
                 decoded['backend'] != configuredAccountBackend ||
                 decoded['bundleId'] != configuredPublicBundleId ||
-                (onDeviceExecution && (decoded['execution'] != 'on_device' || decoded['controlContract'] != 'v10-device-license-v1')) ||
-                (configuredAccountBackend == 'cloudflare' && !onDeviceExecution &&
+                (onDeviceExecution &&
+                    (decoded['execution'] != 'on_device' ||
+                        decoded['controlContract'] !=
+                            'v10-device-license-v1')) ||
+                (configuredAccountBackend == 'cloudflare' &&
+                    !onDeviceExecution &&
                     decoded['processingApiBaseUrl'] !=
                         configuredProcessingApiBaseUrl)))) {
       throw DeploymentIdentityFailure({

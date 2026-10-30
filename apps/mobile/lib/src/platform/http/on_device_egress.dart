@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../../features/account/data/account_session_store.dart';
+import '../diagnostics/control_diagnostic_policy.dart';
 
 /// Product control metadata only. Content transports cannot silently become a
 /// fallback when a native resource, recognizer or translator fails.
@@ -9,6 +10,7 @@ void requireOnDeviceControlRequest(
   Uri uri,
   String? body,
 ) {
+  requireDiagnosticReadOnlyRequest(method, uri.path);
   if (!onDeviceExecution) return;
   final configured = Uri.tryParse(configuredAccountApiBaseUrl);
   const paths = {

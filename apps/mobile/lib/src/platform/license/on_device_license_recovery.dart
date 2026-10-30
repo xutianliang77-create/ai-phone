@@ -2,53 +2,109 @@ part of 'on_device_license.dart';
 
 extension _OnDeviceLicenseRecovery on OnDeviceLicenseClient {
   Future<void> _flushReceipts(ScopedAccountOperation op) async {
+    if (controlDiagnosticReadOnly) {
+      throw StateError('control_diagnostic_read_only');
+    }
     await op.check();
     while (true) {
       final previous = _receiptFlushFlight;
-      if (previous == null) break;
+      if (previous == null) {
+        final flight = _flushReceiptsOnce(op);
+        _receiptFlushFlight = flight;
+        _receiptFlushOperation = op;
+        try {
+          await flight;
+        } finally {
+          if (identical(_receiptFlushFlight, flight)) {
+            _receiptFlushFlight = null;
+            _receiptFlushOperation = null;
+          }
+        }
+        return;
+      }
+      final running = _receiptFlushOperation;
+      final sameAccount =
+          running != null &&
+          identical(running.store, op.store) &&
+          running.generation == op.generation &&
+          running.original.ownerId == op.original.ownerId &&
+          running.original.token == op.original.token;
       try {
         await previous;
-      } catch (_) {
-        // A later caller may retry the retained outbox for its own account.
+      } catch (error, stack) {
+        await op.check();
+        if (sameAccount) Error.throwWithStackTrace(error, stack);
       }
       await op.check();
-    }
-    final flight = _flushReceiptsOnce(op);
-    _receiptFlushFlight = flight;
-    try {
-      await flight;
-    } finally {
-      if (identical(_receiptFlushFlight, flight)) _receiptFlushFlight = null;
+      // A same-account waiter shares the outcome, including failures. It may
+      // not silently replay the same receipt as part of the same signal.
+      if (sameAccount) return;
     }
   }
 
   Future<void> _flushReceiptsOnce(ScopedAccountOperation op) async {
     final outbox = await native('outbox', {'ownerId': op.original.ownerId});
+    final blocked = <String>{};
+    Object? firstConflict;
+    StackTrace? firstConflictStack;
     for (final row in (outbox['receipts'] as List? ?? [])) {
       await op.check();
       final value = Map<String, Object?>.from(row as Map);
-      final result = await request(
-        '/v10/device/close',
-        body: Map<String, Object?>.from(value['envelope'] as Map),
-        operation: op,
-      );
+      final leaseId = value['leaseId'];
+      if (leaseId is! String || leaseId.isEmpty) {
+        throw StateError('device_receipt_binding');
+      }
+      if (blocked.contains(leaseId)) continue;
+      late final Map<String, Object?> result;
+      try {
+        result = await request(
+          '/v10/device/close',
+          body: Map<String, Object?>.from(value['envelope'] as Map),
+          operation: op,
+        );
+      } on _DeviceControlResponseError catch (error, stack) {
+        const isolatedConflicts = {
+          'v10_license_close_binding',
+          'v10_device_statistics_invalid',
+          'v10_device_proof',
+          'v10_invalid_fields',
+          'v10_invalid_identifier',
+          'v10_invalid_integer',
+          'd1_idempotency_conflict',
+        };
+        if (error.statusCode != 409 ||
+            !isolatedConflicts.contains(error.message)) {
+          rethrow;
+        }
+        // Preserve order within one lease; an unrelated lease may still send
+        // its own original receipt. A conflict never acknowledges the row.
+        blocked.add(leaseId);
+        firstConflict ??= error;
+        firstConflictStack ??= stack;
+        continue;
+      }
       if (result['status'] != 'closed' ||
           result['leaseId'] != value['leaseId'] ||
           result['sequence'] != value['sequence'] ||
           result['chargedSeconds'] != 0) {
         throw StateError('device_close_ack_binding');
       }
+      await op.check();
       await native('ackClose', {
         'ownerId': op.original.ownerId,
         'leaseId': value['leaseId'],
         'sequence': value['sequence'],
       });
     }
+    if (firstConflict != null) {
+      Error.throwWithStackTrace(firstConflict, firstConflictStack!);
+    }
   }
 
   // The native bridge emits this only after persisting a signed receipt.
   // Failed delivery leaves the native outbox intact for foreground recovery.
-  void _scheduleReceiptFlush() {
+  void _scheduleReceiptFlush({ScopedAccountOperation? expectedOperation}) {
+    if (controlDiagnosticReadOnly) return;
     if (_receiptFlushRunning) {
       _receiptFlushAgain = true;
       return;
@@ -59,7 +115,10 @@ extension _OnDeviceLicenseRecovery on OnDeviceLicenseClient {
         do {
           _receiptFlushAgain = false;
           try {
-            final op = await ScopedAccountOperation.capture(store);
+            final op =
+                expectedOperation ??
+                await ScopedAccountOperation.capture(store);
+            await op.check();
             await flushReceipts(op);
           } catch (_) {
             // Network or account changes must never discard the receipt.
