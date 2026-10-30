@@ -39,7 +39,6 @@ Future<void> recordPublicControlAttempt({
         'identity_joined',
         'identity_network_retry',
         'request',
-        'request_retry',
       ].contains(phase)) {
     return;
   }

@@ -1,6 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
-import '../../../../platform/license/on_device_license.dart';
+import '../../../account/data/account_api_client.dart'
+    show verifyAccountDeployment;
+import '../../../account/data/account_session_store.dart';
+import '../../../../platform/diagnostics/control_diagnostic_policy.dart';
+import '../../../../platform/http/public_http_client.dart';
+
+/// Public identity only: no account, Apple refresh, license or receipt operation.
+Future<Map<String, Object?>> runPublicControlDiagnostic({
+  http.Client? client,
+}) async {
+  if (!controlDiagnosticReadOnly) {
+    throw StateError('control_diagnostic_disabled');
+  }
+  final base = Uri.parse(configuredAccountApiBaseUrl);
+  requireAccountOrigin(base, configuredPublicDeploymentId);
+  final transport = client ?? createPublicHttpClient(base);
+  try {
+    await verifyAccountDeployment(
+      transport,
+      base,
+      configuredPublicDeploymentId,
+      const Duration(seconds: 30),
+      forceRefresh: true,
+    );
+    return {'identityVerified': true};
+  } finally {
+    if (client == null) transport.close();
+  }
+}
 
 /// Only exposed by the explicitly read-only QA build.
 class ControlDiagnosticPage extends StatefulWidget {
@@ -13,7 +42,7 @@ class ControlDiagnosticPage extends StatefulWidget {
 
 class _ControlDiagnosticPageState extends State<ControlDiagnosticPage> {
   bool _busy = false;
-  String _state = '准备就绪；点击后只检查授权配置，不领取授权。';
+  String _state = '准备就绪；点击后只检查公开服务身份，不领取授权。';
 
   Future<void> _run() async {
     if (_busy) return;
@@ -22,15 +51,11 @@ class _ControlDiagnosticPageState extends State<ControlDiagnosticPage> {
       _state = '正在检查连接…';
     });
     try {
-      final result =
-          await (widget.probe ??
-              () => OnDeviceLicenseClient.shared.request(
-                '/v10/device/configuration',
-              ))();
+      final result = await (widget.probe ?? runPublicControlDiagnostic)();
       if (!mounted) return;
       setState(() {
-        _state = result['licenseAdmission'] == 'closed'
-            ? '服务已响应，授权入口当前关闭。'
+        _state = result['identityVerified'] == true
+            ? '服务身份已验证；未领取授权。'
             : '服务已响应，请保留结果供核对。';
       });
     } catch (_) {

@@ -14,41 +14,39 @@ import 'package:translation_mobile/src/platform/license/on_device_license.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test(
-    'diagnostic build permits only identity and configuration GET',
-    () async {
-      expect(controlDiagnosticReadOnly, isTrue);
-      final base = Uri.parse(configuredAccountApiBaseUrl);
-      for (final path in ['/auth/deployment', '/v10/device/configuration']) {
-        expect(
-          () => requireOnDeviceControlRequest(
-            base,
-            'GET',
-            base.resolve(path),
-            null,
-          ),
-          returnsNormally,
-        );
-      }
-      for (final pair in [
-        ('POST', '/v10/device/close'),
-        ('POST', '/v10/device/acquire'),
-        ('POST', '/billing/subscription/sync'),
-        ('GET', '/billing/entitlement'),
-        ('POST', '/auth/apple/login'),
-      ]) {
-        expect(
-          () => requireOnDeviceControlRequest(
-            base,
-            pair.$1,
-            base.resolve(pair.$2),
-            null,
-          ),
-          throwsA(isA<StateError>()),
-        );
-      }
-    },
-  );
+  test('diagnostic build permits only public identity GET', () async {
+    expect(controlDiagnosticReadOnly, isTrue);
+    final base = Uri.parse(configuredAccountApiBaseUrl);
+    for (final path in ['/auth/deployment']) {
+      expect(
+        () => requireOnDeviceControlRequest(
+          base,
+          'GET',
+          base.resolve(path),
+          null,
+        ),
+        returnsNormally,
+      );
+    }
+    for (final pair in [
+      ('POST', '/v10/device/close'),
+      ('POST', '/v10/device/acquire'),
+      ('POST', '/billing/subscription/sync'),
+      ('GET', '/billing/entitlement'),
+      ('GET', '/v10/device/configuration'),
+      ('POST', '/auth/apple/login'),
+    ]) {
+      expect(
+        () => requireOnDeviceControlRequest(
+          base,
+          pair.$1,
+          base.resolve(pair.$2),
+          null,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    }
+  });
 
   test(
     'diagnostic probe makes no receipt, entitlement or acquisition request',
@@ -68,9 +66,11 @@ void main() {
       );
       final paths = <String>[];
       final diagnosticIds = <String?>[];
+      final authorizations = <String?>[];
       final client = MockClient((request) async {
         paths.add(request.url.path);
         diagnosticIds.add(request.headers['x-wujie-diagnostic-id']);
+        authorizations.add(request.headers['authorization']);
         final value = request.url.path == '/auth/deployment'
             ? {
                 'deploymentId': configuredPublicDeploymentId,
@@ -105,15 +105,17 @@ void main() {
       });
       await license.reconcileOnline();
       await expectLater(license.ensureValid(), throwsA(isA<StateError>()));
-      expect(
-        (await license.request(
-          '/v10/device/configuration',
-        ))['licenseAdmission'],
-        'closed',
+      await expectLater(
+        license.request('/v10/device/configuration'),
+        throwsA(isA<StateError>()),
       );
-      expect(paths, ['/auth/deployment', '/v10/device/configuration']);
+      expect(
+        (await runPublicControlDiagnostic(client: client))['identityVerified'],
+        true,
+      );
+      expect(paths, ['/auth/deployment']);
       expect(diagnosticIds, everyElement(matches(RegExp(r'^[a-f0-9]{24}$'))));
-      expect(diagnosticIds.toSet().length, 2);
+      expect(authorizations, [null]);
       expect(nativeCalls, 0);
     },
   );
@@ -127,7 +129,7 @@ void main() {
         home: ControlDiagnosticPage(
           probe: () async {
             calls++;
-            return {'licenseAdmission': 'closed'};
+            return {'identityVerified': true};
           },
         ),
       ),
@@ -136,7 +138,7 @@ void main() {
     await tester.tap(find.text('检查一次'));
     await tester.pumpAndSettle();
     expect(calls, 1);
-    expect(find.text('服务已响应，授权入口当前关闭。'), findsOneWidget);
+    expect(find.text('服务身份已验证；未领取授权。'), findsOneWidget);
   });
 
   testWidgets(

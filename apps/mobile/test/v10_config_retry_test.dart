@@ -1,11 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:cupertino_http/cupertino_http.dart' show NSErrorClientException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:objective_c/objective_c.dart' as objc;
 import 'package:translation_mobile/src/features/account/data/account_scoped_http.dart';
 import 'package:translation_mobile/src/features/account/data/account_session_store.dart';
 import 'package:translation_mobile/src/platform/http/deployment_identity_cache.dart';
@@ -21,21 +18,24 @@ AccountSession account(String owner) => AccountSession(
 class FixtureTransport extends http.BaseClient
     implements DeploymentIdentityRetryTransport {
   FixtureTransport({
-    this.failFirst = false,
-    this.hangFirst = false,
+    this.failData = false,
+    this.hangData = false,
+    this.failIdentityFirst = false,
     this.status = 200,
-    this.firstError,
   });
-  final bool failFirst, hangFirst;
+  final bool failData, hangData, failIdentityFirst;
   final int status;
-  final Object? firstError;
-  int sends = 0, renewals = 0;
+  int sends = 0, identityCalls = 0, renewals = 0;
   final gate = Completer<void>();
   @override
   void renewIdentityConnection() => renewals++;
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (request.url.path == '/auth/deployment') {
+      identityCalls++;
+      if (identityCalls == 1 && failIdentityFirst) {
+        throw TimeoutException('synthetic identity timeout');
+      }
       return http.StreamedResponse(
         Stream.value(
           utf8.encode(
@@ -52,11 +52,8 @@ class FixtureTransport extends http.BaseClient
       );
     }
     sends++;
-    if (sends == 1 && hangFirst) await gate.future;
-    if (sends == 1 && firstError != null) throw firstError!;
-    if (sends == 1 && failFirst) {
-      throw TimeoutException('synthetic transport failure');
-    }
+    if (hangData) await gate.future;
+    if (failData) throw TimeoutException('synthetic data timeout');
     return http.StreamedResponse(Stream.value(utf8.encode('{}')), status);
   }
 }
@@ -85,30 +82,14 @@ void main() {
   }
 
   test(
-    'only configuration GET renews the session and retries one transport failure',
-    () async {
-      final store = MemoryAccountSessionStore(account('one'));
-      final client = FixtureTransport(failFirst: true);
-      final response = await request(
-        client,
-        store,
-        'GET',
-        '/v10/device/configuration',
-      );
-      expect(response.statusCode, 200);
-      expect(client.sends, 2);
-      expect(client.renewals, 1);
-    },
-  );
-
-  test(
-    'entitlement GET and acquisition POST are never automatically replayed',
+    'configuration GET, entitlement GET and acquisition POST are never auto-replayed',
     () async {
       for (final pair in [
+        ('GET', '/v10/device/configuration'),
         ('GET', '/billing/entitlement'),
         ('POST', '/v10/device/acquire'),
       ]) {
-        final client = FixtureTransport(failFirst: true);
+        final client = FixtureTransport(failData: true);
         await expectLater(
           request(
             client,
@@ -124,35 +105,66 @@ void main() {
     },
   );
 
-  test('account change during a failed attempt prevents retry', () async {
-    final store = MemoryAccountSessionStore(account('one'));
-    final client = FixtureTransport(failFirst: true, hangFirst: true);
-    final pending = request(client, store, 'GET', '/v10/device/configuration');
-    final result = pending.then((_) => 'success', onError: (_) => 'failed');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    await store.save(account('two'));
-    client.gate.complete();
-    expect(await result, 'failed');
-    expect(client.sends, 1);
-    expect(client.renewals, 0);
-  });
+  test(
+    'only the public identity GET retries once on a fresh connection',
+    () async {
+      final client = FixtureTransport(failIdentityFirst: true);
+      final response = await request(
+        client,
+        MemoryAccountSessionStore(account('one')),
+        'GET',
+        '/v10/device/configuration',
+        timeout: const Duration(seconds: 12),
+      );
+      expect(response.statusCode, 200);
+      expect(client.identityCalls, 2);
+      expect(client.renewals, 1);
+      expect(client.sends, 1);
+    },
+  );
 
-  test('a stalled first configuration attempt leaves time for retry', () async {
-    final client = FixtureTransport(hangFirst: true);
-    final stopwatch = Stopwatch()..start();
-    final response = await request(
-      client,
-      MemoryAccountSessionStore(account('one')),
-      'GET',
-      '/v10/device/configuration',
-      timeout: const Duration(milliseconds: 300),
-    );
-    expect(response.statusCode, 200);
-    expect(client.sends, 2);
-    expect(client.renewals, 1);
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 500)));
-    client.gate.complete();
-  });
+  test(
+    'account switch during a failed configuration prevents any replay',
+    () async {
+      final store = MemoryAccountSessionStore(account('one'));
+      final client = FixtureTransport(failData: true, hangData: true);
+      final pending = request(
+        client,
+        store,
+        'GET',
+        '/v10/device/configuration',
+      );
+      final result = pending.then((_) => 'success', onError: (_) => 'failed');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await store.save(account('two'));
+      client.gate.complete();
+      expect(await result, 'failed');
+      expect(client.sends, 1);
+      expect(client.renewals, 0);
+    },
+  );
+
+  test(
+    'stalled configuration stops at its existing deadline without replay',
+    () async {
+      final client = FixtureTransport(hangData: true);
+      final stopwatch = Stopwatch()..start();
+      await expectLater(
+        request(
+          client,
+          MemoryAccountSessionStore(account('one')),
+          'GET',
+          '/v10/device/configuration',
+          timeout: const Duration(milliseconds: 180),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      expect(client.sends, 1);
+      expect(client.renewals, 0);
+      expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 500)));
+      client.gate.complete();
+    },
+  );
 
   test('HTTP errors are returned once without reconnect or retry', () async {
     final client = FixtureTransport(status: 409);
@@ -168,41 +180,4 @@ void main() {
     expect(client.sends, 1);
     expect(client.renewals, 0);
   });
-
-  test(
-    'TLS failures are not retried; transient connection loss may retry',
-    () async {
-      NSErrorClientException error(int code) => NSErrorClientException(
-        objc.NSError.errorWithDomain(
-          'NSURLErrorDomain'.toNSString(),
-          code: code,
-        ),
-      );
-      final tls = FixtureTransport(firstError: error(-1202));
-      await expectLater(
-        request(
-          tls,
-          MemoryAccountSessionStore(account('one')),
-          'GET',
-          '/v10/device/configuration',
-        ),
-        throwsA(isA<NSErrorClientException>()),
-      );
-      expect(tls.sends, 1);
-      expect(tls.renewals, 0);
-      final lost = FixtureTransport(firstError: error(-1005));
-      expect(
-        (await request(
-          lost,
-          MemoryAccountSessionStore(account('one')),
-          'GET',
-          '/v10/device/configuration',
-        )).statusCode,
-        200,
-      );
-      expect(lost.sends, 2);
-      expect(lost.renewals, 1);
-    },
-    skip: !Platform.isMacOS,
-  );
 }
