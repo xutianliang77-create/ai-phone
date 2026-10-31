@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
@@ -159,6 +161,92 @@ void main() {
     expect(find.text('拍照'), findsOneWidget);
     expect(find.text('相册'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reports unreadable selected image separately from picker failure',
+      (WidgetTester tester) async {
+    final dir = Directory.systemTemp.createTempSync('scan-preview-test-');
+    var path = '${dir.path}/missing-image.jpg';
+    const channel = MethodChannel('plugins.flutter.io/image_picker');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async => path);
+    addTearDown(() async {
+      messenger.setMockMethodCallHandler(channel, null);
+      dir.deleteSync(recursive: true);
+    });
+    await tester.pumpWidget(_TestApp(
+      child: ScanTranslationPage(
+        ocrProvider: const _FakeOcrProvider('你好'),
+        translationProvider: _FakeTranslationProvider(),
+        historyRepository: _FakeSessionHistoryRepository(),
+      ),
+    ));
+
+    Future<void> pickAndWait() async {
+      await tester.runAsync(() async {
+        await tester.tap(find.text('相册'));
+        for (var i = 0; i < 100; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          await tester.pump();
+          if (find.text('已选图片，但无法读取或显示预览；请重新选择。').evaluate().isNotEmpty) {
+            return;
+          }
+        }
+      });
+      await tester.pumpAndSettle();
+    }
+
+    await pickAndWait();
+    expect(find.text('已选图片，但无法读取或显示预览；请重新选择。'), findsOneWidget);
+    expect(find.text('无法读取图片，请检查相机或照片权限'), findsNothing);
+    path = '${dir.path}/invalid-image.jpg';
+    File(path).writeAsBytesSync([1, 2, 3, 4]);
+    await pickAndWait();
+    expect(find.text('已选图片，但无法读取或显示预览；请重新选择。'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shows language detection failure without exposing the error',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: ScanTranslationPage(
+        detectLanguage: (_) async => throw StateError('private detail'),
+        ocrProvider: const _FakeOcrProvider('你好'),
+        translationProvider: _FakeTranslationProvider(),
+        historyRepository: _FakeSessionHistoryRepository(),
+        pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      ),
+    ));
+
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('翻译'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+    expect(find.text('无法判断原文语言，请手动选择中文或英文；已保留识别文字。'), findsOneWidget);
+    expect(find.text('你好'), findsOneWidget);
+    expect(find.textContaining('private detail'), findsNothing);
+  });
+
+  test('authorization and language status messages are localized', () {
+    for (final key in [
+      'scan_image_read_failed',
+      'scan_ocr_authorization_unavailable',
+      'scan_translation_authorization_unavailable',
+      'scan_authorization_result_unverified',
+      'scan_language_detection_failed',
+    ]) {
+      for (final locale in [const Locale('zh'), const Locale('en')]) {
+        expect(AppLocalizations(locale).scanStatusMessage(key), isNot(key));
+        expect(AppLocalizations(locale).scanStatusMessage(key), isNotEmpty);
+      }
+    }
   });
 
   testWidgets('keeps recognized text when translation is unavailable',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -133,6 +134,42 @@ void main() {
     expect(controller.translatedText, 'Hello');
   });
 
+  test('new image does not display the previous automatic language', () async {
+    final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    expect(controller.sourceLanguage, 'zh');
+    await controller.selectImage(ScanImageSource.camera);
+    expect(controller.sourceLanguage, 'auto');
+    expect(controller.selectedSourceLanguage, 'auto');
+  });
+
+  test('successful re-recognition clears the previous detected language', () async {
+    final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
+      ocrProvider: _SequenceOcrProvider(),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    expect(controller.sourceLanguage, 'zh');
+    await controller.recognizeSelectedImage();
+    expect(controller.recognizedText, 'Welcome');
+    expect(controller.sourceLanguage, 'auto');
+  });
+
   test('clears a stale translation error after changing the target', () async {
     final controller = ScanTranslationController(
       detectLanguage: _fixtureLanguage,
@@ -187,6 +224,162 @@ void main() {
     expect(controller.status, ScanTranslationStatus.failed);
     expect(controller.message, 'scan_image_pick_failed');
     expect(controller.isBusy, isFalse);
+  });
+
+  test('failed preview keeps the previous image and completed results', () async {
+    var pickCount = 0;
+    final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async {
+        if (pickCount++ == 0) return _picked('/tmp/first.jpg');
+        throw const ScanImageReadFailure();
+      },
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    await controller.selectImage(ScanImageSource.camera);
+
+    expect(controller.imagePath, '/tmp/first.jpg');
+    expect(controller.recognizedText, '你好');
+    expect(controller.translatedText, 'Hello');
+    expect(controller.message, 'scan_image_read_failed');
+    expect(controller.isBusy, isFalse);
+  });
+
+  test('authorization timeout before OCR is not reported as OCR failure', () async {
+    final ocr = _RecordingOcrProvider('你好');
+    final controller = ScanTranslationController(
+      ocrProvider: ocr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+      startAuthorization: () async => throw TimeoutException('private detail'),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.camera);
+    await controller.recognizeSelectedImage();
+
+    expect(ocr.calls, 0);
+    expect(controller.imagePath, '/tmp/menu.jpg');
+    expect(controller.message, 'scan_ocr_authorization_unavailable');
+    expect(controller.isBusy, isFalse);
+  });
+
+  test('known authorization failure keeps its actionable message', () async {
+    final ocr = _RecordingOcrProvider('你好');
+    final controller = ScanTranslationController(
+      ocrProvider: ocr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+      startAuthorization: () async => throw StateError('authorization_required'),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+
+    expect(ocr.calls, 0);
+    expect(controller.message, contains('授权'));
+  });
+
+  test('authorization timeout before translation preserves OCR text', () async {
+    var shouldFail = false;
+    final translator = _FakeTranslationProvider();
+    final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+      startAuthorization: () async {
+        if (shouldFail) throw TimeoutException('private detail');
+        return 'lease';
+      },
+      verifyAuthorization: (_) async {},
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    shouldFail = true;
+    await controller.translateRecognizedText();
+
+    expect(controller.recognizedText, '你好');
+    expect(controller.translatedText, isEmpty);
+    expect(translator.lastSourceLanguage, isNull);
+    expect(controller.message, 'scan_translation_authorization_unavailable');
+    expect(controller.isBusy, isFalse);
+  });
+
+  test('failed completion authorization does not publish new OCR results', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+      startAuthorization: () async => 'lease',
+      verifyAuthorization: (_) async => throw StateError('private detail'),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+
+    expect(controller.recognizedText, isEmpty);
+    expect(controller.imagePath, '/tmp/menu.jpg');
+    expect(controller.message, 'scan_authorization_result_unverified');
+  });
+
+  test('failed completion authorization does not publish a translation', () async {
+    var verifyFails = false;
+    final translator = _FakeTranslationProvider();
+    final controller = ScanTranslationController(
+      detectLanguage: _fixtureLanguage,
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+      startAuthorization: () async => 'lease',
+      verifyAuthorization: (_) async {
+        if (verifyFails) throw StateError('private detail');
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    verifyFails = true;
+    await controller.translateRecognizedText();
+
+    expect(translator.lastSourceLanguage, 'zh');
+    expect(controller.recognizedText, '你好');
+    expect(controller.translatedText, isEmpty);
+    expect(controller.message, 'scan_authorization_result_unverified');
+    expect(controller.isBusy, isFalse);
+  });
+
+  test('language detector failure is distinct from translation failure', () async {
+    final translator = _FakeTranslationProvider();
+    final controller = ScanTranslationController(
+      detectLanguage: (_) async => throw StateError('private detail'),
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    addTearDown(controller.dispose);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.recognizedText, '你好');
+    expect(translator.lastSourceLanguage, isNull);
+    expect(controller.message, 'scan_language_detection_failed');
+    controller.setSourceLanguage('zh');
+    await controller.translateRecognizedText();
+    expect(controller.translatedText, 'Hello');
   });
 
   test('keeps OCR text when the translation provider throws', () async {
@@ -292,11 +485,27 @@ class _FakeOcrProvider implements MobileOcrProvider {
   }
 }
 
+class _SequenceOcrProvider implements MobileOcrProvider {
+  int calls = 0;
+  @override
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async => MobileOcrResult(
+    text: calls++ == 0 ? '你好' : 'Welcome',
+    provider: 'fixture',
+  );
+
+  @override
+  Future<void> dispose() async {}
+}
+
 class _RecordingOcrProvider implements MobileOcrProvider {
   _RecordingOcrProvider(this.text);
 
   final String text;
   List<String>? lastPreferredScripts;
+  int calls = 0;
 
   @override
   Future<void> dispose() async {}
@@ -306,6 +515,7 @@ class _RecordingOcrProvider implements MobileOcrProvider {
     String imagePath, {
     List<String>? preferredScripts,
   }) async {
+    calls++;
     lastPreferredScripts = preferredScripts;
     return MobileOcrResult(text: text, provider: 'recording');
   }

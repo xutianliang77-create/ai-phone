@@ -261,17 +261,26 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
       imageQuality: 92,
     );
     if (image == null) return null;
-    final bytes = await image.readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    final aspectRatio = frame.image.width / frame.image.height;
-    frame.image.dispose();
-    codec.dispose();
-    return PickedScanImage(
-      path: image.path,
-      previewBytes: bytes,
-      aspectRatio: aspectRatio,
-    );
+    try {
+      final bytes = await image.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      try {
+        final frame = await codec.getNextFrame();
+        try {
+          return PickedScanImage(
+            path: image.path,
+            previewBytes: bytes,
+            aspectRatio: frame.image.width / frame.image.height,
+          );
+        } finally {
+          frame.image.dispose();
+        }
+      } finally {
+        codec.dispose();
+      }
+    } on Object {
+      throw const ScanImageReadFailure();
+    }
   }
 
   Future<void> _share(AppLocalizations l10n) async {

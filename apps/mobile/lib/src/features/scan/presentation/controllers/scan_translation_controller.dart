@@ -45,6 +45,11 @@ class ScanTranslatedBlock {
 typedef ScanImagePicker =
     Future<PickedScanImage?> Function(ScanImageSource source);
 
+/// The picker returned an image, but reading or decoding its preview failed.
+class ScanImageReadFailure implements Exception {
+  const ScanImageReadFailure();
+}
+
 class ScanTranslationController extends ChangeNotifier {
   ScanTranslationController({
     required MobileOcrProvider ocrProvider,
@@ -143,10 +148,12 @@ class ScanTranslationController extends ChangeNotifier {
     PickedScanImage? image;
     try {
       image = await _pickImagePath(source);
-    } on Object {
+    } on Object catch (error) {
       if (!_current(generation)) return;
       status = ScanTranslationStatus.failed;
-      message = 'scan_image_pick_failed';
+      message = error is ScanImageReadFailure
+          ? 'scan_image_read_failed'
+          : 'scan_image_pick_failed';
       notifyListeners();
       return;
     }
@@ -160,6 +167,7 @@ class ScanTranslationController extends ChangeNotifier {
     imagePath = image.path;
     imagePreviewBytes = image.previewBytes;
     imageAspectRatio = image.aspectRatio > 0 ? image.aspectRatio : 4 / 3;
+    sourceLanguage = selectedSourceLanguage;
     recognizedText = '';
     translatedText = '';
     recognizedBlocks = const <MobileOcrBlock>[];
@@ -167,6 +175,51 @@ class ScanTranslationController extends ChangeNotifier {
     savedSessionId = null;
     status = ScanTranslationStatus.imageSelected;
     notifyListeners();
+  }
+
+  Future<String?> _beginAuthorization() async {
+    try {
+      return await _startAuthorization?.call();
+    } on Object catch (error) {
+      throw _ScanAuthorizationFailure(error, completion: false);
+    }
+  }
+
+  Future<void> _checkAuthorization(String? lease) async {
+    if (lease == null) return;
+    try {
+      await _verifyAuthorization?.call(lease);
+    } on Object catch (error) {
+      throw _ScanAuthorizationFailure(error, completion: true);
+    }
+  }
+
+  Future<String?> _determineLanguage(String text) async {
+    try {
+      return await _detectLanguage(text);
+    } on Object catch (error) {
+      throw _ScanLanguageDetectionFailure(error);
+    }
+  }
+
+  String _scanFailureMessage(Object error, String fallback) {
+    final cause = error is _ScanAuthorizationFailure
+        ? error.cause
+        : error is _ScanLanguageDetectionFailure
+        ? error.cause
+        : error;
+    final licenseMessage = deviceLicenseFailureText(cause);
+    if (licenseMessage != null) return licenseMessage;
+    if (error is _ScanAuthorizationFailure) {
+      if (error.completion) return 'scan_authorization_result_unverified';
+      return fallback == 'scan_ocr_failed'
+          ? 'scan_ocr_authorization_unavailable'
+          : 'scan_translation_authorization_unavailable';
+    }
+    if (error is _ScanLanguageDetectionFailure) {
+      return 'scan_language_detection_failed';
+    }
+    return fallback;
   }
 
   Future<void> recognizeSelectedImage() async {
@@ -184,7 +237,7 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final lease = await _startAuthorization?.call();
+      final lease = await _beginAuthorization();
       if (!_current(generation)) return;
       final result = await _ocrProvider.recognizeImage(
         path,
@@ -192,7 +245,7 @@ class ScanTranslationController extends ChangeNotifier {
             ? const <String>['latin', 'chinese']
             : const <String>['chinese', 'latin'],
       );
-      if (lease != null) await _verifyAuthorization?.call(lease);
+      await _checkAuthorization(lease);
       if (!_current(generation)) return;
       // Do not guess that an OCR currency symbol is a certification mark.
       final nextText = result?.text.trim() ?? '';
@@ -202,6 +255,7 @@ class ScanTranslationController extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      sourceLanguage = selectedSourceLanguage;
       recognizedText = nextText;
       recognizedBlocks = List<MobileOcrBlock>.unmodifiable(
         result?.blocks ?? const <MobileOcrBlock>[],
@@ -212,8 +266,7 @@ class ScanTranslationController extends ChangeNotifier {
     } on Object catch (error) {
       if (!_current(generation)) return;
       status = ScanTranslationStatus.failed;
-      message = 'scan_ocr_failed';
-      message = deviceLicenseFailureText(error) ?? message;
+      message = _scanFailureMessage(error, 'scan_ocr_failed');
       notifyListeners();
       return;
     }
@@ -239,13 +292,13 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final lease = await _startAuthorization?.call();
+      final lease = await _beginAuthorization();
       if (!_current(generation)) return;
       final standalone = ScanTranslationEntityProtector(
         text,
       ).canBypassTranslation;
       final detected = selectedSourceLanguage == 'auto'
-          ? (standalone ? 'auto' : await _detectLanguage(text))
+          ? (standalone ? 'auto' : await _determineLanguage(text))
           : selectedSourceLanguage;
       if (!_current(generation)) return;
       if (detected == null) {
@@ -272,7 +325,7 @@ class ScanTranslationController extends ChangeNotifier {
               ? 'auto'
               : recognizedBlocks.length == 1
               ? detected
-              : await _detectLanguage(block.text);
+              : await _determineLanguage(block.text);
           if (!_current(generation)) return;
           if (blockLanguage == null) throw const _ScanLanguageUncertain();
           final translation = await _translateText(block.text, blockLanguage);
@@ -285,19 +338,19 @@ class ScanTranslationController extends ChangeNotifier {
         nextBlocks = List<ScanTranslatedBlock>.unmodifiable(blocks);
         nextText = blocks.map((block) => block.translation).join('\n');
       }
-      if (lease != null) await _verifyAuthorization?.call(lease);
+      await _checkAuthorization(lease);
       if (!_current(generation)) return;
       translatedText = nextText;
       translatedBlocks = nextBlocks;
     } on Object catch (error) {
       if (!_current(generation)) return;
       status = ScanTranslationStatus.recognized;
-      message = error is _ScanLanguageUncertain
+      final fallback = error is _ScanLanguageUncertain
           ? 'scan_language_uncertain'
           : error is ScanEntityRestorationFailure
           ? 'scan_entities_unverified'
           : 'scan_translation_unavailable';
-      message = deviceLicenseFailureText(error) ?? message;
+      message = _scanFailureMessage(error, fallback);
       notifyListeners();
       return;
     }
@@ -377,6 +430,17 @@ class ScanTranslationController extends ChangeNotifier {
     _translationProvider.dispose();
     super.dispose();
   }
+}
+
+class _ScanAuthorizationFailure implements Exception {
+  const _ScanAuthorizationFailure(this.cause, {required this.completion});
+  final Object cause;
+  final bool completion;
+}
+
+class _ScanLanguageDetectionFailure implements Exception {
+  const _ScanLanguageDetectionFailure(this.cause);
+  final Object cause;
 }
 
 class _ScanLanguageUncertain implements Exception {
